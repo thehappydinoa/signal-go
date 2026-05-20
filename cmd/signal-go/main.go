@@ -63,7 +63,7 @@ func runLink(args []string) int {
 		cancel()
 	}()
 
-	pl, err := sg.Link(ctx, sg.LinkOptions{
+	acct, err := sg.Link(ctx, sg.LinkOptions{
 		UserAgent: *userAgent,
 		OnURL: func(linkURL string) error {
 			fmt.Println("Open Signal on your phone → Settings → Linked devices → +")
@@ -80,11 +80,14 @@ func runLink(args []string) int {
 		return 1
 	}
 	fmt.Println()
-	fmt.Println("Received encrypted provisioning envelope from your phone.")
-	fmt.Printf("  envelope body:   %d bytes\n", len(pl.EnvelopeBody))
-	fmt.Printf("  envelope pubkey: %d bytes\n", len(pl.EnvelopePublicKey))
+	fmt.Println("Linked! Decoded provisioning material from your primary device:")
+	fmt.Printf("  ACI:    %s\n", acct.ACI)
+	fmt.Printf("  PNI:    %s\n", acct.PNI)
+	fmt.Printf("  number: %s\n", acct.Number)
+	fmt.Printf("  code:   %s\n", acct.ProvisioningCode)
+	fmt.Printf("  profile key: %d bytes\n", len(acct.ProfileKey))
 	fmt.Println()
-	fmt.Println("Phase 2 (decrypt + complete registration) is not yet implemented.")
+	fmt.Println("Next: Phase 2c will generate prekeys and register against /v1/devices/link.")
 	fmt.Println("See ROADMAP.md.")
 	return 0
 }
