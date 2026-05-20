@@ -30,3 +30,17 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# signal-go: built libsignal artifacts (header is committed, .a is not)
+/internal/libsignal/lib/*.a
+/internal/libsignal/lib/.version
+
+# signal-go: libsignal source clone cache (scripts/build-libsignal.sh)
+/.build/
+
+# signal-go: built binaries
+/bin/
+/cmd/*/signal-go
+
+# Local account state created by the demo CLI
+/.signal-data/

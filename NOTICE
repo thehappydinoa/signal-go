@@ -1,0 +1,14 @@
+signal-go
+Copyright (c) 2026 The signal-go authors
+
+This product includes software developed by Signal Messenger LLC
+(https://github.com/signalapp/libsignal), licensed under AGPL-3.0-only.
+A pinned version of libsignal is statically linked into the signal-go
+binary; see internal/libsignal/ and docs/adr/0004-libsignal-pin.md.
+
+Protocol buffer definitions under proto/ are vendored from
+github.com/signalapp/Signal-Android (also AGPL-3.0-only). See
+proto/UPSTREAM.txt for the exact commit pin.
+
+This project is not affiliated with, endorsed by, or supported by Signal
+Messenger LLC.

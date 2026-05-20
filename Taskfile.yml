@@ -1,0 +1,115 @@
+version: '3'
+
+vars:
+  LIBSIGNAL_VERSION: v0.94.1
+  GOFLAGS: -trimpath
+  COVER_THRESHOLD: 0  # tighten as we grow; ADR 0006 target is 80%
+
+env:
+  CGO_ENABLED: '1'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Install dev tools (protoc-gen-go, golangci-lint)
+    cmds:
+      - go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+      - command -v golangci-lint >/dev/null || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.62.0
+      - command -v protoc      >/dev/null || (echo "Install protoc from your distro (e.g. apt install protobuf-compiler)" && exit 1)
+      - command -v cargo       >/dev/null || (echo "Install Rust (https://rustup.rs) — needed once to build libsignal" && exit 1)
+
+  libsignal:
+    desc: Build libsignal_ffi.a from pinned upstream tag (slow first time, cached after)
+    sources:
+      - scripts/build-libsignal.sh
+    generates:
+      - internal/libsignal/lib/libsignal_ffi.a
+      - internal/libsignal/include/signal_ffi.h
+    cmds:
+      - LIBSIGNAL_VERSION={{.LIBSIGNAL_VERSION}} bash scripts/build-libsignal.sh
+
+  proto:
+    desc: Regenerate Go from vendored .proto files
+    sources:
+      - proto/*.proto
+      - scripts/gen-proto.sh
+    generates:
+      - internal/proto/gen/**/*.pb.go
+    cmds:
+      - bash scripts/gen-proto.sh
+
+  build:
+    desc: Build the library and demo CLI
+    deps: [libsignal]
+    cmds:
+      - go build {{.GOFLAGS}} ./...
+
+  test:
+    desc: Run unit tests
+    deps: [libsignal]
+    cmds:
+      - go test {{.GOFLAGS}} -race -count=1 ./...
+
+  test:component:
+    desc: Run component tests (require fake Signal server)
+    deps: [libsignal]
+    cmds:
+      - go test {{.GOFLAGS}} -race -count=1 -tags=component ./...
+
+  test:e2e:
+    desc: Run end-to-end tests against real chat.signal.org (manual; gated)
+    deps: [libsignal]
+    env:
+      SIGNAL_GO_E2E: '1'
+    cmds:
+      - go test {{.GOFLAGS}} -race -count=1 -tags=e2e -timeout=10m ./...
+
+  cover:
+    desc: Run tests with coverage report
+    deps: [libsignal]
+    cmds:
+      - go test {{.GOFLAGS}} -race -count=1 -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out | tail -1
+
+  lint:
+    desc: Run golangci-lint
+    deps: [libsignal]
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format Go code (ignores the libsignal build cache under .build/)
+    cmds:
+      - gofmt -s -w $(go list -f '{{.Dir}}' ./...)
+      - test -x "$(go env GOPATH)/bin/goimports" && "$(go env GOPATH)/bin/goimports" -w -local github.com/thehappydinoa/signal-go $(go list -f '{{.Dir}}' ./...) || true
+
+  tidy:
+    desc: go mod tidy
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Remove build artifacts (does not touch the libsignal clone cache)
+    cmds:
+      - rm -rf coverage.out internal/libsignal/lib/libsignal_ffi.a internal/libsignal/lib/.version
+      - find . -name '*.test' -delete
+
+  clean:all:
+    desc: Remove everything, including the libsignal clone (forces a rebuild)
+    cmds:
+      - task: clean
+      - rm -rf .build
+
+  ci:
+    desc: Run the full CI pipeline locally
+    cmds:
+      - task: setup
+      - task: libsignal
+      - task: proto
+      - task: lint
+      - task: test
+      - task: cover
