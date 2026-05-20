@@ -44,15 +44,14 @@ type Options struct {
 }
 
 // Session is the result of [Link]: a successful pairing handshake that
-// yielded an encrypted [ProvisionEnvelope]. Phase 2 will decrypt it and use
-// the contents to register a linked device.
+// yielded a decrypted [ProvisionMessage] from the user's primary device.
 type Session struct {
-	// EphemeralKey is the keypair we generated for the handshake. Phase 2
-	// decryption needs the private half.
+	// EphemeralKey is the keypair we generated for the handshake. Kept on
+	// the session for completeness; higher layers usually don't need it.
 	EphemeralKey *libsignal.IdentityKeyPair
-	// Envelope holds the encrypted ProvisionMessage payload received from
-	// the primary device via the server.
-	Envelope *provpb.ProvisionEnvelope
+	// Message holds the decoded ProvisionMessage with the linked account's
+	// ACI/PNI identity keys, UUIDs, number, and provisioning code.
+	Message *provpb.ProvisionMessage
 }
 
 // Link runs the provisioning handshake to completion and returns a Session.
@@ -167,14 +166,19 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 
 	// Wait for the encrypted envelope, or for the user to abort, or for the
 	// ws to die under us.
+	var env *provpb.ProvisionEnvelope
 	select {
-	case env := <-envCh:
-		return &Session{EphemeralKey: ephemeral, Envelope: env}, nil
+	case env = <-envCh:
 	case err := <-errCh:
 		return nil, err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	msg, err := DecryptEnvelope(ephemeral.Private, env)
+	if err != nil {
+		return nil, fmt.Errorf("provisioning.Link: decrypt: %w", err)
+	}
+	return &Session{EphemeralKey: ephemeral, Message: msg}, nil
 }
 
 // buildLinkURL returns the sgnl://linkdevice URL that the Signal mobile

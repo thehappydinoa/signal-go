@@ -151,17 +151,33 @@ func TestLinkHappyPath(t *testing.T) {
 	fake := newFakeProvisioningServer(t, wantAddress)
 	defer fake.Close()
 
-	envelopePublicKey := bytesPattern(32, 0x11)
-	envelopeBody := []byte("encrypted-bytes")
-	fake.PushEnvelope(&provpb.ProvisionEnvelope{
-		PublicKey: envelopePublicKey,
-		Body:      envelopeBody,
-	})
+	// To round-trip the envelope through Link's internal decrypt we have to
+	// know which secondary public key the primary side encrypts to. Inject
+	// the secondary's ephemeral key so we can compute the matching envelope.
+	secondary, err := libsignal.GenerateIdentityKeyPair()
+	if err != nil {
+		t.Fatalf("Generate secondary: %v", err)
+	}
+	primary, err := libsignal.GenerateIdentityKeyPair()
+	if err != nil {
+		t.Fatalf("Generate primary: %v", err)
+	}
+	aci := "11111111-2222-3333-4444-555555555555"
+	num := "+15551234567"
+	code := "ABCD-1234"
+	wantMsg := &provpb.ProvisionMessage{
+		Aci:              &aci,
+		Number:           &num,
+		ProvisioningCode: &code,
+	}
+	env := encryptForTest(t, primary.Private, primary.Public, secondary.Public, wantMsg)
+	fake.PushEnvelope(env)
 
 	gotURLCh := make(chan string, 1)
 	var onURLOnce sync.Once
 	opts := Options{
-		URL: fake.URL(),
+		URL:          fake.URL(),
+		EphemeralKey: secondary,
 		OnURL: func(linkURL string) error {
 			onURLOnce.Do(func() { gotURLCh <- linkURL })
 			return nil
@@ -177,11 +193,8 @@ func TestLinkHappyPath(t *testing.T) {
 	if sess.EphemeralKey == nil {
 		t.Fatal("nil ephemeral key in session")
 	}
-	if string(sess.Envelope.GetBody()) != string(envelopeBody) {
-		t.Errorf("envelope body mismatch")
-	}
-	if string(sess.Envelope.GetPublicKey()) != string(envelopePublicKey) {
-		t.Errorf("envelope public key mismatch")
+	if sess.Message.GetAci() != aci || sess.Message.GetNumber() != num || sess.Message.GetProvisioningCode() != code {
+		t.Errorf("decoded message mismatch: %+v", sess.Message)
 	}
 
 	select {
@@ -231,9 +244,13 @@ func TestLinkUsesInjectedKey(t *testing.T) {
 	}
 	wantPub, _ := kp.Public.Serialize()
 
+	primary, _ := libsignal.GenerateIdentityKeyPair()
+	num := "+1"
+	env := encryptForTest(t, primary.Private, primary.Public, kp.Public, &provpb.ProvisionMessage{Number: &num})
+
 	fake := newFakeProvisioningServer(t, "addr2")
 	defer fake.Close()
-	fake.PushEnvelope(&provpb.ProvisionEnvelope{Body: []byte("x")})
+	fake.PushEnvelope(env)
 
 	var gotPub []byte
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
