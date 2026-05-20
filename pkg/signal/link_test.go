@@ -25,16 +25,24 @@ import (
 )
 
 // fakeSignal answers both halves of the link flow: the provisioning
-// websocket and the REST /v1/devices/link call.
+// websocket and the REST /v1/devices/link + /v2/keys calls.
 type fakeSignal struct {
-	t            *testing.T
-	httpSrv      *httptest.Server
-	wsSrv        *httptest.Server
-	addressUUID  string
-	envelopeCh   chan *provpb.ProvisionEnvelope // buffered; server waits on this
-	lastLinkReq  web.LinkDeviceRequest
-	lastLinkAuth string
-	linkResponse web.LinkDeviceResponse
+	t              *testing.T
+	httpSrv        *httptest.Server
+	wsSrv          *httptest.Server
+	addressUUID    string
+	envelopeCh     chan *provpb.ProvisionEnvelope // buffered; server waits on this
+	lastLinkReq    web.LinkDeviceRequest
+	lastLinkAuth   string
+	linkResponse   web.LinkDeviceResponse
+	preKeyUploads  []preKeyUpload
+	preKeyUploadMu sync.Mutex
+}
+
+type preKeyUpload struct {
+	Identity string
+	Req      web.UploadPreKeysRequest
+	Auth     string
 }
 
 func newFakeSignal(t *testing.T, addr string) *fakeSignal {
@@ -63,14 +71,37 @@ func (f *fakeSignal) ProvisioningURL() string {
 func (f *fakeSignal) APIBaseURL() string { return f.httpSrv.URL }
 
 func (f *fakeSignal) handleHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/v1/devices/link" {
+	switch r.URL.Path {
+	case "/v1/devices/link":
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &f.lastLinkReq)
+		f.lastLinkAuth = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode(f.linkResponse)
+	case "/v2/keys":
+		raw, _ := io.ReadAll(r.Body)
+		var req web.UploadPreKeysRequest
+		_ = json.Unmarshal(raw, &req)
+		f.preKeyUploadMu.Lock()
+		f.preKeyUploads = append(f.preKeyUploads, preKeyUpload{
+			Identity: r.URL.Query().Get("identity"),
+			Req:      req,
+			Auth:     r.Header.Get("Authorization"),
+		})
+		f.preKeyUploadMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	default:
 		http.Error(w, "not found", http.StatusNotFound)
-		return
 	}
-	raw, _ := io.ReadAll(r.Body)
-	_ = json.Unmarshal(raw, &f.lastLinkReq)
-	f.lastLinkAuth = r.Header.Get("Authorization")
-	_ = json.NewEncoder(w).Encode(f.linkResponse)
+}
+
+// PreKeyUploads returns a snapshot of recorded /v2/keys uploads, keyed by
+// the order they arrived in.
+func (f *fakeSignal) PreKeyUploads() []preKeyUpload {
+	f.preKeyUploadMu.Lock()
+	defer f.preKeyUploadMu.Unlock()
+	out := make([]preKeyUpload, len(f.preKeyUploads))
+	copy(out, f.preKeyUploads)
+	return out
 }
 
 func (f *fakeSignal) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -181,9 +212,10 @@ func TestLinkHappyPath(t *testing.T) {
 	// channel.
 	var onceURL sync.Once
 	opts := LinkOptions{
-		ProvisioningURL: fake.ProvisioningURL(),
-		APIBaseURL:      fake.APIBaseURL(),
-		Store:           memstore.New(),
+		ProvisioningURL:    fake.ProvisioningURL(),
+		APIBaseURL:         fake.APIBaseURL(),
+		Store:              memstore.New(),
+		OneTimePreKeyCount: 4, // small batch to keep test fast
 		OnURL: func(linkURL string) error {
 			onceURL.Do(func() {
 				u, err := url.Parse(linkURL)
@@ -242,6 +274,41 @@ func TestLinkHappyPath(t *testing.T) {
 	}
 	if len(got.Password) == 0 {
 		t.Error("persisted account has empty password")
+	}
+
+	// Verify one-time prekey uploads (one per identity).
+	uploads := fake.PreKeyUploads()
+	if len(uploads) != 2 {
+		t.Fatalf("/v2/keys uploads = %d, want 2", len(uploads))
+	}
+	byIdent := map[string]preKeyUpload{}
+	for _, u := range uploads {
+		byIdent[u.Identity] = u
+	}
+	for _, ident := range []string{"aci", "pni"} {
+		u, ok := byIdent[ident]
+		if !ok {
+			t.Errorf("missing %s upload", ident)
+			continue
+		}
+		if len(u.Req.PreKeys) != 4 || len(u.Req.PqPreKeys) != 4 {
+			t.Errorf("%s upload sizes: ec=%d kem=%d, want 4+4", ident, len(u.Req.PreKeys), len(u.Req.PqPreKeys))
+		}
+		// First batch should start at id=2 (we consumed id=1 for the
+		// rotating signed + last-resort Kyber prekeys at link time).
+		if u.Req.PreKeys[0].KeyID != 2 {
+			t.Errorf("%s first one-time prekey id = %d, want 2", ident, u.Req.PreKeys[0].KeyID)
+		}
+		// Auth uses {ACI}.{deviceId} format.
+		wantAuthPrefix := "Basic "
+		if !strings.HasPrefix(u.Auth, wantAuthPrefix) {
+			t.Errorf("%s upload auth header = %q", ident, u.Auth)
+		}
+	}
+
+	// Persisted state should reflect the bumped next-id counters.
+	if got.ACIIdentity.NextPreKeyID != 2+4 || got.PNIIdentity.NextKyberPreKeyID != 2+4 {
+		t.Errorf("next-id counters not bumped: %+v / %+v", got.ACIIdentity, got.PNIIdentity)
 	}
 }
 

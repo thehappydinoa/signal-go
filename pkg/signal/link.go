@@ -33,11 +33,26 @@ type LinkOptions struct {
 	// (Encrypted device names land in Phase 3.)
 	DeviceName string
 
+	// OneTimePreKeyCount is the size of each one-time prekey batch
+	// (Curve25519 + Kyber) uploaded after the link succeeds. Defaults to
+	// 100, matching upstream clients. Set to 0 to skip the upload (the
+	// device will still be linked, but cannot receive new sessions until
+	// you upload prekeys later).
+	OneTimePreKeyCount int
+
 	// ProvisioningURL overrides the websocket endpoint. Default: production.
 	ProvisioningURL string
 	// APIBaseURL overrides chat.signal.org for the REST call.
 	APIBaseURL string
+
+	// testSkipPreKeyUpload is a test-only hook to opt out of the one-time
+	// prekey upload while still keeping the rest of the flow.
+	testSkipPreKeyUpload bool
 }
+
+// DefaultOneTimePreKeyCount is the size of each one-time prekey batch
+// uploaded at link time when [LinkOptions.OneTimePreKeyCount] is zero.
+const DefaultOneTimePreKeyCount = 100
 
 // LinkedAccount summarises a newly-linked device. The full state has been
 // persisted via Store.SaveAccount; callers can drop it after this returns.
@@ -96,9 +111,9 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	}
 
 	// Step 4: assemble + send the link request.
-	web := web.New(opts.APIBaseURL, opts.UserAgent)
+	webc := web.New(opts.APIBaseURL, opts.UserAgent)
 	req := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), msg.GetReadReceipts(), aciIdent, pniIdent, opts.DeviceName)
-	resp, err := web.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
+	resp, err := webc.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
 	if err != nil {
 		return nil, fmt.Errorf("signal.Link: register: %w", err)
 	}
@@ -106,7 +121,32 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 		return nil, errors.New("signal.Link: server returned deviceId=0")
 	}
 
-	// Step 5: persist.
+	// Step 5: upload one-time prekey batches (ACI + PNI, EC + Kyber) so
+	// recipients can establish sessions with us. Skipped if disabled.
+	count := opts.OneTimePreKeyCount
+	if count < 0 {
+		return nil, errors.New("signal.Link: OneTimePreKeyCount must be non-negative")
+	}
+	if count == 0 && !opts.skipOneTimePreKeys() {
+		count = DefaultOneTimePreKeyCount
+	}
+	if count > 0 {
+		creds := web.Credentials{
+			Username: fmt.Sprintf("%s.%d", resp.UUID, resp.DeviceID),
+			Password: password,
+		}
+		var err error
+		aciIdent, err = uploadOneTimePreKeys(ctx, webc, creds, web.IdentityACI, aciIdent, count)
+		if err != nil {
+			return nil, fmt.Errorf("signal.Link: upload ACI prekeys: %w", err)
+		}
+		pniIdent, err = uploadOneTimePreKeys(ctx, webc, creds, web.IdentityPNI, pniIdent, count)
+		if err != nil {
+			return nil, fmt.Errorf("signal.Link: upload PNI prekeys: %w", err)
+		}
+	}
+
+	// Step 6: persist.
 	acct := &account.Account{
 		ACI:                resp.UUID,
 		PNI:                resp.PNI,
@@ -125,6 +165,41 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	return &LinkedAccount{
 		ACI: acct.ACI, PNI: acct.PNI, Number: acct.Number, DeviceID: acct.DeviceID,
 	}, nil
+}
+
+// skipOneTimePreKeys is a hook for tests to disable the one-time upload
+// without changing the public API. Set by link_test.go.
+func (o LinkOptions) skipOneTimePreKeys() bool {
+	return o.testSkipPreKeyUpload
+}
+
+// uploadOneTimePreKeys generates count one-time Curve25519 + Kyber prekeys
+// for ident, uploads them via PUT /v2/keys, and returns the identity with
+// its NextPreKeyID / NextKyberPreKeyID bumped.
+func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int) (account.Identity, error) {
+	identityPriv, err := libsignal.DeserializePrivateKey(ident.PrivateKey)
+	if err != nil {
+		return ident, fmt.Errorf("identity priv: %w", err)
+	}
+	ecBatch, err := prekeys.GenerateOneTimePreKeys(ident.NextPreKeyID, count)
+	if err != nil {
+		return ident, err
+	}
+	kemBatch, err := prekeys.GenerateOneTimeKyberPreKeys(identityPriv, ident.NextKyberPreKeyID, count)
+	if err != nil {
+		return ident, err
+	}
+	req := web.UploadPreKeysRequest{
+		IdentityKey: base64.StdEncoding.EncodeToString(ident.PublicKey),
+		PreKeys:     web.ECPreKeysFrom(ecBatch),
+		PqPreKeys:   web.KEMPreKeysFrom(kemBatch),
+	}
+	if err := webc.UploadPreKeys(ctx, creds, kind, req); err != nil {
+		return ident, err
+	}
+	ident.NextPreKeyID += uint32(count)
+	ident.NextKyberPreKeyID += uint32(count)
+	return ident, nil
 }
 
 // buildIdentity rehydrates an identity keypair from its ProvisionMessage

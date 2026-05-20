@@ -48,8 +48,9 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] `internal/store`: storage interface + `memstore` (tests) + `fsstore`
       (atomic JSON write to disk)
 - [x] Public API: `signal.Link` orchestrates the whole flow and persists
-- [ ] **Phase 2-followup**: upload the 100 one-time prekeys (Curve25519 +
-      Kyber) via `PUT /v2/keys/{aci,pni}` after the link succeeds
+- [x] Upload one-time prekeys (Curve25519 + Kyber, batch size configurable
+      via `LinkOptions.OneTimePreKeyCount`, default 100) via
+      `PUT /v2/keys?identity={aci,pni}` after the link succeeds
 - [ ] **Phase 2-followup**: encrypted device name (libsignal
       `signal_device_name_*` FFI)
 - [ ] End-to-end test against a real phone (manual, gated by `SIGNAL_GO_E2E=1`)
