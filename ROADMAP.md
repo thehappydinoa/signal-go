@@ -30,20 +30,29 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [ ] Unit tests for proto roundtrip, URL encoding, ws frame parsing
 - [ ] Integration test stub (skipped unless `SIGNAL_GO_E2E=1`)
 
-## Phase 2 — Complete the link **(planned)**
+## Phase 2 — Complete the link **(done except where noted)**
 
-- [ ] `ProvisioningCipher` decrypt via libsignal (cgo wrapper)
-- [ ] Parse `ProvisionMessage` → ACI identity keypair, PNI identity keypair,
-      profile key, master key/AEP, number, provisioning code, link-device token
-- [ ] Prekey generation for both ACI and PNI:
-  - signed prekey (rotating)
-  - **mandatory PQXDH**: Kyber last-resort prekey + 100 one-time Kyber prekeys
-  - 100 one-time prekeys
-- [ ] `internal/web`: REST client, basic auth, JSON request/response
-- [ ] `PUT /v1/devices/link` with `AccountAttributes`, prekeys, capabilities
-- [ ] `internal/store`: storage interface + filesystem reference impl
-      (account state, identity keys, prekey records, sessions, sender keys)
-- [ ] End-to-end test against a real phone (manual, gated)
+- [x] `ProvisioningCipher` decrypt (Go AES-CBC + HMAC on top of libsignal
+      ECDH/HKDF, since libsignal exposes the primitives but not the cipher)
+- [x] Parse `ProvisionMessage` → ACI/PNI identity keys, profile key,
+      AccountEntropyPool, number, provisioning code
+- [x] Prekey generation for both ACI and PNI:
+  - [x] Curve25519 signed prekey (rotating)
+  - [x] Kyber/ML-KEM last-resort prekey (rotating, signed)
+  - [x] Curve25519 one-time prekeys (generator)
+  - [x] Kyber one-time prekeys (generator)
+- [x] `internal/web`: REST client (basic auth, JSON, error type)
+- [x] `PUT /v1/devices/link` with `AccountAttributes` + signed + Kyber
+      last-resort prekeys (both namespaces)
+- [x] `internal/account`: Account model + validation
+- [x] `internal/store`: storage interface + `memstore` (tests) + `fsstore`
+      (atomic JSON write to disk)
+- [x] Public API: `signal.Link` orchestrates the whole flow and persists
+- [ ] **Phase 2-followup**: upload the 100 one-time prekeys (Curve25519 +
+      Kyber) via `PUT /v2/keys/{aci,pni}` after the link succeeds
+- [ ] **Phase 2-followup**: encrypted device name (libsignal
+      `signal_device_name_*` FFI)
+- [ ] End-to-end test against a real phone (manual, gated by `SIGNAL_GO_E2E=1`)
 
 ## Phase 3 — Receive **(planned)**
 

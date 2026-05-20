@@ -156,9 +156,13 @@ func TestDecryptEnvelopeRejectsBadCiphertext(t *testing.T) {
 		{"wrong version", func(b []byte) []byte { c := append([]byte(nil), b...); c[0] = 0x02; return c }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			bad := *env
-			bad.Body = tc.mut(env.Body)
-			if _, err := DecryptEnvelope(secondary.Private, &bad); err == nil {
+			// Build a fresh envelope rather than copying *env (the
+			// protobuf Message embeds a sync.Mutex via protoimpl).
+			bad := &provpb.ProvisionEnvelope{
+				PublicKey: env.PublicKey,
+				Body:      tc.mut(env.Body),
+			}
+			if _, err := DecryptEnvelope(secondary.Private, bad); err == nil {
 				t.Errorf("expected error, got nil")
 			}
 		})

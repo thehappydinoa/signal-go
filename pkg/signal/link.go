@@ -2,11 +2,17 @@ package signal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
+	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
+	"github.com/thehappydinoa/signal-go/internal/prekeys"
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
+	"github.com/thehappydinoa/signal-go/internal/store"
+	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
 // LinkOptions configures [Link].
@@ -14,51 +20,37 @@ type LinkOptions struct {
 	// OnURL is called once the linking URL is ready. Typical implementations
 	// print the URL or render it as a QR code in the terminal. Required.
 	OnURL func(linkURL string) error
-	// UserAgent reported to Signal in the X-Signal-Agent header.
-	// Defaults to "signal-go".
+
+	// Store persists the completed account so [Open] can later resume.
+	// Required.
+	Store store.Store
+
+	// UserAgent reported in X-Signal-Agent headers. Defaults to "signal-go".
 	UserAgent string
+
+	// DeviceName is shown in the user's "Linked devices" list. If empty,
+	// the device appears unnamed until a SyncMessage updates it.
+	// (Encrypted device names land in Phase 3.)
+	DeviceName string
+
+	// ProvisioningURL overrides the websocket endpoint. Default: production.
+	ProvisioningURL string
+	// APIBaseURL overrides chat.signal.org for the REST call.
+	APIBaseURL string
 }
 
-// IdentityKey pairs the public + private halves of one of the linked
-// account's long-term identity keys. There are two: one for the ACI
-// (account identifier) and one for the PNI (phone-number identifier).
-type IdentityKey struct {
-	Public  []byte // 33 bytes: 0x05 prefix + 32-byte X25519 point
-	Private []byte // 32 bytes
-}
-
-// LinkedAccount is the decoded provisioning material delivered by the user's
-// primary device after a successful QR-link handshake.
-//
-// In Phase 1 we hand this back to the caller as-is. Phase 2's later steps
-// will use it to generate prekeys and register against `PUT /v1/devices/link`,
-// turning a LinkedAccount into a registered, persistable Account.
+// LinkedAccount summarises a newly-linked device. The full state has been
+// persisted via Store.SaveAccount; callers can drop it after this returns.
 type LinkedAccount struct {
-	// ACI is the account identifier (UUID v4 string).
-	ACI string
-	// PNI is the phone-number identifier (UUID v4 string).
-	PNI string
-	// Number is the E.164 phone number.
-	Number string
-	// ProvisioningCode is the short-lived code the primary device sent that
-	// we present to Signal's server during /v1/devices/link.
-	ProvisioningCode string
-	// ACIIdentityKey is the long-term identity keypair for the ACI.
-	ACIIdentityKey IdentityKey
-	// PNIIdentityKey is the long-term identity keypair for the PNI.
-	PNIIdentityKey IdentityKey
-	// ProfileKey is the 32-byte profile encryption key.
-	ProfileKey []byte
-	// ReadReceipts is the account's read-receipts preference.
-	ReadReceipts bool
-	// AccountEntropyPool, if present, is the master backup secret. Empty
-	// for accounts that have not enrolled in the new backup system.
-	AccountEntropyPool string
+	ACI      string
+	PNI      string
+	Number   string
+	DeviceID uint32
 }
 
-// Link runs the secondary-device QR-link handshake against
-// chat.signal.org. On success it returns the decrypted [LinkedAccount]
-// material from the user's primary device.
+// Link runs the secondary-device QR-link handshake against chat.signal.org
+// and completes registration. On success the new device's state is
+// persisted via opts.Store; the returned [LinkedAccount] is a summary.
 //
 // The user must scan the URL passed to opts.OnURL with their primary
 // device's "Linked devices" menu within the Signal mobile app. ctx
@@ -67,61 +59,150 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	if opts.OnURL == nil {
 		return nil, errors.New("signal.Link: LinkOptions.OnURL is required")
 	}
+	if opts.Store == nil {
+		return nil, errors.New("signal.Link: LinkOptions.Store is required")
+	}
+
+	// Step 1: QR handshake (provisioning ws + decrypt envelope).
 	sess, err := provisioning.Link(ctx, provisioning.Options{
 		UserAgent: opts.UserAgent,
+		URL:       opts.ProvisioningURL,
 		OnURL:     opts.OnURL,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return convertSession(sess)
-}
-
-// convertSession projects a provisioning.Session onto the public
-// [LinkedAccount] type.
-func convertSession(sess *provisioning.Session) (*LinkedAccount, error) {
-	if sess == nil || sess.Message == nil {
-		return nil, errors.New("signal: empty provisioning session")
-	}
 	msg := sess.Message
-
-	// Either aci/pni or aciBinary/pniBinary may be present depending on
-	// upstream client version. The string forms are canonical for our
-	// public API; we'll normalise the binary forms later if needed.
 	if msg.GetAci() == "" || msg.GetNumber() == "" || msg.GetProvisioningCode() == "" {
-		return nil, fmt.Errorf("signal: provisioning message missing required fields")
-	}
-	if err := validateIdentityKey("ACI", msg.GetAciIdentityKeyPublic(), msg.GetAciIdentityKeyPrivate()); err != nil {
-		return nil, err
-	}
-	if err := validateIdentityKey("PNI", msg.GetPniIdentityKeyPublic(), msg.GetPniIdentityKeyPrivate()); err != nil {
-		return nil, err
+		return nil, errors.New("signal.Link: provisioning message missing required fields")
 	}
 
-	return &LinkedAccount{
-		ACI:                msg.GetAci(),
-		PNI:                msg.GetPni(),
+	// Step 2: generate per-namespace identity-derived state (registration
+	// IDs, signed prekeys, last-resort Kyber prekeys).
+	aciIdent, err := buildIdentity(msg.GetAciIdentityKeyPublic(), msg.GetAciIdentityKeyPrivate())
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: ACI identity: %w", err)
+	}
+	pniIdent, err := buildIdentity(msg.GetPniIdentityKeyPublic(), msg.GetPniIdentityKeyPrivate())
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: PNI identity: %w", err)
+	}
+
+	// Step 3: account password (HTTP Basic credential for all post-link
+	// authenticated requests).
+	password, err := generatePassword()
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: generate password: %w", err)
+	}
+
+	// Step 4: assemble + send the link request.
+	web := web.New(opts.APIBaseURL, opts.UserAgent)
+	req := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), msg.GetReadReceipts(), aciIdent, pniIdent, opts.DeviceName)
+	resp, err := web.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: register: %w", err)
+	}
+	if resp.DeviceID == 0 {
+		return nil, errors.New("signal.Link: server returned deviceId=0")
+	}
+
+	// Step 5: persist.
+	acct := &account.Account{
+		ACI:                resp.UUID,
+		PNI:                resp.PNI,
 		Number:             msg.GetNumber(),
-		ProvisioningCode:   msg.GetProvisioningCode(),
-		ACIIdentityKey:     IdentityKey{Public: msg.GetAciIdentityKeyPublic(), Private: msg.GetAciIdentityKeyPrivate()},
-		PNIIdentityKey:     IdentityKey{Public: msg.GetPniIdentityKeyPublic(), Private: msg.GetPniIdentityKeyPrivate()},
+		DeviceID:           resp.DeviceID,
+		Password:           password,
 		ProfileKey:         msg.GetProfileKey(),
-		ReadReceipts:       msg.GetReadReceipts(),
 		AccountEntropyPool: msg.GetAccountEntropyPool(),
+		ReadReceipts:       msg.GetReadReceipts(),
+		ACIIdentity:        aciIdent,
+		PNIIdentity:        pniIdent,
+	}
+	if err := opts.Store.SaveAccount(acct); err != nil {
+		return nil, fmt.Errorf("signal.Link: persist account: %w", err)
+	}
+	return &LinkedAccount{
+		ACI: acct.ACI, PNI: acct.PNI, Number: acct.Number, DeviceID: acct.DeviceID,
 	}, nil
 }
 
-// validateIdentityKey confirms the provisioning message handed us a
-// well-formed keypair by deserializing both halves through libsignal.
-func validateIdentityKey(label string, pub, priv []byte) error {
-	if len(pub) == 0 || len(priv) == 0 {
-		return fmt.Errorf("signal: %s identity key missing", label)
+// buildIdentity rehydrates an identity keypair from its ProvisionMessage
+// bytes and generates the initial signed + Kyber prekeys for it.
+func buildIdentity(pubBytes, privBytes []byte) (account.Identity, error) {
+	if len(pubBytes) == 0 || len(privBytes) == 0 {
+		return account.Identity{}, errors.New("identity key missing")
 	}
-	if _, err := libsignal.DeserializePublicKey(pub); err != nil {
-		return fmt.Errorf("signal: %s public key invalid: %w", label, err)
+	priv, err := libsignal.DeserializePrivateKey(privBytes)
+	if err != nil {
+		return account.Identity{}, fmt.Errorf("private key invalid: %w", err)
 	}
-	if _, err := libsignal.DeserializePrivateKey(priv); err != nil {
-		return fmt.Errorf("signal: %s private key invalid: %w", label, err)
+	if _, err := libsignal.DeserializePublicKey(pubBytes); err != nil {
+		return account.Identity{}, fmt.Errorf("public key invalid: %w", err)
 	}
-	return nil
+	regID, err := prekeys.NewRegistrationID()
+	if err != nil {
+		return account.Identity{}, err
+	}
+	spk, err := prekeys.GenerateSignedPreKey(priv, 1)
+	if err != nil {
+		return account.Identity{}, err
+	}
+	kspk, err := prekeys.GenerateLastResortKyberPreKey(priv, 1)
+	if err != nil {
+		return account.Identity{}, err
+	}
+	return account.Identity{
+		PublicKey:             pubBytes,
+		PrivateKey:            privBytes,
+		RegistrationID:        regID,
+		SignedPreKey:          *spk,
+		LastResortKyberPreKey: *kspk,
+		// We've consumed id 1 for the rotating signed + last-resort Kyber
+		// prekeys, so one-time keys start at 2.
+		NextPreKeyID:      2,
+		NextKyberPreKeyID: 2,
+	}, nil
+}
+
+// buildLinkRequest constructs the /v1/devices/link request body.
+func buildLinkRequest(provisioningCode string, profileKey []byte, readReceipts bool, aci, pni account.Identity, deviceName string) web.LinkDeviceRequest {
+	return web.LinkDeviceRequest{
+		VerificationCode: provisioningCode,
+		AccountAttributes: web.AccountAttributes{
+			FetchesMessages:           true,
+			RegistrationID:            aci.RegistrationID,
+			PNIRegistrationID:         pni.RegistrationID,
+			Name:                      deviceName,
+			Capabilities:              web.DefaultCapabilities(),
+			UnidentifiedAccessKey:     deriveUDKey(profileKey),
+			DiscoverableByPhoneNumber: true,
+		},
+		ACISignedPreKey:       web.SignedECPreKeyFrom(aci.SignedPreKey),
+		PNISignedPreKey:       web.SignedECPreKeyFrom(pni.SignedPreKey),
+		ACIPqLastResortPreKey: web.SignedKEMPreKeyFrom(aci.LastResortKyberPreKey),
+		PNIPqLastResortPreKey: web.SignedKEMPreKeyFrom(pni.LastResortKyberPreKey),
+	}
+}
+
+// deriveUDKey produces the 16-byte unidentified-access key that Signal
+// expects in AccountAttributes.
+//
+// Phase 2 placeholder: we send 16 zero bytes (server accepts this at link
+// time; sealed-sender will not work until we plug in the proper AES-GCM-SIV
+// derivation in Phase 4). See ROADMAP.md.
+func deriveUDKey(profileKey []byte) string {
+	_ = profileKey
+	return base64.StdEncoding.EncodeToString(make([]byte, 16))
+}
+
+// generatePassword returns a random 18-byte password as a base64 string.
+// 18 bytes encode to 24 chars without padding, matching what other Signal
+// clients emit.
+func generatePassword() (string, error) {
+	var b [18]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b[:]), nil
 }

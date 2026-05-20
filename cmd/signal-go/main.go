@@ -1,22 +1,26 @@
 // Command signal-go is the demo CLI for the signal-go library.
 //
-// Phase 1 supports one subcommand:
+// Phase 2 supports:
 //
-//	signal-go link    Print the sgnl://linkdevice URL and wait for the user
-//	                  to scan it with their primary device.
+//	signal-go link -store <dir>    Pair as a Signal secondary device and
+//	                               persist credentials under <dir>.
 //
-// As later phases land, this CLI will gain `send`, `recv`, `groups`, etc.
+// Phase 3+ will add `recv`, `send`, `groups`, etc.
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/thehappydinoa/signal-go/internal/store"
+	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -51,20 +55,39 @@ func runLink(args []string) int {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the user to scan")
 	userAgent := fs.String("user-agent", "signal-go", "value sent in X-Signal-Agent")
+	storeDir := fs.String("store", ".signal-data", "directory where account state is persisted")
+	deviceName := fs.String("name", "", "device name shown in the user's linked devices list (TODO: encrypt)")
 	_ = fs.Parse(args)
+
+	dir, err := filepath.Abs(*storeDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve store dir: %v\n", err)
+		return 1
+	}
+	s, err := fsstore.New(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "open store: %v\n", err)
+		return 1
+	}
+	if existing, err := s.LoadAccount(); err == nil {
+		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", dir, existing.ACI, existing.DeviceID)
+		fmt.Fprintln(os.Stderr, "Delete the store directory if you want to re-link.")
+		return 1
+	} else if !errors.Is(err, store.ErrNotLinked) {
+		fmt.Fprintf(os.Stderr, "store: %v\n", err)
+		return 1
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
-	// Honour Ctrl-C.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
+	go func() { <-sigCh; cancel() }()
 
-	acct, err := sg.Link(ctx, sg.LinkOptions{
-		UserAgent: *userAgent,
+	la, err := sg.Link(ctx, sg.LinkOptions{
+		UserAgent:  *userAgent,
+		Store:      s,
+		DeviceName: *deviceName,
 		OnURL: func(linkURL string) error {
 			fmt.Println("Open Signal on your phone → Settings → Linked devices → +")
 			fmt.Println("Scan the URL below as a QR code, or paste it manually:")
@@ -80,14 +103,13 @@ func runLink(args []string) int {
 		return 1
 	}
 	fmt.Println()
-	fmt.Println("Linked! Decoded provisioning material from your primary device:")
-	fmt.Printf("  ACI:    %s\n", acct.ACI)
-	fmt.Printf("  PNI:    %s\n", acct.PNI)
-	fmt.Printf("  number: %s\n", acct.Number)
-	fmt.Printf("  code:   %s\n", acct.ProvisioningCode)
-	fmt.Printf("  profile key: %d bytes\n", len(acct.ProfileKey))
+	fmt.Println("Linked!")
+	fmt.Printf("  ACI:      %s\n", la.ACI)
+	fmt.Printf("  PNI:      %s\n", la.PNI)
+	fmt.Printf("  number:   %s\n", la.Number)
+	fmt.Printf("  deviceID: %d\n", la.DeviceID)
+	fmt.Printf("  store:    %s\n", dir)
 	fmt.Println()
-	fmt.Println("Next: Phase 2c will generate prekeys and register against /v1/devices/link.")
-	fmt.Println("See ROADMAP.md.")
+	fmt.Println("Phase 3 will add real-time receive over the chat websocket.")
 	return 0
 }
