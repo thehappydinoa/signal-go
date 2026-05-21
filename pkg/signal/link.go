@@ -11,7 +11,6 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
-	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
@@ -23,7 +22,7 @@ type LinkOptions struct {
 
 	// Store persists the completed account so [Open] can later resume.
 	// Required.
-	Store store.Store
+	Store account.Store
 
 	// UserAgent reported in X-Signal-Agent headers. Defaults to "signal-go".
 	UserAgent string

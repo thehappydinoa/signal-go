@@ -8,7 +8,6 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
-	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
 	"github.com/thehappydinoa/signal-go/internal/store/memstore"
 )
@@ -54,15 +53,15 @@ func validAccount(t *testing.T) *account.Account {
 	}
 }
 
-// stores is the table of [store.Store] implementations under test.
-func stores(t *testing.T) map[string]store.Store {
+// stores is the table of [account.Store] implementations under test.
+func stores(t *testing.T) map[string]account.Store {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "fs")
 	fs, err := fsstore.New(dir)
 	if err != nil {
 		t.Fatalf("fsstore.New: %v", err)
 	}
-	return map[string]store.Store{
+	return map[string]account.Store{
 		"memstore": memstore.New(),
 		"fsstore":  fs,
 	}
@@ -72,7 +71,7 @@ func TestStoreLoadAccountWhenEmpty(t *testing.T) {
 	for name, s := range stores(t) {
 		t.Run(name, func(t *testing.T) {
 			_, err := s.LoadAccount()
-			if !errors.Is(err, store.ErrNotLinked) {
+			if !errors.Is(err, account.ErrNotLinked) {
 				t.Errorf("err = %v, want ErrNotLinked", err)
 			}
 		})

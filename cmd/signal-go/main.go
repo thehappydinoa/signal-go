@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thehappydinoa/signal-go/internal/store"
+	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
@@ -73,7 +73,7 @@ func runLink(args []string) int {
 		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", dir, existing.ACI, existing.DeviceID)
 		fmt.Fprintln(os.Stderr, "Delete the store directory if you want to re-link.")
 		return 1
-	} else if !errors.Is(err, store.ErrNotLinked) {
+	} else if !errors.Is(err, account.ErrNotLinked) {
 		fmt.Fprintf(os.Stderr, "store: %v\n", err)
 		return 1
 	}
