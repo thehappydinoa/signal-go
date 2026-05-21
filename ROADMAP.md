@@ -79,11 +79,11 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Encrypt with session cipher; emit basic-auth `PUT /v1/messages/{uuid}`
       with the wire-format envelope (`web.SendMessage` + `MessageEnvelope`)
 - [x] Mismatched / stale device responses surfaced as typed errors
-      (`*web.MismatchedDevicesError`, `*web.StaleDevicesError`); auto-
-      retry is the next slice
-- [ ] Auto-retry on `*MismatchedDevicesError` / `*StaleDevicesError`
-      (refresh bundles, drop stale sessions, resend)
-- [ ] Multi-device fan-out (currently only sends to device 1)
+      (`*web.MismatchedDevicesError`, `*web.StaleDevicesError`)
+- [x] Auto-retry on `*MismatchedDevicesError` / `*StaleDevicesError`
+      (refresh bundles, drop stale sessions, resend — at-most-one retry)
+- [x] Multi-device fan-out (GET `/*` on first send; per-recipient device
+      list cached in-memory; one envelope per device in a single PUT)
 - [ ] Sealed-sender encrypt → server doesn't see our ACI as the
       sender. Needs `signal_sealed_sender_multi_recipient_encrypt`
       wrapper + sender-certificate fetch from `/v1/certificate/delivery`

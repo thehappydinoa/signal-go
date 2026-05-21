@@ -100,6 +100,25 @@ func TestSignalStoresSession(t *testing.T) {
 	}
 }
 
+func TestSignalStoresDeleteSession(t *testing.T) {
+	s := memstore.NewSignalStores()
+	a := addr("cccc", 3)
+	rec := []byte("session-to-delete")
+	if err := s.StoreSession(a, rec); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+	if err := s.DeleteSession(a); err != nil {
+		t.Errorf("DeleteSession: %v", err)
+	}
+	if _, err := s.LoadSession(a); !errors.Is(err, store.ErrRecordNotFound) {
+		t.Errorf("after delete: %v", err)
+	}
+	// Idempotent — deleting a missing session is not an error.
+	if err := s.DeleteSession(a); err != nil {
+		t.Errorf("second DeleteSession: %v", err)
+	}
+}
+
 func TestSignalStoresPreKey(t *testing.T) {
 	s := memstore.NewSignalStores()
 	if _, err := s.LoadPreKey(1); !errors.Is(err, store.ErrRecordNotFound) {

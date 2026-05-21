@@ -1,8 +1,7 @@
-# Send flow (Phase 4 — planned)
+# Send flow (Phase 4 — shipped)
 
-Sending a 1:1 message. The full design lives with Phase 4; this is the
-target shape so the public API and the receive pipeline don't end up
-incompatible with it.
+Sending a 1:1 message. Fan-out, retry, and basic-auth send are live.
+Sealed-sender is the next planned enhancement.
 
 ```mermaid
 sequenceDiagram
@@ -14,38 +13,71 @@ sequenceDiagram
     participant Srv as chat.signal.org
 
     App->>Sig: Send(ctx, recipientACI, "hello")
-    alt no session for recipient
-        Sig->>Web: GET /v2/keys/{aci}/{device}
-        Web-->>Sig: PreKeyBundle<br/>identity + signed prekey<br/>+ Kyber + one-time
-        Sig->>LS: process_prekey_bundle<br/>creates session
+
+    alt device list not cached (first send to this ACI)
+        Sig->>Web: GET /v2/keys/{aci}/*
+        Web-->>Sig: all devices + bundles
+        loop for each device without a cached session
+            Sig->>LS: process_prekey_bundle → creates session
+        end
+        Sig->>Sig: cache device-ID set in Client.knownDevices
+    else cached device IDs available
+        loop for each cached device with a deleted session
+            Sig->>Web: GET /v2/keys/{aci}/{devID}
+            Web-->>Sig: fresh bundle
+            Sig->>LS: process_prekey_bundle → re-creates session
+        end
     end
-    Sig->>LS: session_cipher_encrypt(plaintext)
-    LS-->>Sig: SignalMessage / PreKeySignalMessage
-    Sig->>LS: sealed_sender_encrypt<br/>with sender certificate
-    LS-->>Sig: SealedSenderMessage envelope
-    Sig->>Web: PUT /v1/messages/{recipientACI}<br/>envelope, timestamp, ...
-    alt mismatched/stale devices
-        Web-->>Sig: 409 / 410 with device list
-        Sig->>Sig: drop stale sessions,<br/>refetch bundles, retry
+
+    loop for each device address
+        Sig->>LS: session_cipher_encrypt(padded plaintext)
+        LS-->>Sig: SignalMessage / PreKeySignalMessage
     end
+
+    Sig->>Web: PUT /v1/messages/{recipientACI}<br/>[one envelope per device]
+
+    alt HTTP 409 — mismatched devices
+        Web-->>Sig: {missingDevices, extraDevices}
+        Sig->>Sig: delete sessions for extraDevices
+        loop for each missingDevice
+            Sig->>Web: GET /v2/keys/{aci}/{devID}
+            Web-->>Sig: bundle
+            Sig->>LS: process_prekey_bundle
+        end
+        Sig->>Sig: update knownDevices cache
+        Sig->>Web: PUT /v1/messages/{recipientACI} [retry]
+    else HTTP 410 — stale devices
+        Web-->>Sig: {staleDevices}
+        loop for each staleDevice
+            Sig->>Sig: delete stale session
+            Sig->>Web: GET /v2/keys/{aci}/{devID}
+            Web-->>Sig: fresh bundle
+            Sig->>LS: process_prekey_bundle
+        end
+        Sig->>Web: PUT /v1/messages/{recipientACI} [retry]
+    end
+
     Web-->>Sig: 200 OK
-    Sig-->>App: nil
+    Sig-->>App: Receipt{Timestamp, RecipientACI}
 ```
 
 ## What to look at
 
-- **Session establishment** happens lazily on the first send to a
-  recipient. Subsequent sends reuse the Double Ratchet state from the
-  SessionStore.
-- **Sealed sender** is the default. Recipients get an `Envelope` that
-  doesn't reveal the sender's ACI to the server. The sender certificate
-  is fetched from `/v1/certificate/delivery` and cached.
-- **Mismatched/stale devices** (HTTP 409 / 410 with a device list) are
-  the server telling us the recipient has added or removed a device
-  since we last fetched their bundle. We drop the corresponding
-  sessions, refetch, and resend.
+- **Session establishment** happens on the first send to a recipient via
+  `discoverAndEnsureSessions`. Subsequent sends reuse cached sessions and
+  the in-memory device-ID map.
+- **Fan-out**: one `SignalMessage` per device is assembled and sent in a
+  single PUT. Each envelope is independently encrypted with the device's
+  Double Ratchet session.
+- **Retry**: at most one retry on 409/410. A second failure propagates
+  to the caller.
+- **Sealed sender** is the next planned enhancement. Recipients would
+  receive envelopes that don't reveal the sender's ACI to the server.
+  Requires `signal_sealed_sender_multi_recipient_encrypt` wrapper +
+  sender-certificate cache.
 
 ## Linked design records
 
-- [Roadmap Phase 4](../../ROADMAP.md#phase-4--send-11-planned)
+- [ADR 0014 — Send retry and multi-device fan-out strategy](../adr/0014-send-retry-fanout.md)
+- [Roadmap Phase 4](../../ROADMAP.md#phase-4--send-11-in-progress)
 - [Sealed Sender (Signal blog)](https://signal.org/blog/sealed-sender/)

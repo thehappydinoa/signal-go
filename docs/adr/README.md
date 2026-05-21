@@ -21,3 +21,4 @@ with a new ADR that links back to the one it replaces.
 | 0011 | Security audit methodology + threat model      | Accepted |
 | 0012 | Encrypted account store on disk                | Accepted |
 | 0013 | GitHub Actions CI                              | Accepted |
+| 0014 | Send retry and multi-device fan-out strategy   | Accepted |

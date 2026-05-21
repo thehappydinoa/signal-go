@@ -155,58 +155,40 @@ func newRecipient(t *testing.T, aci string, devID, regID uint32) *recipientFixtu
 	}
 }
 
-// bundleResponse builds the JSON the server returns for
-// GET /v2/keys/{aci}/{deviceID}.
-func (r *recipientFixture) bundleResponse() web.FetchPreKeyResponse {
-	idBytes, _ := r.identityKey.Public.Serialize()
+// bundleDevice builds the web.BundleDevice for this fixture.
+func (r *recipientFixture) bundleDevice() web.BundleDevice {
 	spkBytes, _ := r.signedPreKey.pub.Serialize()
 	kpkBytes, _ := r.kyberPreKey.pub.Serialize()
-	resp := web.FetchPreKeyResponse{
-		IdentityKey: base64.StdEncoding.EncodeToString(idBytes),
-	}
-	dev := struct {
-		DeviceID       uint32 `json:"deviceId"`
-		RegistrationID uint32 `json:"registrationId"`
-		SignedPreKey   struct {
-			KeyID     uint32 `json:"keyId"`
-			PublicKey string `json:"publicKey"`
-			Signature string `json:"signature"`
-		} `json:"signedPreKey"`
-		PqPreKey *struct {
-			KeyID     uint32 `json:"keyId"`
-			PublicKey string `json:"publicKey"`
-			Signature string `json:"signature"`
-		} `json:"pqPreKey"`
-		PreKey *struct {
-			KeyID     uint32 `json:"keyId"`
-			PublicKey string `json:"publicKey"`
-		} `json:"preKey"`
-	}{
+	otBytes, _ := r.oneTimeKey.pub.Serialize()
+	dev := web.BundleDevice{
 		DeviceID:       r.devID,
 		RegistrationID: r.regID,
+		SignedPreKey: web.SignedPreKeySlot{
+			KeyID:     r.signedPreKey.id,
+			PublicKey: base64.StdEncoding.EncodeToString(spkBytes),
+			Signature: base64.StdEncoding.EncodeToString(r.signedPreKey.sig),
+		},
+		PqPreKey: &web.SignedPreKeySlot{
+			KeyID:     r.kyberPreKey.id,
+			PublicKey: base64.StdEncoding.EncodeToString(kpkBytes),
+			Signature: base64.StdEncoding.EncodeToString(r.kyberPreKey.sig),
+		},
+		PreKey: &web.PreKeySlot{
+			KeyID:     r.oneTimeKey.id,
+			PublicKey: base64.StdEncoding.EncodeToString(otBytes),
+		},
 	}
-	dev.SignedPreKey.KeyID = r.signedPreKey.id
-	dev.SignedPreKey.PublicKey = base64.StdEncoding.EncodeToString(spkBytes)
-	dev.SignedPreKey.Signature = base64.StdEncoding.EncodeToString(r.signedPreKey.sig)
-	dev.PqPreKey = &struct {
-		KeyID     uint32 `json:"keyId"`
-		PublicKey string `json:"publicKey"`
-		Signature string `json:"signature"`
-	}{
-		KeyID:     r.kyberPreKey.id,
-		PublicKey: base64.StdEncoding.EncodeToString(kpkBytes),
-		Signature: base64.StdEncoding.EncodeToString(r.kyberPreKey.sig),
+	return dev
+}
+
+// bundleResponse builds the JSON the server returns for
+// GET /v2/keys/{aci}/*.
+func (r *recipientFixture) bundleResponse() web.FetchPreKeyResponse {
+	idBytes, _ := r.identityKey.Public.Serialize()
+	return web.FetchPreKeyResponse{
+		IdentityKey: base64.StdEncoding.EncodeToString(idBytes),
+		Devices:     []web.BundleDevice{r.bundleDevice()},
 	}
-	otBytes, _ := r.oneTimeKey.pub.Serialize()
-	dev.PreKey = &struct {
-		KeyID     uint32 `json:"keyId"`
-		PublicKey string `json:"publicKey"`
-	}{
-		KeyID:     r.oneTimeKey.id,
-		PublicKey: base64.StdEncoding.EncodeToString(otBytes),
-	}
-	resp.Devices = append(resp.Devices, dev)
-	return resp
 }
 
 // senderFixture is the equivalent of Bob's setup but for the sender
@@ -238,14 +220,14 @@ func newSenderClient(t *testing.T, aci string, devID uint32, baseURL string) *Cl
 func TestSendRoundTripDecryptsOnRecipient(t *testing.T) {
 	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
 
-	// Fake REST server: GET bundle, PUT messages — capture the envelope.
+	// Fake REST server: GET /* returns bundle, PUT /messages captures envelope.
 	var (
 		mu       sync.Mutex
 		captured *web.SendMessageRequest
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/1":
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/*":
 			_ = json.NewEncoder(w).Encode(bob.bundleResponse())
 		case r.Method == http.MethodPut && r.URL.Path == "/v1/messages/"+bob.aci:
 			raw, _ := io.ReadAll(r.Body)
@@ -317,8 +299,9 @@ func TestSendRoundTripDecryptsOnRecipient(t *testing.T) {
 }
 
 func TestSendSecondMessageReusesSession(t *testing.T) {
-	// After the first send the session is cached in our SignalStores;
-	// the second send must NOT hit the prekey-bundle endpoint again.
+	// After the first send the session is cached in our SignalStores and
+	// the device list is cached in Client; the second send must NOT hit
+	// the bundle endpoint again.
 	//
 	// Note: both envelopes are still type=PREKEY_BUNDLE. Under the
 	// Double Ratchet, the sending side keeps emitting prekey messages
@@ -336,7 +319,7 @@ func TestSendSecondMessageReusesSession(t *testing.T) {
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/1":
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/*":
 			mu.Lock()
 			bundleHits++
 			mu.Unlock()
@@ -369,10 +352,194 @@ func TestSendSecondMessageReusesSession(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if bundleHits != 1 {
-		t.Errorf("bundle hits = %d, want exactly 1 (session should be cached)", bundleHits)
+		t.Errorf("bundle hits = %d, want exactly 1 (device list cached after first send)", bundleHits)
 	}
 	if sentEnvCount != 2 {
 		t.Errorf("sent envelopes = %d, want 2", sentEnvCount)
+	}
+}
+
+func TestSendMultiDeviceFanOut(t *testing.T) {
+	// Bob has two linked devices. Send should produce one envelope per device
+	// in a single PUT /v1/messages request.
+	bobDev1 := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bobDev2 := newRecipient(t, "bob-aci-uuid", 2, 5555)
+	// Device 2 shares the same identity key as device 1 (same account).
+	bobDev2.identityKey = bobDev1.identityKey
+
+	var (
+		mu      sync.Mutex
+		putBody web.SendMessageRequest
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bobDev1.aci+"/*":
+			idBytes, _ := bobDev1.identityKey.Public.Serialize()
+			_ = json.NewEncoder(w).Encode(web.FetchPreKeyResponse{
+				IdentityKey: base64.StdEncoding.EncodeToString(idBytes),
+				Devices:     []web.BundleDevice{bobDev1.bundleDevice(), bobDev2.bundleDevice()},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/v1/messages/"+bobDev1.aci:
+			raw, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			_ = json.Unmarshal(raw, &putBody)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(web.SendMessageResponse{})
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := alice.Send(ctx, bobDev1.aci, "hi both devices"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(putBody.Messages) != 2 {
+		t.Fatalf("want 2 envelopes (one per device), got %d", len(putBody.Messages))
+	}
+	devIDs := map[uint32]bool{}
+	for _, msg := range putBody.Messages {
+		devIDs[msg.DestinationDeviceID] = true
+	}
+	if !devIDs[1] || !devIDs[2] {
+		t.Errorf("envelopes targeted devices %v, want both 1 and 2", devIDs)
+	}
+}
+
+func TestSendRetryOnMismatchedDevices(t *testing.T) {
+	// The server initially reports only device 1 in the bundle response,
+	// then the first PUT returns 409 with missingDevices=[2]. Send must
+	// fetch a bundle for device 2, then retry and succeed.
+	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bob2 := newRecipient(t, "bob-aci-uuid", 2, 5555)
+	bob2.identityKey = bob.identityKey
+
+	var (
+		mu      sync.Mutex
+		putHits int
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/*":
+			// Initial discovery: only device 1.
+			_ = json.NewEncoder(w).Encode(bob.bundleResponse())
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/2":
+			// Bundle fetch for the missing device 2.
+			idBytes, _ := bob2.identityKey.Public.Serialize()
+			_ = json.NewEncoder(w).Encode(web.FetchPreKeyResponse{
+				IdentityKey: base64.StdEncoding.EncodeToString(idBytes),
+				Devices:     []web.BundleDevice{bob2.bundleDevice()},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/v1/messages/"+bob.aci:
+			mu.Lock()
+			putHits++
+			hit := putHits
+			mu.Unlock()
+			if hit == 1 {
+				// First attempt: tell the sender about a new device.
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"missingDevices": []uint32{2},
+					"extraDevices":   []uint32{},
+				})
+				return
+			}
+			// Retry: succeed.
+			_ = json.NewEncoder(w).Encode(web.SendMessageResponse{})
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	receipt, err := alice.Send(ctx, bob.aci, "hello with retry")
+	if err != nil {
+		t.Fatalf("Send returned error after retry: %v", err)
+	}
+	if receipt.RecipientACI != bob.aci {
+		t.Errorf("receipt.RecipientACI = %q, want %q", receipt.RecipientACI, bob.aci)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if putHits != 2 {
+		t.Errorf("PUT hits = %d, want exactly 2 (initial + retry)", putHits)
+	}
+}
+
+func TestSendRetryOnStaleDevices(t *testing.T) {
+	// The first PUT returns HTTP 410 (stale registration ID for device 1).
+	// Send must drop the session, re-fetch the bundle, and retry.
+	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+
+	var (
+		mu      sync.Mutex
+		putHits int
+		getHits int
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/*":
+			mu.Lock()
+			getHits++
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(bob.bundleResponse())
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/1":
+			mu.Lock()
+			getHits++
+			mu.Unlock()
+			// Re-fetch of stale device's bundle: return fresh bundle.
+			_ = json.NewEncoder(w).Encode(bob.bundleResponse())
+		case r.Method == http.MethodPut && r.URL.Path == "/v1/messages/"+bob.aci:
+			mu.Lock()
+			putHits++
+			hit := putHits
+			mu.Unlock()
+			if hit == 1 {
+				w.WriteHeader(http.StatusGone)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"staleDevices": []uint32{1},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(web.SendMessageResponse{})
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	receipt, err := alice.Send(ctx, bob.aci, "hello after stale session")
+	if err != nil {
+		t.Fatalf("Send returned error after stale-device retry: %v", err)
+	}
+	if receipt.RecipientACI != bob.aci {
+		t.Errorf("receipt.RecipientACI = %q, want %q", receipt.RecipientACI, bob.aci)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if putHits != 2 {
+		t.Errorf("PUT hits = %d, want exactly 2", putHits)
+	}
+	// Discovery (/*) + stale re-fetch (/1) = 2.
+	if getHits != 2 {
+		t.Errorf("GET hits = %d, want 2 (discover + stale re-fetch)", getHits)
 	}
 }
 
@@ -392,7 +559,10 @@ func TestSendInputValidation(t *testing.T) {
 	}
 }
 
-func TestSendSurfacesMismatchedDevicesError(t *testing.T) {
+func TestSendPropagatesMismatchedDevicesErrorAfterRetry(t *testing.T) {
+	// If both the initial send AND the retry return 409, the error
+	// propagates to the caller. errors.As can still find the typed error
+	// through the wrapping.
 	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -414,7 +584,7 @@ func TestSendSurfacesMismatchedDevicesError(t *testing.T) {
 	_, err := alice.Send(ctx, bob.aci, "hi")
 	var mde *web.MismatchedDevicesError
 	if !errors.As(err, &mde) {
-		t.Fatalf("err = %v (%T), want *web.MismatchedDevicesError", err, err)
+		t.Fatalf("err = %v (%T), want *web.MismatchedDevicesError in chain", err, err)
 	}
 }
 

@@ -20,24 +20,7 @@ func TestFetchPreKeyBundleSendsExpectedRequest(t *testing.T) {
 		gotAuth = r.Header.Get("Authorization")
 		_ = json.NewEncoder(w).Encode(FetchPreKeyResponse{
 			IdentityKey: base64.StdEncoding.EncodeToString([]byte{0x05}),
-			Devices: []struct {
-				DeviceID       uint32 `json:"deviceId"`
-				RegistrationID uint32 `json:"registrationId"`
-				SignedPreKey   struct {
-					KeyID     uint32 `json:"keyId"`
-					PublicKey string `json:"publicKey"`
-					Signature string `json:"signature"`
-				} `json:"signedPreKey"`
-				PqPreKey *struct {
-					KeyID     uint32 `json:"keyId"`
-					PublicKey string `json:"publicKey"`
-					Signature string `json:"signature"`
-				} `json:"pqPreKey"`
-				PreKey *struct {
-					KeyID     uint32 `json:"keyId"`
-					PublicKey string `json:"publicKey"`
-				} `json:"preKey"`
-			}{
+			Devices: []BundleDevice{
 				{DeviceID: 1, RegistrationID: 4242},
 			},
 		})

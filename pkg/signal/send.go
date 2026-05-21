@@ -17,19 +17,16 @@ import (
 )
 
 // Send delivers a 1:1 text message to the recipient identified by their
-// ACI (UUID string). If no session exists with the recipient's primary
-// device, Send transparently fetches a prekey bundle and establishes one
-// before encrypting.
+// ACI (UUID string).
 //
-// Phase 4 ships single-device + basic-auth send: the message goes to the
-// recipient's primary device (device 1) only, and the server learns
-// we're the sender. Multi-device fan-out and sealed-sender land in the
-// next iteration.
+// On the first send to a recipient, Send fetches the full device list via
+// GET /v2/keys/{aci}/* and establishes a Double Ratchet session with every
+// device that does not already have one. Subsequent sends reuse the cached
+// device list and existing sessions.
 //
-// On 409 / 410 from the server (mismatched / stale devices), Send returns
-// the typed [*web.MismatchedDevicesError] / [*web.StaleDevicesError]
-// without retrying — callers will get cleaner retry semantics once the
-// Phase 4.1 fan-out work lands.
+// If the server replies with HTTP 409 (mismatched devices) or 410 (stale
+// devices), Send transparently refreshes the affected sessions and retries
+// once. If the retry also fails the error is returned to the caller.
 func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, error) {
 	if c.webc == nil || c.stores == nil {
 		return Receipt{}, errors.New("signal.Send: Client was opened without send-side dependencies")
@@ -47,38 +44,28 @@ func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, 
 		return Receipt{}, err
 	}
 	padded := padContent(contentBytes)
+	creds := c.credentials()
 
-	// Phase 4 v1: target the recipient's device 1 (primary). Fan-out
-	// across all devices needs a /v2/keys/<aci>/* response that lists
-	// every device, and a session per device — defer that.
-	addr := store.Address{ServiceID: recipientACI, DeviceID: 1}
-
-	if err := c.ensureSession(ctx, addr); err != nil {
-		return Receipt{}, err
-	}
-
-	envBytes, msgType, destRegID, err := c.encryptForDevice(addr, padded)
+	addrs, err := c.discoverAndEnsureSessions(ctx, creds, recipientACI)
 	if err != nil {
 		return Receipt{}, err
 	}
 
-	creds := web.Credentials{
-		Username: fmt.Sprintf("%s.%d", c.acct.ACI, c.acct.DeviceID),
-		Password: c.acct.Password,
-	}
-	req := web.SendMessageRequest{
-		Timestamp: uint64(ts),
-		Urgent:    true,
-		Messages: []web.MessageEnvelope{{
-			Type:                      msgType,
-			DestinationDeviceID:       addr.DeviceID,
-			DestinationRegistrationID: destRegID,
-			Content:                   base64.StdEncoding.EncodeToString(envBytes),
-		}},
-	}
-	if _, err := c.webc.SendMessage(ctx, creds, recipientACI, req); err != nil {
+	req, err := c.buildSendRequest(uint64(ts), addrs, padded)
+	if err != nil {
 		return Receipt{}, err
 	}
+
+	if _, err := c.webc.SendMessage(ctx, creds, recipientACI, req); err != nil {
+		addrs, req, err = c.handleSendError(ctx, creds, recipientACI, addrs, padded, uint64(ts), err)
+		if err != nil {
+			return Receipt{}, err
+		}
+		if _, err := c.webc.SendMessage(ctx, creds, recipientACI, req); err != nil {
+			return Receipt{}, fmt.Errorf("signal.Send: %w", err)
+		}
+	}
+
 	return Receipt{Timestamp: time.UnixMilli(ts), RecipientACI: recipientACI}, nil
 }
 
@@ -90,34 +77,151 @@ type Receipt struct {
 	RecipientACI string
 }
 
-// ensureSession installs a Double Ratchet session for addr if none
-// exists yet, by fetching the recipient's prekey bundle and running it
-// through libsignal's processPreKeyBundle.
-func (c *Client) ensureSession(ctx context.Context, addr store.Address) error {
-	if _, err := c.stores.LoadSession(addr); err == nil {
-		return nil // already have one
-	} else if !errors.Is(err, store.ErrRecordNotFound) {
-		return fmt.Errorf("signal.Send: load session: %w", err)
-	}
-
-	creds := web.Credentials{
+// credentials returns basic-auth credentials for the local device.
+func (c *Client) credentials() web.Credentials {
+	return web.Credentials{
 		Username: fmt.Sprintf("%s.%d", c.acct.ACI, c.acct.DeviceID),
 		Password: c.acct.Password,
 	}
-	bundleResp, err := c.webc.FetchPreKeyBundle(ctx, creds, addr.ServiceID, strconv.FormatUint(uint64(addr.DeviceID), 10))
-	if err != nil {
-		return fmt.Errorf("signal.Send: fetch prekey bundle: %w", err)
-	}
-	if len(bundleResp.Devices) == 0 {
-		return fmt.Errorf("signal.Send: server returned no devices for %s", addr.ServiceID)
-	}
-	dev := bundleResp.Devices[0]
+}
 
-	bundle, err := buildLibsignalBundle(bundleResp.IdentityKey, dev)
-	if err != nil {
-		return fmt.Errorf("signal.Send: build prekey bundle: %w", err)
+// discoverAndEnsureSessions returns the current device address list for
+// the recipient, establishing sessions for any devices that do not yet
+// have one.
+//
+// On the first call for a given ACI it fetches GET /v2/keys/{aci}/* and
+// caches the device ID set. Subsequent calls use the in-memory cache and
+// only fetch individual bundles for devices whose sessions have been
+// deleted (e.g. by a prior 410 response).
+func (c *Client) discoverAndEnsureSessions(ctx context.Context, creds web.Credentials, recipientACI string) ([]store.Address, error) {
+	c.mu.Lock()
+	deviceIDs := c.knownDevices[recipientACI]
+	c.mu.Unlock()
+
+	if deviceIDs == nil {
+		// First send to this recipient: discover the full device set.
+		resp, err := c.webc.FetchPreKeyBundle(ctx, creds, recipientACI, "*")
+		if err != nil {
+			return nil, fmt.Errorf("signal.Send: discover devices: %w", err)
+		}
+		if len(resp.Devices) == 0 {
+			return nil, fmt.Errorf("signal.Send: no devices for %s", recipientACI)
+		}
+		deviceIDs = make([]uint32, 0, len(resp.Devices))
+		for _, dev := range resp.Devices {
+			addr := store.Address{ServiceID: recipientACI, DeviceID: dev.DeviceID}
+			if _, serr := c.stores.LoadSession(addr); errors.Is(serr, store.ErrRecordNotFound) {
+				if err := c.processBundle(resp.IdentityKey, dev, addr); err != nil {
+					return nil, err
+				}
+			}
+			deviceIDs = append(deviceIDs, dev.DeviceID)
+		}
+		c.mu.Lock()
+		if c.knownDevices == nil {
+			c.knownDevices = make(map[string][]uint32)
+		}
+		c.knownDevices[recipientACI] = deviceIDs
+		c.mu.Unlock()
+	} else {
+		// Subsequent send: only fetch bundles for devices whose sessions
+		// were deleted (e.g. because the last send returned HTTP 410).
+		for _, devID := range deviceIDs {
+			addr := store.Address{ServiceID: recipientACI, DeviceID: devID}
+			if _, err := c.stores.LoadSession(addr); errors.Is(err, store.ErrRecordNotFound) {
+				if err := c.fetchAndProcessBundle(ctx, creds, recipientACI, devID); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
+	addrs := make([]store.Address, len(deviceIDs))
+	for i, id := range deviceIDs {
+		addrs[i] = store.Address{ServiceID: recipientACI, DeviceID: id}
+	}
+	return addrs, nil
+}
+
+// handleSendError interprets an HTTP 409 or 410 response, fixes up the
+// session state and address list, and returns the corrected values ready
+// for a single retry. Non-device-set errors are returned unchanged.
+func (c *Client) handleSendError(
+	ctx context.Context,
+	creds web.Credentials,
+	recipientACI string,
+	addrs []store.Address,
+	padded []byte,
+	ts uint64,
+	sendErr error,
+) ([]store.Address, web.SendMessageRequest, error) {
+	var mde *web.MismatchedDevicesError
+	var sde *web.StaleDevicesError
+	switch {
+	case errors.As(sendErr, &mde):
+		// Drop sessions for devices Bob no longer has.
+		for _, devID := range mde.ExtraDevices {
+			_ = c.stores.DeleteSession(store.Address{ServiceID: recipientACI, DeviceID: devID})
+		}
+		addrs = filterOutDevices(addrs, mde.ExtraDevices)
+
+		// Establish sessions for Bob's new devices.
+		for _, devID := range mde.MissingDevices {
+			if err := c.fetchAndProcessBundle(ctx, creds, recipientACI, devID); err != nil {
+				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: missing device %d: %w", devID, err)
+			}
+			addrs = append(addrs, store.Address{ServiceID: recipientACI, DeviceID: devID})
+		}
+
+		// Update the cache to reflect the corrected device set.
+		c.mu.Lock()
+		c.knownDevices[recipientACI] = addressDeviceIDs(addrs)
+		c.mu.Unlock()
+
+	case errors.As(sendErr, &sde):
+		// Registration IDs changed: drop sessions and re-fetch bundles.
+		for _, devID := range sde.StaleDevices {
+			addr := store.Address{ServiceID: recipientACI, DeviceID: devID}
+			if err := c.stores.DeleteSession(addr); err != nil {
+				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: delete stale session %d: %w", devID, err)
+			}
+			if err := c.fetchAndProcessBundle(ctx, creds, recipientACI, devID); err != nil {
+				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: stale device %d: %w", devID, err)
+			}
+		}
+		// addrs is unchanged — same set of devices, new sessions.
+
+	default:
+		return nil, web.SendMessageRequest{}, sendErr
+	}
+
+	req, err := c.buildSendRequest(ts, addrs, padded)
+	if err != nil {
+		return nil, web.SendMessageRequest{}, err
+	}
+	return addrs, req, nil
+}
+
+// fetchAndProcessBundle fetches a single device's prekey bundle and
+// processes it to establish a Double Ratchet session.
+func (c *Client) fetchAndProcessBundle(ctx context.Context, creds web.Credentials, recipientACI string, devID uint32) error {
+	resp, err := c.webc.FetchPreKeyBundle(ctx, creds, recipientACI, strconv.FormatUint(uint64(devID), 10))
+	if err != nil {
+		return fmt.Errorf("fetch bundle for device %d: %w", devID, err)
+	}
+	if len(resp.Devices) == 0 {
+		return fmt.Errorf("no bundle returned for device %d", devID)
+	}
+	return c.processBundle(resp.IdentityKey, resp.Devices[0], store.Address{ServiceID: recipientACI, DeviceID: devID})
+}
+
+// processBundle converts a wire-format prekey bundle into a libsignal
+// PreKeyBundle and calls ProcessPreKeyBundle to establish a session.
+func (c *Client) processBundle(identityKeyB64 string, dev web.BundleDevice, addr store.Address) error {
+	bundle, err := buildLibsignalBundle(identityKeyB64, dev)
+	if err != nil {
+		return fmt.Errorf("signal.Send: build bundle for %s: %w", addr, err)
+	}
 	remote, err := libsignal.NewAddress(addr.ServiceID, addr.DeviceID)
 	if err != nil {
 		return err
@@ -129,9 +233,59 @@ func (c *Client) ensureSession(ctx context.Context, addr store.Address) error {
 	h := libsignal.NewStoreHandle(c.stores)
 	defer h.Release()
 	if err := libsignal.ProcessPreKeyBundle(bundle, remote, local, h, time.Now()); err != nil {
-		return fmt.Errorf("signal.Send: process prekey bundle: %w", err)
+		return fmt.Errorf("signal.Send: process bundle for %s: %w", addr, err)
 	}
 	return nil
+}
+
+// buildSendRequest encrypts padded content for every address and
+// assembles the [web.SendMessageRequest].
+func (c *Client) buildSendRequest(ts uint64, addrs []store.Address, padded []byte) (web.SendMessageRequest, error) {
+	msgs := make([]web.MessageEnvelope, 0, len(addrs))
+	for _, addr := range addrs {
+		envBytes, msgType, destRegID, err := c.encryptForDevice(addr, padded)
+		if err != nil {
+			return web.SendMessageRequest{}, err
+		}
+		msgs = append(msgs, web.MessageEnvelope{
+			Type:                      msgType,
+			DestinationDeviceID:       addr.DeviceID,
+			DestinationRegistrationID: destRegID,
+			Content:                   base64.StdEncoding.EncodeToString(envBytes),
+		})
+	}
+	return web.SendMessageRequest{
+		Timestamp: ts,
+		Urgent:    true,
+		Messages:  msgs,
+	}, nil
+}
+
+// filterOutDevices removes addresses whose DeviceID appears in remove.
+func filterOutDevices(addrs []store.Address, remove []uint32) []store.Address {
+	if len(remove) == 0 {
+		return addrs
+	}
+	skip := make(map[uint32]bool, len(remove))
+	for _, id := range remove {
+		skip[id] = true
+	}
+	out := make([]store.Address, 0, len(addrs))
+	for _, a := range addrs {
+		if !skip[a.DeviceID] {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// addressDeviceIDs extracts the DeviceID from each address.
+func addressDeviceIDs(addrs []store.Address) []uint32 {
+	ids := make([]uint32, len(addrs))
+	for i, a := range addrs {
+		ids[i] = a.DeviceID
+	}
+	return ids
 }
 
 // encryptForDevice runs libsignal's session-cipher encrypt and returns
@@ -209,28 +363,10 @@ func padContent(body []byte) []byte {
 	return out
 }
 
-// buildLibsignalBundle translates the JSON-decoded prekey bundle into a
-// libsignal-owned *PreKeyBundle, doing the base64 decoding and key
+// buildLibsignalBundle translates a [web.BundleDevice] into a
+// libsignal-owned *PreKeyBundle, doing base64 decoding and key
 // deserialization along the way.
-func buildLibsignalBundle(identityKeyB64 string, dev struct {
-	DeviceID       uint32 `json:"deviceId"`
-	RegistrationID uint32 `json:"registrationId"`
-	SignedPreKey   struct {
-		KeyID     uint32 `json:"keyId"`
-		PublicKey string `json:"publicKey"`
-		Signature string `json:"signature"`
-	} `json:"signedPreKey"`
-	PqPreKey *struct {
-		KeyID     uint32 `json:"keyId"`
-		PublicKey string `json:"publicKey"`
-		Signature string `json:"signature"`
-	} `json:"pqPreKey"`
-	PreKey *struct {
-		KeyID     uint32 `json:"keyId"`
-		PublicKey string `json:"publicKey"`
-	} `json:"preKey"`
-},
-) (*libsignal.PreKeyBundle, error) {
+func buildLibsignalBundle(identityKeyB64 string, dev web.BundleDevice) (*libsignal.PreKeyBundle, error) {
 	idBytes, err := web.DecodeBase64(identityKeyB64)
 	if err != nil {
 		return nil, fmt.Errorf("identity key: %w", err)
