@@ -154,10 +154,9 @@ func (f *fakeSignal) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// fullProvisionMessage builds a ProvisionMessage with real ACI + PNI keys,
-// encrypts it as a ProvisionEnvelope addressed to secondaryPub, and returns
-// it along with the expected ACI/PNI values for assertions.
-func fullProvisionMessage(t *testing.T, secondaryPub *libsignal.PublicKey) (*provpb.ProvisionEnvelope, *provpb.ProvisionMessage) {
+// fullProvisionMessage builds a ProvisionMessage with real ACI + PNI keys
+// and encrypts it as a ProvisionEnvelope addressed to secondaryPub.
+func fullProvisionMessage(t *testing.T, secondaryPub *libsignal.PublicKey) *provpb.ProvisionEnvelope {
 	t.Helper()
 	primary, _ := libsignal.GenerateIdentityKeyPair()
 	aciKP, _ := libsignal.GenerateIdentityKeyPair()
@@ -188,8 +187,7 @@ func fullProvisionMessage(t *testing.T, secondaryPub *libsignal.PublicKey) (*pro
 	// external test we exercise it via the public path: encrypt and then
 	// hand back. We re-implement the encrypt locally to keep the public
 	// API surface clean.
-	env := encryptEnvelope(t, primary.Private, primary.Public, secondaryPub, msg)
-	return env, msg
+	return encryptEnvelope(t, primary.Private, primary.Public, secondaryPub, msg)
 }
 
 func TestLinkRequiresOpts(t *testing.T) {
@@ -233,7 +231,7 @@ func TestLinkHappyPath(t *testing.T) {
 					t.Errorf("DeserializePublicKey: %v", err)
 					return
 				}
-				env, _ := fullProvisionMessage(t, secondaryPub)
+				env := fullProvisionMessage(t, secondaryPub)
 				fake.envelopeCh <- env
 			})
 			return nil
@@ -328,7 +326,7 @@ func TestLinkSurfacesRegistrationError(t *testing.T) {
 			u, _ := url.Parse(linkURL)
 			pubBytes, _ := base64.URLEncoding.DecodeString(u.Query().Get("pub_key"))
 			secondaryPub, _ := libsignal.DeserializePublicKey(pubBytes)
-			env, _ := fullProvisionMessage(t, secondaryPub)
+			env := fullProvisionMessage(t, secondaryPub)
 			fake.envelopeCh <- env
 			return nil
 		},

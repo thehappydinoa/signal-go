@@ -207,7 +207,12 @@ func open(key [keyLen]byte, blob []byte) ([]byte, error) {
 	}
 	pt, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrWrongPassphrase, err)
+		// We intentionally only wrap ErrWrongPassphrase here; the inner
+		// AEAD error is opaque and identical for every failure mode
+		// (corrupted blob, truncation, wrong key, tampered ciphertext).
+		// Surfacing it in the message would leak nothing useful and
+		// errorlint would rightly complain about double-wrapping.
+		return nil, fmt.Errorf("%w (%s)", ErrWrongPassphrase, err.Error())
 	}
 	return pt, nil
 }

@@ -45,10 +45,17 @@ func Dial(ctx context.Context, rawURL string, opts *DialOptions) (*Client, error
 		}
 		httpc = &http.Client{Transport: tr}
 	}
-	conn, _, err := websocket.Dial(ctx, rawURL, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(ctx, rawURL, &websocket.DialOptions{
 		HTTPClient: httpc,
 		HTTPHeader: opts.Header,
 	})
+	// coder/websocket may surface a non-nil *http.Response on success (HTTP
+	// 101 Switching Protocols) and on some failure paths. Either way the
+	// body is empty after upgrade — close it so the connection doesn't
+	// leak through net/http's pool.
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("ws.Dial: %w", err)
 	}

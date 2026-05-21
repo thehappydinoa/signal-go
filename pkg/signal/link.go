@@ -111,7 +111,7 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 
 	// Step 4: assemble + send the link request.
 	webc := web.New(opts.APIBaseURL, opts.UserAgent)
-	req := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), msg.GetReadReceipts(), aciIdent, pniIdent, opts.DeviceName)
+	req := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
 	resp, err := webc.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
 	if err != nil {
 		return nil, fmt.Errorf("signal.Link: register: %w", err)
@@ -240,7 +240,10 @@ func buildIdentity(pubBytes, privBytes []byte) (account.Identity, error) {
 }
 
 // buildLinkRequest constructs the /v1/devices/link request body.
-func buildLinkRequest(provisioningCode string, profileKey []byte, readReceipts bool, aci, pni account.Identity, deviceName string) web.LinkDeviceRequest {
+// The readReceipts flag from the ProvisionMessage is persisted on the
+// Account but is not part of the registration request; the server
+// learns it later via SyncMessage.
+func buildLinkRequest(provisioningCode string, profileKey []byte, aci, pni account.Identity, deviceName string) web.LinkDeviceRequest {
 	return web.LinkDeviceRequest{
 		VerificationCode: provisioningCode,
 		AccountAttributes: web.AccountAttributes{

@@ -93,9 +93,11 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.62.0
-          # Match the config we already commit; redundant flag but
-          # safer when defaults drift.
+          # Pinned to v2: golangci-lint refuses to lint a `go 1.25`
+          # module if the binary was built with an older Go (our
+          # go.mod targets 1.25 via x/crypto). v2 binaries are built
+          # with go1.25+.
+          version: v2.12.2
           args: --config .golangci.yml
 
   vet:

@@ -23,12 +23,13 @@ import (
 	provpb "github.com/thehappydinoa/signal-go/internal/proto/gen/provisioningpb"
 )
 
+const envelopeVersion byte = 0x01
+
 const (
-	envelopeVersion byte = 0x01
-	ivLen                = 16
-	macLen               = 32
-	aesKeyLen            = 32
-	hmacKeyLen           = 32
+	ivLen      = 16
+	macLen     = 32
+	aesKeyLen  = 32
+	hmacKeyLen = 32
 )
 
 var hkdfInfo = []byte("TextSecure Provisioning Message")
