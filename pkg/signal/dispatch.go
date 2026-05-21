@@ -29,11 +29,11 @@ func (c *Client) dispatchContent(sender string, senderDevice uint32, envTS, srvT
 
 func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, srvTS time.Time, dm *sspb.DataMessage) {
 	ev := &MessageEvent{
-		Sender:         sender,
-		SenderDevice:   senderDevice,
-		Timestamp:      msToTime(dm.GetTimestamp()),
+		Sender:          sender,
+		SenderDevice:    senderDevice,
+		Timestamp:       msToTime(dm.GetTimestamp()),
 		ServerTimestamp: srvTS,
-		Body:           dm.GetBody(),
+		Body:            dm.GetBody(),
 	}
 	if ev.Timestamp.IsZero() {
 		ev.Timestamp = envTS

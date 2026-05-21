@@ -36,7 +36,7 @@ func newChatFakeServer(t *testing.T, pushReqs ...*wspb.WebSocketRequestMessage) 
 			t.Logf("accept: %v", err)
 			return
 		}
-		defer c.CloseNow()
+		defer func() { _ = c.CloseNow() }()
 
 		for _, req := range pushReqs {
 			reqType := wspb.WebSocketMessage_REQUEST
@@ -191,8 +191,8 @@ func TestOpenAndReceiveDataMessage(t *testing.T) {
 		SourceServiceId: &senderACI,
 		SourceDeviceId:  &senderDevice,
 		Content:         contentBytes,
-		ClientTimestamp:  &ts,
-		ServerTimestamp:  &srvTS,
+		ClientTimestamp: &ts,
+		ServerTimestamp: &srvTS,
 	}
 	envReq := makeEnvelopeRequest(t, env)
 
@@ -259,7 +259,7 @@ func TestOpenAndReceiveReceiptMessage(t *testing.T) {
 		SourceServiceId: &sender,
 		SourceDeviceId:  &dev,
 		Content:         contentBytes,
-		ClientTimestamp:  &ts,
+		ClientTimestamp: &ts,
 	}
 	envReq := makeEnvelopeRequest(t, env)
 
@@ -323,7 +323,7 @@ func TestOpenAndReceiveTypingMessage(t *testing.T) {
 		SourceServiceId: &sender,
 		SourceDeviceId:  &dev,
 		Content:         contentBytes,
-		ClientTimestamp:  &ts,
+		ClientTimestamp: &ts,
 	}
 	envReq := makeEnvelopeRequest(t, env)
 
@@ -392,7 +392,7 @@ func TestOpenAndReceiveSyncMessage(t *testing.T) {
 		SourceServiceId: &sender,
 		SourceDeviceId:  &dev,
 		Content:         contentBytes,
-		ClientTimestamp:  &ts,
+		ClientTimestamp: &ts,
 	}
 	envReq := makeEnvelopeRequest(t, env)
 
@@ -446,7 +446,7 @@ func TestOpenDecryptionErrorEmitsEvent(t *testing.T) {
 		SourceServiceId: &sender,
 		SourceDeviceId:  &dev,
 		Content:         []byte("this-is-not-valid-protobuf-content!@#$%"),
-		ClientTimestamp:  &ts,
+		ClientTimestamp: &ts,
 	}
 	envReq := makeEnvelopeRequest(t, env)
 

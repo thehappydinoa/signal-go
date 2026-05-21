@@ -230,7 +230,8 @@ func (c *Client) emit(ev Event) {
 	select {
 	case c.events <- ev:
 	default:
-		c.log.Warn("event channel full, dropping event",
+		c.log.Warn(
+			"event channel full, dropping event",
 			"type", fmt.Sprintf("%T", ev),
 		)
 	}
