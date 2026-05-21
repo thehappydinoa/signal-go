@@ -134,6 +134,9 @@ Internal review (we do this before any external work):
   - filesystem perms `0700` dir / `0600` files
   - atomic rename for every write
   - account.json never logs Password or PrivateKey
+  - [x] at-rest encryption: AES-256-GCM + Argon2id (ADR 0012); wrong-passphrase
+    fails closed via [`ErrWrongPassphrase`]; mode-mixing fails via
+    [`ErrDirEncrypted`]/[`ErrDirPlaintext`]
 - [ ] `internal/web` TLS posture:
   - `MinVersion: tls.VersionTLS12` (or 1.3) explicit
   - Signal's chat.signal.org pinned-CA option (off by default, available)
