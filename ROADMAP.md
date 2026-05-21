@@ -20,15 +20,16 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] `scripts/build-libsignal.sh` — pinned, reproducible static-lib build
 - [x] Taskfile (`task libsignal`, `task proto`, `task build`, `task test`, `task lint`)
 - [x] `.golangci.yml`, `.editorconfig`, test conventions
-- [ ] Protobuf codegen for `Provisioning`, `WebSocketResources`, `SignalService`
-- [ ] `internal/libsignal`: cgo preamble, error mapping, basic key primitives
+- [x] Protobuf codegen for `Provisioning`, `WebSocketResources`, `SignalService`
+- [x] `internal/libsignal`: cgo preamble, error mapping, basic key primitives
       (`PrivateKey`, `PublicKey`, `IdentityKeyPair`, `KeyPair.generate`)
-- [ ] `internal/ws`: `WebSocketMessage` framed connection wrapper
-- [ ] `internal/provisioning`: open provisioning ws, receive `ProvisioningUuid`,
+- [x] `internal/ws`: `WebSocketMessage` framed connection wrapper
+- [x] `internal/provisioning`: open provisioning ws, receive `ProvisioningUuid`,
       compose `sgnl://linkdevice?uuid=...&pub_key=...&capabilities=...` URL
-- [ ] Demo `cmd/signal-go link` prints the URL (and optionally renders ANSI QR)
-- [ ] Unit tests for proto roundtrip, URL encoding, ws frame parsing
-- [ ] Integration test stub (skipped unless `SIGNAL_GO_E2E=1`)
+- [x] Demo `cmd/signal-go link` prints the URL (ANSI QR rendering still
+      open as a nice-to-have)
+- [x] Unit tests for proto roundtrip, URL encoding, ws frame parsing
+- [x] Integration test stub (skipped unless `SIGNAL_GO_E2E=1`)
 
 ## Phase 2 — Complete the link **(done except where noted)**
 

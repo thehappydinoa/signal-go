@@ -6,37 +6,46 @@ symmetric key never touches disk; the caller either supplies it directly
 Argon2id.
 
 ```mermaid
-flowchart LR
-    classDef in fill:#dde7ff,stroke:#3a5fb8,color:#000
-    classDef sec fill:#ffe0e0,stroke:#a13a3a,color:#000
-    classDef out fill:#d6f5d6,stroke:#3a7d3a,color:#000
-    classDef fs fill:#eee,stroke:#888,color:#000
+flowchart TB
+    subgraph inputs [Key source]
+        pp[Passphrase]
+        rk[Raw 32-byte key]
+    end
 
-    pp[Passphrase]:::in
-    rk[Raw 32-byte key]:::in
-    salt[(16-byte salt)]:::fs
-    params[Argon2id params<br/>t=3, m=64MiB, p=4]:::fs
+    subgraph kdf [Argon2id<br/>t=3, m=64 MiB, p=4]
+        salt[16-byte salt]
+        params[Parameters]
+    end
 
-    pp -->|"Argon2id<br/>(t=3, m=64MiB, p=4)"| key
+    key[32-byte symmetric key<br/>in memory only]
+    json[Account JSON]
+    nonce[12-byte nonce<br/>crypto/rand per write]
+    sealed["account.enc<br/>0x01 + nonce + ct + tag"]
+    kdfjson[kdf.json<br/>salt + params + version]
+    disk[(disk - mode 0600)]
+
+    pp --> kdf
+    kdf --> key
     rk --> key
 
-    key[/"32-byte symmetric key<br/>(in memory only)"/]:::sec
-    json[Account JSON]:::in
-    nonce[/"12-byte nonce<br/>(crypto/rand per write)"/]:::sec
-
-    key -->|AES-256-GCM| sealed
+    key --> sealed
     json --> sealed
     nonce --> sealed
 
-    sealed["account.enc<br/>0x01 || nonce || ct || tag"]:::out
-
-    salt -. "passphrase mode only" .-> pp
-    params -. "passphrase mode only" .-> pp
-
-    sealed -->|mode 0600| disk[(disk)]:::fs
-    salt --> kdfjson["kdf.json<br/>{salt, time, memory, threads, version}"]
+    salt --> kdfjson
     params --> kdfjson
-    kdfjson -->|mode 0600| disk
+
+    sealed --> disk
+    kdfjson --> disk
+
+    classDef in fill:#dde7ff,stroke:#3a5fb8,color:#000;
+    classDef sec fill:#ffe0e0,stroke:#a13a3a,color:#000;
+    classDef out fill:#d6f5d6,stroke:#3a7d3a,color:#000;
+    classDef ext fill:#eee,stroke:#888,color:#000;
+    class pp,rk,json,salt,params in;
+    class key,nonce sec;
+    class sealed,kdfjson out;
+    class disk ext;
 ```
 
 ## What to look at
@@ -55,6 +64,14 @@ flowchart LR
 - **Mode mixing is rejected.** A directory with `account.json` blocks
   encrypted constructors with `ErrDirPlaintext`; one with `account.enc`
   blocks `New` with `ErrDirEncrypted`. No silent leftovers.
+
+## On-disk layout
+
+```
+.signal-data/
+├── kdf.json          (passphrase mode only: salt + Argon2id params)
+└── account.enc       (0x01 || 12-byte nonce || ciphertext || 16-byte GCM tag)
+```
 
 ## Linked design records
 
