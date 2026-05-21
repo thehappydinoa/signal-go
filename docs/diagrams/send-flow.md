@@ -7,7 +7,7 @@ incompatible with it.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant App as Caller<br/>(pkg/signal or pkg/bot)
+    participant App as Caller<br/>pkg/signal or pkg/bot
     participant Sig as pkg/signal.Client
     participant LS as internal/libsignal
     participant Web as internal/web
@@ -16,17 +16,17 @@ sequenceDiagram
     App->>Sig: Send(ctx, recipientACI, "hello")
     alt no session for recipient
         Sig->>Web: GET /v2/keys/{aci}/{device}
-        Web-->>Sig: PreKeyBundle<br/>(identity, signed prekey, Kyber, one-time)
-        Sig->>LS: process_prekey_bundle<br/>(creates session)
+        Web-->>Sig: PreKeyBundle<br/>identity + signed prekey<br/>+ Kyber + one-time
+        Sig->>LS: process_prekey_bundle<br/>creates session
     end
     Sig->>LS: session_cipher_encrypt(plaintext)
     LS-->>Sig: SignalMessage / PreKeySignalMessage
-    Sig->>LS: sealed_sender_encrypt<br/>(with sender certificate)
+    Sig->>LS: sealed_sender_encrypt<br/>with sender certificate
     LS-->>Sig: SealedSenderMessage envelope
-    Sig->>Web: PUT /v1/messages/{recipientACI}<br/>(envelope, timestamp, …)
+    Sig->>Web: PUT /v1/messages/{recipientACI}<br/>envelope, timestamp, ...
     alt mismatched/stale devices
         Web-->>Sig: 409 / 410 with device list
-        Sig->>Sig: drop stale sessions, refetch bundles,<br/>retry
+        Sig->>Sig: drop stale sessions,<br/>refetch bundles, retry
     end
     Web-->>Sig: 200 OK
     Sig-->>App: nil
