@@ -18,7 +18,7 @@ tasks:
     desc: Install dev tools (protoc-gen-go, golangci-lint)
     cmds:
       - go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-      - command -v golangci-lint >/dev/null || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.62.0
+      - command -v golangci-lint >/dev/null || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
       - command -v protoc      >/dev/null || (echo "Install protoc from your distro (e.g. apt install protobuf-compiler)" && exit 1)
       - command -v cargo       >/dev/null || (echo "Install Rust (https://rustup.rs) — needed once to build libsignal" && exit 1)
 

@@ -57,11 +57,13 @@ func (s *inlineSignalStores) LocalIdentityKey() ([]byte, []byte, error) {
 	}
 	return bytes.Clone(s.identityPub), bytes.Clone(s.identityPriv), nil
 }
+
 func (s *inlineSignalStores) LocalRegistrationID() (uint32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.regID, nil
 }
+
 func (s *inlineSignalStores) LoadIdentity(addr store.Address) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,6 +73,7 @@ func (s *inlineSignalStores) LoadIdentity(addr store.Address) ([]byte, error) {
 	}
 	return bytes.Clone(v), nil
 }
+
 func (s *inlineSignalStores) SaveIdentity(addr store.Address, pub []byte) (store.SaveIdentityResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,6 +85,7 @@ func (s *inlineSignalStores) SaveIdentity(addr store.Address, pub []byte) (store
 	}
 	return store.IdentityReplaced, nil
 }
+
 func (s *inlineSignalStores) IsTrustedIdentity(addr store.Address, pub []byte, _ store.Direction) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -91,6 +95,7 @@ func (s *inlineSignalStores) IsTrustedIdentity(addr store.Address, pub []byte, _
 	}
 	return bytes.Equal(v, pub), nil
 }
+
 func (s *inlineSignalStores) LoadSession(addr store.Address) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -100,12 +105,14 @@ func (s *inlineSignalStores) LoadSession(addr store.Address) ([]byte, error) {
 	}
 	return bytes.Clone(v), nil
 }
+
 func (s *inlineSignalStores) StoreSession(addr store.Address, blob []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[addr.String()] = bytes.Clone(blob)
 	return nil
 }
+
 func (s *inlineSignalStores) LoadPreKey(id uint32) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,18 +122,21 @@ func (s *inlineSignalStores) LoadPreKey(id uint32) ([]byte, error) {
 	}
 	return bytes.Clone(v), nil
 }
+
 func (s *inlineSignalStores) StorePreKey(id uint32, blob []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.preKeys[id] = bytes.Clone(blob)
 	return nil
 }
+
 func (s *inlineSignalStores) RemovePreKey(id uint32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.preKeys, id)
 	return nil
 }
+
 func (s *inlineSignalStores) LoadSignedPreKey(id uint32) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -136,12 +146,14 @@ func (s *inlineSignalStores) LoadSignedPreKey(id uint32) ([]byte, error) {
 	}
 	return bytes.Clone(v), nil
 }
+
 func (s *inlineSignalStores) StoreSignedPreKey(id uint32, blob []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.signedKeys[id] = bytes.Clone(blob)
 	return nil
 }
+
 func (s *inlineSignalStores) LoadKyberPreKey(id uint32) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -151,24 +163,28 @@ func (s *inlineSignalStores) LoadKyberPreKey(id uint32) ([]byte, error) {
 	}
 	return bytes.Clone(v), nil
 }
+
 func (s *inlineSignalStores) StoreKyberPreKey(id uint32, blob []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.kyberKeys[id] = bytes.Clone(blob)
 	return nil
 }
+
 func (s *inlineSignalStores) MarkKyberPreKeyUsed(id uint32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.usedKyber[id] = struct{}{}
 	return nil
 }
+
 func (s *inlineSignalStores) KyberPreKeyUsed(id uint32) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.usedKyber[id]
 	return ok
 }
+
 func (s *inlineSignalStores) LoadSenderKey(sender store.Address, distID string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -178,6 +194,7 @@ func (s *inlineSignalStores) LoadSenderKey(sender store.Address, distID string) 
 	}
 	return bytes.Clone(v), nil
 }
+
 func (s *inlineSignalStores) StoreSenderKey(sender store.Address, distID string, blob []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

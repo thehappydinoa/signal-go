@@ -57,8 +57,14 @@ type Session struct {
 // Link runs the provisioning handshake to completion and returns a Session.
 // The function blocks until either an envelope arrives or ctx is cancelled.
 //
-// Phase 1 scope: we display the linking URL via opts.OnURL and wait for the
-// envelope. We do not decrypt or register yet.
+// Phase 1 scope: we display the linking URL via opts.OnURL and wait for
+// the envelope. We do not decrypt or register yet.
+//
+// Cyclomatic complexity is high because this is a linear protocol with
+// several select arms; factoring into helpers hides the sequence the
+// reader needs to follow.
+//
+//nolint:gocyclo
 func Link(ctx context.Context, opts Options) (*Session, error) {
 	if opts.OnURL == nil {
 		return nil, errors.New("provisioning.Link: Options.OnURL is required")
@@ -97,7 +103,10 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 		case verb == "PUT" && path == "/v1/address":
 			var addr provpb.ProvisioningAddress
 			if err := proto.Unmarshal(req.GetBody(), &addr); err != nil {
-				return 400, "bad ProvisioningAddress", nil, nil
+				// Translate parse failure to HTTP 400 for the peer; we do
+				// not want the ws handler to surface a Go error (which
+				// would close the connection).
+				return 400, "bad ProvisioningAddress", nil, nil //nolint:nilerr
 			}
 			if addr.GetAddress() == "" {
 				return 400, "empty address", nil, nil
@@ -112,7 +121,7 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 		case verb == "PUT" && path == "/v1/message":
 			var env provpb.ProvisionEnvelope
 			if err := proto.Unmarshal(req.GetBody(), &env); err != nil {
-				return 400, "bad ProvisionEnvelope", nil, nil
+				return 400, "bad ProvisionEnvelope", nil, nil //nolint:nilerr
 			}
 			select {
 			case envCh <- &env:

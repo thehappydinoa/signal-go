@@ -1,82 +1,101 @@
-# golangci-lint configuration
-# See https://golangci-lint.run/usage/configuration/
+version: "2"
 run:
-  timeout: 5m
-  tests: true
   build-tags:
     - component
     - e2e
-  # The libsignal Rust workspace also contains test fixtures written in Go;
-  # they live under .build/ when we clone it locally. Don't lint them.
-  skip-dirs:
-    - .build
-    - internal/proto/gen
-
+  tests: true
 linters:
-  disable-all: true
+  default: none
   enable:
-    # Defaults
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    # Style / correctness
     - bodyclose
+    - copyloopvar
+    - errcheck
     - errorlint
     - gocritic
-    - goimports
+    - gocyclo
+    - govet
+    - ineffassign
     - misspell
     - nilerr
     - nolintlint
+    - prealloc
     - predeclared
     - revive
+    - staticcheck
     - unconvert
     - unparam
+    - unused
     - whitespace
-    # Concurrency
-    - copyloopvar
-    - prealloc
-    # Code health
-    - gocyclo
-    - gofumpt
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/thehappydinoa/signal-go
-  gocyclo:
-    min-complexity: 20
-  revive:
+  settings:
+    gocritic:
+      # cgo expansions trip dupSubExpr for legitimate `err != nil` checks
+      # on every C.signal_* call. Disable globally; the legitimate cases
+      # the check finds are caught by govet anyway.
+      disabled-checks:
+        - dupSubExpr
+    gocyclo:
+      min-complexity: 20
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        - name: var-naming
+        - name: package-comments
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+          disabled: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        arguments:
-          - disableStutteringCheck
-      - name: var-naming
-      - name: package-comments
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: if-return
-      - name: increment-decrement
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-        disabled: true  # too noisy on interface impls
-
+      - linters:
+          - gocritic
+          - gocyclo
+        path: _test\.go
+      - linters:
+          - errcheck
+          - gocritic
+          - gocyclo
+          - govet
+          - revive
+          - staticcheck
+          - unused
+        path: internal/proto/gen/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    # Allow long, descriptive test names and complex test setups
-    - path: _test\.go
-      linters: [gocyclo, gocritic]
-    # Generated protobuf code
-    - path: internal/proto/gen/
-      linters: [revive, gocritic, gosimple, staticcheck, unused, gocyclo, errcheck, govet]
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/thehappydinoa/signal-go
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

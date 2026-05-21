@@ -19,13 +19,14 @@ import (
 // official clients (the legacy "TextSecure" name has been retained).
 var hkdfInfo = []byte("TextSecure Provisioning Message")
 
+// envelopeVersion is the leading byte of every ProvisionEnvelope body.
+const envelopeVersion byte = 0x01
+
 const (
-	// envelopeVersion is the leading byte of every ProvisionEnvelope body.
-	envelopeVersion byte = 0x01
-	ivLen                = 16
-	macLen               = 32
-	aesKeyLen            = 32
-	hmacKeyLen           = 32
+	ivLen      = 16
+	macLen     = 32
+	aesKeyLen  = 32
+	hmacKeyLen = 32
 )
 
 // DecryptEnvelope decrypts a [provpb.ProvisionEnvelope] using our half of

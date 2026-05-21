@@ -57,7 +57,7 @@ func okOrError(err error) C.int {
 // mutable pointer) into a Go [store.Address]. The libsignal pointer
 // remains owned by libsignal; we only read from it.
 func addressFromC(p C.SignalMutPointerProtocolAddress) (store.Address, error) {
-	cp := C.SignalConstPointerProtocolAddress{raw: p.raw}
+	cp := C.SignalConstPointerProtocolAddress(p)
 	var cname *C.char
 	if err := checkError(C.signal_address_get_name(&cname, cp)); err != nil {
 		return store.Address{}, err
@@ -84,7 +84,7 @@ func uuidFromC(u C.SignalUuid) string {
 // publicKeyToBytes serializes a libsignal public key pointer to its
 // 33-byte tagged encoding.
 func publicKeyToBytes(p C.SignalMutPointerPublicKey) ([]byte, error) {
-	cp := C.SignalConstPointerPublicKey{raw: p.raw}
+	cp := C.SignalConstPointerPublicKey(p)
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_publickey_serialize(&buf, cp)); err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func publicKeyToBytes(p C.SignalMutPointerPublicKey) ([]byte, error) {
 
 // sessionRecordToBytes serializes a libsignal session record pointer.
 func sessionRecordToBytes(p C.SignalMutPointerSessionRecord) ([]byte, error) {
-	cp := C.SignalConstPointerSessionRecord{raw: p.raw}
+	cp := C.SignalConstPointerSessionRecord(p)
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_session_record_serialize(&buf, cp)); err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func sessionRecordToBytes(p C.SignalMutPointerSessionRecord) ([]byte, error) {
 
 // preKeyRecordToBytes serializes a libsignal prekey record pointer.
 func preKeyRecordToBytes(p C.SignalMutPointerPreKeyRecord) ([]byte, error) {
-	cp := C.SignalConstPointerPreKeyRecord{raw: p.raw}
+	cp := C.SignalConstPointerPreKeyRecord(p)
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_pre_key_record_serialize(&buf, cp)); err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func preKeyRecordToBytes(p C.SignalMutPointerPreKeyRecord) ([]byte, error) {
 
 // signedPreKeyRecordToBytes serializes a libsignal signed prekey record.
 func signedPreKeyRecordToBytes(p C.SignalMutPointerSignedPreKeyRecord) ([]byte, error) {
-	cp := C.SignalConstPointerSignedPreKeyRecord{raw: p.raw}
+	cp := C.SignalConstPointerSignedPreKeyRecord(p)
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_signed_pre_key_record_serialize(&buf, cp)); err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func signedPreKeyRecordToBytes(p C.SignalMutPointerSignedPreKeyRecord) ([]byte, 
 
 // kyberPreKeyRecordToBytes serializes a libsignal Kyber prekey record.
 func kyberPreKeyRecordToBytes(p C.SignalMutPointerKyberPreKeyRecord) ([]byte, error) {
-	cp := C.SignalConstPointerKyberPreKeyRecord{raw: p.raw}
+	cp := C.SignalConstPointerKyberPreKeyRecord(p)
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_kyber_pre_key_record_serialize(&buf, cp)); err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func kyberPreKeyRecordToBytes(p C.SignalMutPointerKyberPreKeyRecord) ([]byte, er
 
 // senderKeyRecordToBytes serializes a libsignal sender-key record.
 func senderKeyRecordToBytes(p C.SignalMutPointerSenderKeyRecord) ([]byte, error) {
-	cp := C.SignalConstPointerSenderKeyRecord{raw: p.raw}
+	cp := C.SignalConstPointerSenderKeyRecord(p)
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_sender_key_record_serialize(&buf, cp)); err != nil {
 		return nil, err
