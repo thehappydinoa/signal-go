@@ -27,21 +27,22 @@ import (
 //     arguments and returns Go errors. Tests exercise this layer
 //     directly with no cgo.
 //
-// Return-code convention at the FFI layer:
+// Return-code convention at the FFI layer (libsignal v0.94+):
 //
-//	0  = success
-//	1  = "not found" (Load* only; other callbacks treat this as error)
+//	0  = success (for Load* returning Option, leave the out-pointer null on
+//	     [store.ErrRecordNotFound])
 //	-1 = error
 //
-// Out-parameters are written iff we return 0.
+// Out-parameters are written only on success with a found record.
 
-// loadReturnCode maps a Go (data, err) to libsignal's int return.
-func loadReturnCode(err error) C.int {
+// loadOptionalReturn maps a Load error to the FFI return code. Not-found is
+// success with a null out-parameter, not return code 1.
+func loadOptionalReturn(err error) C.int {
 	if err == nil {
 		return 0
 	}
 	if errors.Is(err, store.ErrRecordNotFound) {
-		return 1
+		return 0
 	}
 	return -1
 }
@@ -149,7 +150,8 @@ func handleAs[S any](ctx unsafe.Pointer) (S, bool) {
 	if ctx == nil {
 		return zero, false
 	}
-	v := cgo.Handle(uintptr(ctx)).Value()
+	ptr := (*uintptr)(ctx)
+	v := cgo.Handle(*ptr).Value()
 	s, ok := v.(S)
 	return s, ok
 }
@@ -168,7 +170,7 @@ func signalgo_load_session(ctx unsafe.Pointer, out *C.SignalMutPointerSessionRec
 	}
 	blob, err := loadSessionImpl(s, addr)
 	if err != nil {
-		return loadReturnCode(err)
+		return loadOptionalReturn(err)
 	}
 	rec, err := DeserializeSessionRecord(blob)
 	if err != nil {
@@ -204,7 +206,7 @@ func signalgo_get_local_identity_key_pair(ctx unsafe.Pointer, out *C.SignalPairO
 	}
 	pubBytes, privBytes, err := getLocalIdentityKeyPairImpl(s)
 	if err != nil {
-		return loadReturnCode(err)
+		return -1
 	}
 	priv, err := DeserializePrivateKey(privBytes)
 	if err != nil {
@@ -247,7 +249,7 @@ func signalgo_get_identity_key(ctx unsafe.Pointer, out *C.SignalMutPointerPublic
 	}
 	pubBytes, err := getIdentityKeyImpl(s, addr)
 	if err != nil {
-		return loadReturnCode(err)
+		return loadOptionalReturn(err)
 	}
 	pub, err := DeserializePublicKey(pubBytes)
 	if err != nil {
@@ -310,7 +312,7 @@ func signalgo_load_pre_key(ctx unsafe.Pointer, out *C.SignalMutPointerPreKeyReco
 	}
 	blob, err := loadPreKeyImpl(s, uint32(id))
 	if err != nil {
-		return loadReturnCode(err)
+		return loadOptionalReturn(err)
 	}
 	rec, err := DeserializePreKeyRecord(blob)
 	if err != nil {
@@ -351,7 +353,7 @@ func signalgo_load_signed_pre_key(ctx unsafe.Pointer, out *C.SignalMutPointerSig
 	}
 	blob, err := loadSignedPreKeyImpl(s, uint32(id))
 	if err != nil {
-		return loadReturnCode(err)
+		return loadOptionalReturn(err)
 	}
 	rec, err := DeserializeSignedPreKeyRecord(blob)
 	if err != nil {
@@ -383,7 +385,7 @@ func signalgo_load_kyber_pre_key(ctx unsafe.Pointer, out *C.SignalMutPointerKybe
 	}
 	blob, err := loadKyberPreKeyImpl(s, uint32(id))
 	if err != nil {
-		return loadReturnCode(err)
+		return loadOptionalReturn(err)
 	}
 	rec, err := DeserializeKyberPreKeyRecord(blob)
 	if err != nil {
@@ -428,7 +430,7 @@ func signalgo_load_sender_key(ctx unsafe.Pointer, out *C.SignalMutPointerSenderK
 	}
 	blob, err := loadSenderKeyImpl(s, addr, uuidFromC(distID))
 	if err != nil {
-		return loadReturnCode(err)
+		return loadOptionalReturn(err)
 	}
 	rec, err := DeserializeSenderKeyRecord(blob)
 	if err != nil {
@@ -457,9 +459,6 @@ func signalgo_store_sender_key(ctx unsafe.Pointer, sender C.SignalMutPointerProt
 }
 
 //export signalgo_destroy_store_handle
-func signalgo_destroy_store_handle(ctx unsafe.Pointer) {
-	if ctx == nil {
-		return
-	}
-	cgo.Handle(uintptr(ctx)).Delete()
+func signalgo_destroy_store_handle(unsafe.Pointer) {
+	// Handle lifetime is owned by [StoreHandle.Release] on the Go side.
 }

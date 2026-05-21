@@ -214,8 +214,8 @@ func TestStoreHandleLifecycle(t *testing.T) {
 	if h == nil {
 		t.Fatal("NewStoreHandle returned nil")
 	}
-	if h.Ctx() == 0 {
-		t.Error("Ctx() is zero")
+	if h.Ctx() == nil {
+		t.Error("Ctx() is nil")
 	}
 	h.Release()
 	h.Release() // idempotent
@@ -239,14 +239,13 @@ func TestStoreFactoriesAssertCorrectInterface(t *testing.T) {
 
 func TestStoreFactoriesPanicOnWrongType(t *testing.T) {
 	type notAStore struct{}
-	h := NewStoreHandle(notAStore{})
-	defer h.Release()
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("expected panic for non-store value")
 		}
 	}()
-	_ = SessionStoreFor(h)
+	h := NewStoreHandle(notAStore{})
+	defer h.Release()
 }
 
 func TestIdentityImpls(t *testing.T) {
@@ -423,12 +422,11 @@ func TestFormatUUID(t *testing.T) {
 	}
 }
 
-func TestLoadReturnCode(t *testing.T) {
-	// loadReturnCode lives in stores.go (cgo); we can't import its
-	// return type into a non-cgo test, so we exercise the same
-	// branching via the equivalent Go-side ErrRecordNotFound check used
-	// by the impl path.
-	if !errors.Is(store.ErrRecordNotFound, store.ErrRecordNotFound) {
-		t.Fatal("sanity check failed")
+func TestLoadOptionalReturn(t *testing.T) {
+	if loadOptionalReturn(store.ErrRecordNotFound) != 0 {
+		t.Error("not found should be success (null out-param)")
+	}
+	if loadOptionalReturn(errors.New("boom")) != -1 {
+		t.Error("other errors should be -1")
 	}
 }

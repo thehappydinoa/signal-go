@@ -76,7 +76,7 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 | [1 — Foundation](./ROADMAP.md#phase-1--foundation-done) | ✅ | cgo to libsignal, ws layer, QR-link handshake |
 | [2 — Complete the link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | ProvisioningCipher, prekey gen, REST registration, prekey upload |
 | [Encrypted store](./docs/adr/0012-encrypted-store.md) | ✅ | AES-256-GCM at rest, Argon2id passphrase mode |
-| [3 — Receive](./ROADMAP.md#phase-3--receive-in-progress) | 🔧 in progress | authenticated ws, sealed sender, typed events |
+| [3 — Receive](./ROADMAP.md#phase-3--receive-in-progress) | 🔧 in progress | authenticated ws, libsignal decrypt, typed events |
 | [4 — Send](./ROADMAP.md#phase-4--send-11-planned) | ⏳ | 1:1 sealed-sender send |
 | [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys |
 | [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-planned) | ⏳ | `pkg/bot` dispatch + middleware |

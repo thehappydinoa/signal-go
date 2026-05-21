@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
+	"github.com/thehappydinoa/signal-go/internal/chat"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
@@ -76,6 +77,17 @@ func testLastResortKyberPreKey() prekeys.LastResortKyberPreKey {
 		PublicKey: make([]byte, 1568),
 		SecretKey: make([]byte, 64),
 		Signature: make([]byte, 64),
+	}
+}
+
+// testOpenOptions builds [OpenOptions] for websocket fakes that push
+// already-decoded Content bytes (not real ciphertext).
+func testOpenOptions(acctStore account.Store, ss *memstore.SignalStores, dial chat.DialFunc) OpenOptions {
+	return OpenOptions{
+		AccountStore: acctStore,
+		SignalStores: ss,
+		Decryptor:    passthroughDecryptor{},
+		DialFunc:     dial,
 	}
 }
 
@@ -202,11 +214,7 @@ func TestOpenAndReceiveDataMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -269,11 +277,7 @@ func TestOpenAndReceiveReceiptMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -333,11 +337,7 @@ func TestOpenAndReceiveTypingMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -402,11 +402,7 @@ func TestOpenAndReceiveSyncMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -456,11 +452,7 @@ func TestOpenDecryptionErrorEmitsEvent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -505,11 +497,7 @@ func TestOpenQueueEmpty(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -539,11 +527,7 @@ func TestClientCloseClosesEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := Open(ctx, OpenOptions{
-		AccountStore: acctStore,
-		SignalStores: ss,
-		DialFunc:     fake.dialFunc,
-	})
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
