@@ -66,7 +66,7 @@ func (f *fakeChatServer) handle(w http.ResponseWriter, r *http.Request) {
 		f.t.Logf("accept: %v", err)
 		return
 	}
-	defer c.CloseNow()
+	defer func() { _ = c.CloseNow() }()
 
 	f.mu.Lock()
 	reqs := f.pending
@@ -256,10 +256,7 @@ func TestConnectionReconnectsOnFailure(t *testing.T) {
 
 	// Wait for reconnect to succeed (attempt 4+).
 	deadline := time.After(5 * time.Second)
-	for {
-		if attempt.Load() >= 4 {
-			break
-		}
+	for attempt.Load() < 4 {
 		select {
 		case <-deadline:
 			t.Fatalf("timed out waiting for reconnect, attempts=%d", attempt.Load())
