@@ -19,12 +19,11 @@ import (
 	"path/filepath"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
-	"github.com/thehappydinoa/signal-go/internal/store"
 )
 
 const accountFile = "account.json"
 
-// Store is a filesystem-backed [store.Store].
+// Store is a filesystem-backed [account.Store].
 type Store struct {
 	dir string
 }
@@ -41,13 +40,13 @@ func New(dir string) (*Store, error) {
 	return &Store{dir: dir}, nil
 }
 
-// LoadAccount implements [store.Store].
+// LoadAccount implements [account.Store].
 func (s *Store) LoadAccount() (*account.Account, error) {
 	path := filepath.Join(s.dir, accountFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, store.ErrNotLinked
+			return nil, account.ErrNotLinked
 		}
 		return nil, fmt.Errorf("fsstore: read account: %w", err)
 	}
@@ -58,8 +57,9 @@ func (s *Store) LoadAccount() (*account.Account, error) {
 	return &acct, nil
 }
 
-// SaveAccount writes the account atomically (write to tmp, then rename).
-// Returns an error if the account fails validation.
+// SaveAccount writes the account atomically (write to tmp, then rename),
+// implementing [account.Store]. Returns an error if the account fails
+// validation.
 func (s *Store) SaveAccount(acct *account.Account) error {
 	if err := acct.Validate(); err != nil {
 		return err
