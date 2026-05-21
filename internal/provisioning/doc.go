@@ -17,11 +17,12 @@
 //     decrypt the envelope using our ephemeral private key, and obtain a
 //     [ProvisionMessage] containing the account's ACI/PNI identity keys,
 //     UUIDs, number, and provisioning code.
-//  6. Generate prekeys (ACI + PNI; signed + last-resort Kyber + 100 one-time
-//     + 100 one-time Kyber) and `PUT /v1/devices/link` with credentials.
+//  6. [pkg/signal.Link] continues from there: generates prekeys, calls
+//     PUT /v1/devices/link, uploads one-time prekeys, and persists the
+//     account.
 //
-// This Phase-1 implementation covers steps 1-4 plus receiving the envelope
-// in step 5. Decryption and step 6 are Phase 2.
+// Steps 1-5 (plus decryption) are fully implemented in this package.
+// Step 6 lives in [pkg/signal.Link].
 //
 // [ProvisioningAddress]: ../proto/gen/provisioningpb
 // [ProvisionEnvelope]: ../proto/gen/provisioningpb

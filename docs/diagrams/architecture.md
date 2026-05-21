@@ -8,11 +8,11 @@ our Go code.
 ```mermaid
 flowchart TB
     bot[pkg/bot<br/>Phase 6 — planned]
-    sig[pkg/signal<br/>public API]
+    sig[pkg/signal<br/>public API:<br/>Link, Open, Client, Events]
 
     subgraph protocol [Protocol layer]
         prov[internal/provisioning<br/>QR-link orchestration]
-        chat[internal/chat<br/>Phase 3 — authenticated ws]
+        chat[internal/chat<br/>authenticated ws + reconnect]
         web[internal/web<br/>REST + Basic auth]
         ws[internal/ws<br/>WebSocketMessage envelope]
         prekeys[internal/prekeys<br/>signed + Kyber prekey gen]
@@ -32,13 +32,13 @@ flowchart TB
 
     bot --> sig
     sig --> prov
+    sig --> chat
     sig --> web
     sig --> account
     sig --> prekeys
     prov --> ws
     prov --> ls
     chat --> ws
-    chat --> ls
     web --> account
     ls --> ffi
     ls --> store
@@ -66,9 +66,13 @@ flowchart TB
 - `pkg/signal` is what library consumers depend on. Nothing above it
   (your bot, your bridge, `pkg/bot` itself) needs to know about cgo or
   Signal's wire protocol.
+- `internal/chat` wraps `internal/ws` with authenticated connection
+  management and exponential-backoff reconnection. The dispatch of
+  envelope content into typed events happens in `pkg/signal.Client`.
 
 ## Linked design records
 
 - [ADR 0001 — Overall architecture](../adr/0001-overall-architecture.md)
 - [ADR 0002 — No third-party Go deps (allowlist)](../adr/0002-no-third-party-go-deps.md)
 - [ADR 0005 — Storage interface](../adr/0005-store-interface.md)
+- [ADR 0010 — Phase 3 receive pipeline](../adr/0010-phase-3-receive.md)
