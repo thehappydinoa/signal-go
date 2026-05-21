@@ -1,14 +1,21 @@
 name: CodeQL
 
+# CodeQL is intentionally scheduled-only. The main `ci.yml` runs the
+# same `govulncheck` + `golangci-lint` + tests on every PR/push, and
+# CodeQL's autobuild step needs to compile cgo code — which means
+# rebuilding (or downloading-from-cache) libsignal_ffi.a. Triggering
+# CodeQL on every PR meant two `libsignal` builds per event running in
+# parallel (the cache can't save us when both miss simultaneously),
+# doubling our Actions quota burn for marginal security value.
+#
+# Weekly is enough for CodeQL — it's a periodic scan, not a PR gate.
+# Cache-hits from any push/PR in the last 7 days make these runs fast.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   schedule:
-    # Weekly, Mondays at 06:30 UTC — when the lights are off and the
-    # queue is short.
+    # Mondays at 06:30 UTC — when the lights are off and the queue is short.
     - cron: '30 6 * * 1'
+  # Manual trigger for one-off runs (e.g. after a libsignal bump).
+  workflow_dispatch:
 
 permissions:
   contents: read

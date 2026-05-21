@@ -175,8 +175,9 @@ Phase A — bootstrap (this PR):
 - [x] `.github/workflows/ci.yml`: lint + vet + build + test + govulncheck
       on `ubuntu-latest`, with cached `libsignal_ffi.a` keyed on the
       pinned tag
-- [x] `.github/workflows/codeql.yml`: CodeQL security scanning (push + PR
-      + weekly schedule)
+- [x] `.github/workflows/codeql.yml`: CodeQL security scanning, weekly
+      schedule + manual dispatch (deliberately not per-PR — avoids a
+      second parallel libsignal build per event)
 - [x] `.github/dependabot.yml`: weekly bumps for Go modules + actions
 - [x] CI status badge in [`README.md`](./README.md)
 
