@@ -158,9 +158,26 @@ Future additions (tracked in the [Roadmap "Continuous integration & quality"](./
 - Release workflow on tag push
 - Nightly fuzz job
 
+### Pre-push hook
+
+A git pre-push hook that mirrors the CI checks (vet → lint → test) lives in
+[`.githooks/pre-push`](./.githooks/pre-push). Activate it once per clone:
+
+```sh
+task hooks:install      # or: git config core.hooksPath .githooks
+```
+
+`task setup` runs `hooks:install` automatically, so if you ran setup when you
+first cloned you're already covered.
+
+The hook requires `libsignal_ffi.a` to be built. If it is not present yet it
+prints a warning and exits 0 (non-blocking) so a fresh clone is never
+dead-locked. Build the library with `task libsignal` and subsequent pushes
+will enforce the full check suite locally.
+
 If your change touches anything that CI builds or tests, run it locally
-first (`task test && task lint`) before pushing. CI is the safety net,
-not the first line.
+first (`task test && task lint`) before pushing. The hook does this
+automatically; CI is the final safety net, not the first line.
 
 ## License
 

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# pre-push: runs vet, lint, and tests before any push.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+# or:
+#   task hooks:install
+#
+# The checks require libsignal_ffi.a. If it is not built yet, the hook
+# warns and exits without blocking the push — run `task libsignal` once
+# to build it, after which all subsequent pushes will be checked.
+set -euo pipefail
+
+LIB="internal/libsignal/lib/libsignal_ffi.a"
+
+if [[ ! -f "$LIB" ]]; then
+  echo "pre-push: libsignal_ffi.a not found — skipping checks." >&2
+  echo "  Run 'task libsignal' to build it. Checks will run on the next push." >&2
+  exit 0
+fi
+
+echo "pre-push: go vet..."
+go vet ./... || { echo "pre-push: go vet failed" >&2; exit 1; }
+
+echo "pre-push: golangci-lint..."
+golangci-lint run ./... || { echo "pre-push: lint failed" >&2; exit 1; }
+
+echo "pre-push: go test -race..."
+go test -race -count=1 ./... || { echo "pre-push: tests failed" >&2; exit 1; }
+
+echo "pre-push: all checks passed."
