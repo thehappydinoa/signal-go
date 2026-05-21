@@ -56,7 +56,7 @@ the "Link this device?" prompt; we won't yet complete the link).
       `signal_device_name_*` FFI)
 - [ ] End-to-end test against a real phone (manual, gated by `SIGNAL_GO_E2E=1`)
 
-## Phase 3 — Receive **(in progress)**
+## Phase 3 — Receive **(done)**
 
 - [x] Authenticated websocket with auto-reconnect + backoff
       (`internal/chat.Connection`)

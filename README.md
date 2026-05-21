@@ -23,9 +23,11 @@ secondary device. Cryptography flows through Signal's official Rust
 (websockets, REST, prekey lifecycle, sealed sender, groups v2) is
 implemented in Go.
 
-> **Pre-alpha.** Linking works end-to-end with encrypted-at-rest
-> persistence. Real-time receive and send are next. Track progress in
-> the [roadmap](./ROADMAP.md).
+> **Pre-alpha.** Linking, real-time receive, and 1:1 send all work
+> end-to-end with encrypted-at-rest persistence and an in-process
+> two-client test. Sealed-sender, auto-retry on device mismatch, and
+> groups v2 are the next slices. Track progress in the
+> [roadmap](./ROADMAP.md).
 
 ```sh
 go install github.com/thehappydinoa/signal-go/cmd/signal-go@latest  # once we tag v0.1.0
@@ -50,8 +52,13 @@ for the full walkthrough.
   [the encrypted-store diagram](./docs/diagrams/encrypted-store.md).
 - **Small dependency surface** — `coder/websocket`, `google.golang.org/protobuf`,
   and `golang.org/x/crypto` (Argon2id). Everything else is stdlib.
-- **Aimed at bots** — a `pkg/bot` framework with regex / command
-  dispatchers, middleware, and scopes is the Phase 6 target.
+- **Send + receive working** — `signal.Client.Send(ctx, recipient, text)`
+  handles bundle fetch, session establishment, and message encryption;
+  receive is a real-time chat-ws loop emitting typed events on
+  `Client.Events()`.
+- **Bot dispatch out of the box** — `pkg/bot` wraps the client with
+  `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/help")` registration
+  and a `Message.Reply` helper. Scopes + middleware land next.
   ([ADR 0008](./docs/adr/0008-bot-framework.md))
 
 ## Architecture
@@ -64,7 +71,7 @@ flowchart TB
     classDef store fill:#f5d6e8,stroke:#a13a78,color:#000
 
     pub[pkg/signal<br/><i>public API</i>]:::pub
-    bot[pkg/bot<br/><i>Phase 6</i>]:::pub
+    bot[pkg/bot<br/><i>OnText / OnRegex / OnCommand</i>]:::pub
     proto["Protocol layer<br/>(provisioning · web · ws · prekeys · chat)"]:::proto
     crypto[internal/libsignal<br/><i>cgo + libsignal_ffi.a</i>]:::crypto
     store["Persistence<br/>(account · store · fsstore · memstore)"]:::store
@@ -85,10 +92,11 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 | [1 — Foundation](./ROADMAP.md#phase-1--foundation-done) | ✅ | cgo to libsignal, ws layer, QR-link handshake |
 | [2 — Complete the link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | ProvisioningCipher, prekey gen, REST registration, prekey upload |
 | [Encrypted store](./docs/adr/0012-encrypted-store.md) | ✅ | AES-256-GCM at rest, Argon2id passphrase mode |
-| [3 — Receive](./ROADMAP.md#phase-3--receive-in-progress) | 🔧 in progress | authenticated ws, libsignal decrypt, typed events |
-| [4 — Send](./ROADMAP.md#phase-4--send-11-planned) | ⏳ | 1:1 sealed-sender send |
-| [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys |
-| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-planned) | ⏳ | `pkg/bot` dispatch + middleware |
+| [3 — Receive](./ROADMAP.md#phase-3--receive-done) | ✅ | authenticated chat ws, libsignal decrypt, typed events, prekey top-up |
+| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-in-progress) | 🔧 in progress | bundle fetch + session establish + encrypt + `PUT /v1/messages`; sealed-sender + auto-retry + multi-device next |
+| [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys + membership / admin surface |
+| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-in-progress) | 🔧 in progress | `pkg/bot` OnText/OnRegex/OnCommand + Reply; scopes + middleware next |
+| [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | ⏳ | attachments, storage sync, CDSI, SQLite, backup, exec-stack warning |
 | [8 — Security audit](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010) | ⏳ | internal + external review gates `v0.1.0` |
 
 ## Docs
