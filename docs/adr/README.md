@@ -19,3 +19,4 @@ with a new ADR that links back to the one it replaces.
 | 0009 | Licensing: AGPL-3.0-only (libsignal-driven)    | Accepted |
 | 0010 | Phase 3: authenticated receive pipeline        | Accepted |
 | 0011 | Security audit methodology + threat model      | Accepted |
+| 0012 | Encrypted account store on disk                | Accepted |
