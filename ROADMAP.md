@@ -58,12 +58,16 @@ the "Link this device?" prompt; we won't yet complete the link).
 
 ## Phase 3 — Receive **(in progress)**
 
-- [ ] Authenticated websocket with auto-reconnect + backoff
-- [ ] Envelope dispatch loop
+- [x] Authenticated websocket with auto-reconnect + backoff
+      (`internal/chat.Connection`)
+- [x] Envelope dispatch loop (`pkg/signal.Client.processEnvelope`)
 - [ ] Sealed-sender unwrap → session decrypt (Double Ratchet via libsignal)
-- [ ] Content protobuf decode → typed events
-      (`*MessageEvent`, `*ReceiptEvent`, `*TypingEvent`, `*SyncEvent`)
-- [ ] Decryption-error handling (`SignalDecryptionErrorMessage` retry token)
+- [x] Content protobuf decode → typed events
+      (`*MessageEvent`, `*ReceiptEvent`, `*TypingEvent`, `*SyncMessageEvent`)
+- [x] Decryption-error handling (`*DecryptionErrorEvent` emitted without
+      killing the receive loop; retry token pending Phase 4 send)
+- [x] Public API: `signal.Open` + `signal.Client` with buffered `Events()`
+      channel, `Decryptor` interface for pluggable decrypt backends
 - [ ] Prekey rotation on use; top-up endpoint
 
 ## Phase 4 — Send 1:1 **(planned)**

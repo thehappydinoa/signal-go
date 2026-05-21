@@ -1,8 +1,8 @@
 # Getting started
 
 `signal-go` is **pre-alpha**. You can pair it as a Signal secondary
-device today, but receive/send aren't wired yet (Phases 3 & 4). This
-guide walks the link flow.
+device and receive incoming messages (Phase 3), but sending isn't
+wired yet (Phase 4). This guide walks the link and receive flows.
 
 ## Prerequisites
 
@@ -53,6 +53,48 @@ envelope, generates ACI + PNI prekeys, registers via
 `PUT /v1/devices/link`, uploads one-time prekey batches, and persists
 the account under `./.signal-data/`.
 
+## Receive messages (library API)
+
+After linking, use `signal.Open` to load the account and start
+receiving typed events:
+
+```go
+import "github.com/thehappydinoa/signal-go/pkg/signal"
+
+client, err := signal.Open(ctx, signal.OpenOptions{
+    AccountStore: acctStore,
+    SignalStores: signalStores,
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close()
+
+for ev := range client.Events() {
+    switch e := ev.(type) {
+    case *signal.MessageEvent:
+        fmt.Printf("From %s: %s\n", e.Sender, e.Body)
+    case *signal.ReceiptEvent:
+        fmt.Printf("Receipt from %s\n", e.Sender)
+    case *signal.TypingEvent:
+        fmt.Printf("Typing from %s\n", e.Sender)
+    case *signal.SyncMessageEvent:
+        fmt.Printf("Sync: %s\n", e.SentBody)
+    case *signal.DecryptionErrorEvent:
+        fmt.Printf("Decrypt error: %v\n", e.Err)
+    }
+}
+```
+
+The `Client` connects to Signal's authenticated chat websocket, handles
+auto-reconnection with exponential backoff, and dispatches incoming
+envelopes as typed events.
+
+**Note**: Full end-to-end decryption (sealed sender, session cipher) is
+pending — the current implementation uses a passthrough decryptor. Plug
+in a real `Decryptor` via `OpenOptions.Decryptor` once the libsignal
+cgo wrappers are complete.
+
 ## Non-interactive
 
 For systemd units, container deployments, CI, etc.:
@@ -79,8 +121,8 @@ listed (or whatever you passed to `-name`).
 
 ## What's next
 
-- **Receive** (Phase 3): pending. The [receive pipeline](../diagrams/receive-pipeline.md)
-  describes the planned shape.
+- **Receive** (Phase 3): connection + dispatch are working; sealed-sender
+  and session decrypt via libsignal are pending.
 - **Send** (Phase 4): pending. The [send flow](../diagrams/send-flow.md)
   describes the planned shape.
 - **Bot framework** (Phase 6): pending. See [ADR 0008](../adr/0008-bot-framework.md).
