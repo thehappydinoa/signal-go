@@ -63,7 +63,8 @@ flowchart TB
   dispatch (`pkg/signal.Client`), typed events, and libsignal-backed
   decrypt via [`internal/cipher.EnvelopeDecryptor`](../internal/cipher/envelope.go)
   (default for [`signal.Open`](../pkg/signal/client.go)).
-- **Still open**: prekey rotation on use + top-up (Phase 3 follow-up),
+- **Prekey top-up**: after inbound prekey decrypt, [prekeymaint.Maintainer]
+  uploads `PUT /v2/keys` when local one-time counts fall below the threshold.
   sender-key / group decrypt (Phase 5), multi-recipient sealed-sender
   edge cases.
 

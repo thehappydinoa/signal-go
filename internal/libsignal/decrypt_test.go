@@ -148,15 +148,15 @@ func TestDecryptRoundTripPreKeyThenWhisper(t *testing.T) {
 	var got []byte
 	switch ctType {
 	case CiphertextPreKey:
-		pkm, err := DeserializePreKeySignalMessage(ctBytes)
-		if err != nil {
-			t.Fatal(err)
+		pkm, deserErr := DeserializePreKeySignalMessage(ctBytes)
+		if deserErr != nil {
+			t.Fatal(deserErr)
 		}
 		got, err = DecryptPreKeySignalMessage(pkm, bobRemote, bobLocal, bobH)
 	case CiphertextWhisper:
-		sm, err := DeserializeSignalMessage(ctBytes)
-		if err != nil {
-			t.Fatal(err)
+		sm, deserErr := DeserializeSignalMessage(ctBytes)
+		if deserErr != nil {
+			t.Fatal(deserErr)
 		}
 		got, err = DecryptSignalMessage(sm, bobRemote, bobLocal, bobH)
 	default:
