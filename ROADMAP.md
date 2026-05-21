@@ -165,6 +165,35 @@ External review (after the internal pass is clean):
 - [ ] Publish the audit report and our remediation in
       `docs/security/audits/`
 
+## Continuous integration & quality **(ongoing)**
+
+Cross-cutting infrastructure that runs on every PR and merge to `main`.
+Design: [ADR 0013](./docs/adr/0013-ci-github-actions.md).
+
+Phase A — bootstrap (this PR):
+- [x] `.github/workflows/ci.yml`: lint + vet + build + test + govulncheck
+      on `ubuntu-latest`, with cached `libsignal_ffi.a` keyed on the
+      pinned tag
+- [x] `.github/workflows/codeql.yml`: CodeQL security scanning (push + PR
+      + weekly schedule)
+- [x] `.github/dependabot.yml`: weekly bumps for Go modules + actions
+- [x] CI status badge in [`README.md`](./README.md)
+
+Phase B — broaden:
+- [ ] macOS runners (`macos-latest`) with their own libsignal cache
+- [ ] Windows runners (`windows-latest`) once we've validated the cgo
+      build path
+- [ ] `staticcheck` and (post-triage) `gosec` as separate jobs
+- [ ] Coverage report uploaded as a PR check (we already have
+      `task cover`; need a CI consumer)
+
+Phase C — release pipeline (lands with v0.1.0):
+- [ ] `.github/workflows/release.yml`: build `signal-go` binaries on
+      tag push; publish to the GitHub Release
+- [ ] Cross-compiled binaries for linux/{amd64,arm64} + darwin/arm64;
+      Windows iff Phase B Windows runner is green
+- [ ] Nightly fuzz job (Phase 8 dependency)
+
 ## Non-goals
 
 - We will not implement the Signal protocol cryptography in Go. All crypto goes

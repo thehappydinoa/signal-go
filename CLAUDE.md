@@ -128,16 +128,39 @@ three-ring testing strategy.
 
 ## CI
 
-When CI lands (Phase 8-adjacent), it will run:
+GitHub Actions workflows under [`.github/workflows/`](./.github/workflows/)
+([ADR 0013](./docs/adr/0013-ci-github-actions.md)):
+
+- **`ci.yml`** runs on every push to `main` and every PR:
+  - `libsignal` (one-shot, cached): builds `libsignal_ffi.a` from the
+    pinned tag and uploads it as a workflow artifact
+  - `lint` — golangci-lint against the committed `.golangci.yml`
+  - `vet` — `go vet ./...`
+  - `test` — `go test -race -count=1 ./...`
+  - `build` — `go build ./cmd/signal-go` + smoke-test the binary's help
+  - `govulncheck` — vulnerability scan against the dep tree
+- **`codeql.yml`** runs CodeQL's `security-extended` query set on push,
+  PR, and weekly schedule. Findings land in the *Security* tab; PRs
+  aren't blocked on it.
+- **`dependabot.yml`** — weekly bumps for Go modules + Actions
+  versions. New direct deps still need an ADR 0002 allowlist update.
+
+Locally these correspond to:
 - `task lint` (golangci-lint)
 - `task test` (`go test -race -count=1 ./...`)
 - `task test:component`
-- `go vet ./...`, `staticcheck ./...`, `gosec ./...`, `govulncheck ./...`
-- Fuzz targets on a nightly cadence
+- `go vet ./...`, `govulncheck ./...`
 
-If any of those don't exist yet at the time you're reading this, your
-PR is on the hook for keeping them clean *manually* — and a follow-up
-that wires them into CI is welcome.
+Future additions (tracked in the [Roadmap "Continuous integration & quality"](./ROADMAP.md#continuous-integration--quality-ongoing) section):
+- macOS + Windows matrix
+- `staticcheck` + (post-triage) `gosec`
+- Coverage report on PR checks
+- Release workflow on tag push
+- Nightly fuzz job
+
+If your change touches anything that CI builds or tests, run it locally
+first (`task test && task lint`) before pushing. CI is the safety net,
+not the first line.
 
 ## License
 
