@@ -91,13 +91,21 @@ func (o *OpenOptions) eventBufferSize() int {
 	return 256
 }
 
-// Client is a connected, receiving Signal device. Create one with [Open].
+// Client is a connected Signal device. Create one with [Open].
+//
+// A Client both receives (via [Events]) and sends (via [Send]). The
+// receive path is the chat websocket; the send path is REST.
 type Client struct {
 	acct   *account.Account
 	conn   *chat.Connection
 	events chan Event
 	log    *slog.Logger
 	dec    Decryptor
+
+	// Send-side dependencies. nil-safe for tests that only exercise
+	// receive; Send returns an error if either is missing.
+	webc   *web.Client
+	stores store.SignalStores
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -121,6 +129,10 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	events := make(chan Event, opts.eventBufferSize())
 	log := opts.logger()
 
+	// One shared web client: prekey maintenance (receive side) and Send
+	// (this PR) both use it.
+	webc := web.New(opts.APIBaseURL, opts.UserAgent)
+
 	dec := opts.Decryptor
 	if dec == nil {
 		libDec, err := cipher.NewEnvelopeDecryptor(acct, opts.SignalStores)
@@ -128,7 +140,6 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 			return nil, fmt.Errorf("signal.Open: %w", err)
 		}
 		if !opts.DisablePreKeyMaintenance {
-			webc := web.New(opts.APIBaseURL, opts.UserAgent)
 			libDec.SetPreKeyMaintainer(prekeymaint.NewMaintainer(
 				opts.AccountStore,
 				opts.SignalStores,
@@ -143,6 +154,8 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		events: events,
 		log:    log,
 		dec:    dec,
+		webc:   webc,
+		stores: opts.SignalStores,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{
