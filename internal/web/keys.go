@@ -41,11 +41,11 @@ type KEMPreKey struct {
 // this endpoint is for the rotating one-time batches and for occasional
 // rotation of the signed/last-resort keys.
 type UploadPreKeysRequest struct {
-	IdentityKey     string          `json:"identityKey"`               // base64 of the 33-byte tagged public key
-	SignedPreKey    *SignedECPreKey `json:"signedPreKey,omitempty"`    // optional rotation
+	IdentityKey     string           `json:"identityKey"`               // base64 of the 33-byte tagged public key
+	SignedPreKey    *SignedECPreKey  `json:"signedPreKey,omitempty"`    // optional rotation
 	PqLastResortKey *SignedKEMPreKey `json:"pqLastResortKey,omitempty"` // optional rotation
-	PreKeys         []ECPreKey      `json:"preKeys,omitempty"`         // one-time EC batch
-	PqPreKeys       []KEMPreKey     `json:"pqPreKeys,omitempty"`       // one-time Kyber batch
+	PreKeys         []ECPreKey       `json:"preKeys,omitempty"`         // one-time EC batch
+	PqPreKeys       []KEMPreKey      `json:"pqPreKeys,omitempty"`       // one-time Kyber batch
 }
 
 // UploadPreKeys issues PUT /v2/keys?identity=<type> for an authenticated

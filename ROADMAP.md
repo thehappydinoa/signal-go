@@ -6,7 +6,7 @@ This roadmap tracks the staged build-out of a from-scratch Go Signal client on
 top of Signal's official `libsignal` Rust library. Architectural decisions are
 captured under [`docs/adr/`](./docs/adr/).
 
-## Phase 1 — Foundation **(in progress)**
+## Phase 1 — Foundation **(done)**
 
 Get the cgo build, protobuf codegen, and the unauthenticated half of the
 device-linking flow working end to end. Outcome: `signal-go link` connects to
@@ -55,7 +55,7 @@ the "Link this device?" prompt; we won't yet complete the link).
       `signal_device_name_*` FFI)
 - [ ] End-to-end test against a real phone (manual, gated by `SIGNAL_GO_E2E=1`)
 
-## Phase 3 — Receive **(planned)**
+## Phase 3 — Receive **(in progress)**
 
 - [ ] Authenticated websocket with auto-reconnect + backoff
 - [ ] Envelope dispatch loop

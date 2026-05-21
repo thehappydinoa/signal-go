@@ -21,13 +21,13 @@ type SignalStores struct {
 	identityPriv []byte
 	regID        uint32
 
-	sessions     map[string][]byte                       // addr.String() -> session record
-	identities   map[string][]byte                       // addr.String() -> identity public key (33B)
-	preKeys      map[uint32][]byte                       // id -> PreKeyRecord
-	signedKeys   map[uint32][]byte                       // id -> SignedPreKeyRecord
-	kyberKeys    map[uint32][]byte                       // id -> KyberPreKeyRecord
-	usedKyber    map[uint32]struct{}                     // ids that have been consumed
-	senderKeys   map[senderKeyKey][]byte                 // (sender, distId) -> SenderKeyRecord
+	sessions   map[string][]byte       // addr.String() -> session record
+	identities map[string][]byte       // addr.String() -> identity public key (33B)
+	preKeys    map[uint32][]byte       // id -> PreKeyRecord
+	signedKeys map[uint32][]byte       // id -> SignedPreKeyRecord
+	kyberKeys  map[uint32][]byte       // id -> KyberPreKeyRecord
+	usedKyber  map[uint32]struct{}     // ids that have been consumed
+	senderKeys map[senderKeyKey][]byte // (sender, distId) -> SenderKeyRecord
 }
 
 type senderKeyKey struct {
