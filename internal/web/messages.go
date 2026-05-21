@@ -11,34 +11,38 @@ import (
 
 // ---------- GET /v2/keys/{serviceID}/{deviceID} ----------
 
+// SignedPreKeySlot is a key slot that carries a cryptographic signature
+// (used for both EC signed prekeys and Kyber/PQXDH prekeys in a bundle).
+type SignedPreKeySlot struct {
+	KeyID     uint32 `json:"keyId"`
+	PublicKey string `json:"publicKey"`
+	Signature string `json:"signature"`
+}
+
+// PreKeySlot is an unsigned one-time EC prekey slot.
+type PreKeySlot struct {
+	KeyID     uint32 `json:"keyId"`
+	PublicKey string `json:"publicKey"`
+}
+
+// BundleDevice is one device entry within a [FetchPreKeyResponse].
+// Field names match the Signal wire format; all key material is base64.
+type BundleDevice struct {
+	DeviceID       uint32            `json:"deviceId"`
+	RegistrationID uint32            `json:"registrationId"`
+	SignedPreKey   SignedPreKeySlot  `json:"signedPreKey"`
+	PqPreKey       *SignedPreKeySlot `json:"pqPreKey"`
+	PreKey         *PreKeySlot       `json:"preKey"`
+}
+
 // FetchPreKeyResponse is the JSON Signal returns when we fetch a
 // recipient's prekey bundle. The `devices` array contains one entry per
-// active device — usually 1 or 2. We always request a single device
-// (`*` for all is also supported by the server, but we'd need to wire
-// fan-out separately).
+// active device — typically 1–3, one per linked device.
 //
-// Field names match the wire format. Signal returns base64 in every
-// `publicKey` / `signature` slot.
+// Use GET /v2/keys/{serviceID}/* to retrieve all devices at once.
 type FetchPreKeyResponse struct {
-	IdentityKey string `json:"identityKey"`
-	Devices     []struct {
-		DeviceID       uint32 `json:"deviceId"`
-		RegistrationID uint32 `json:"registrationId"`
-		SignedPreKey   struct {
-			KeyID     uint32 `json:"keyId"`
-			PublicKey string `json:"publicKey"`
-			Signature string `json:"signature"`
-		} `json:"signedPreKey"`
-		PqPreKey *struct {
-			KeyID     uint32 `json:"keyId"`
-			PublicKey string `json:"publicKey"`
-			Signature string `json:"signature"`
-		} `json:"pqPreKey"`
-		PreKey *struct {
-			KeyID     uint32 `json:"keyId"`
-			PublicKey string `json:"publicKey"`
-		} `json:"preKey"`
-	} `json:"devices"`
+	IdentityKey string         `json:"identityKey"`
+	Devices     []BundleDevice `json:"devices"`
 }
 
 // FetchPreKeyBundle issues GET /v2/keys/{serviceID}/{deviceIDOrStar}.

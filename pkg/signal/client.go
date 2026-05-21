@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"google.golang.org/protobuf/proto"
 
@@ -106,6 +107,10 @@ type Client struct {
 	// receive; Send returns an error if either is missing.
 	webc   *web.Client
 	stores store.SignalStores
+
+	// mu guards knownDevices.
+	mu           sync.Mutex
+	knownDevices map[string][]uint32 // recipientACI → device ID set
 }
 
 // Open loads a previously-linked account from opts.AccountStore and

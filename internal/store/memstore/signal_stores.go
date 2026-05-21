@@ -130,6 +130,14 @@ func (s *SignalStores) StoreSession(addr store.Address, record []byte) error {
 	return nil
 }
 
+// DeleteSession implements [store.SessionStore]. Idempotent.
+func (s *SignalStores) DeleteSession(addr store.Address) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, addr.String())
+	return nil
+}
+
 // LoadPreKey implements [store.PreKeyStore].
 func (s *SignalStores) LoadPreKey(id uint32) ([]byte, error) {
 	s.mu.Lock()

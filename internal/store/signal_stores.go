@@ -60,6 +60,9 @@ const (
 type SessionStore interface {
 	LoadSession(addr Address) (record []byte, err error)
 	StoreSession(addr Address, record []byte) error
+	// DeleteSession removes the session record for addr. It is idempotent:
+	// deleting a non-existent session is not an error.
+	DeleteSession(addr Address) error
 }
 
 // IdentityStore persists the local identity key pair, the local
