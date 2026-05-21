@@ -22,3 +22,4 @@ with a new ADR that links back to the one it replaces.
 | 0012 | Encrypted account store on disk                | Accepted |
 | 0013 | GitHub Actions CI                              | Accepted |
 | 0014 | Send retry and multi-device fan-out strategy   | Accepted |
+| 0015 | Sealed-sender encrypt: per-device USMC + cert cache | Accepted |

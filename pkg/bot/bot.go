@@ -42,12 +42,25 @@ type Client interface {
 	Close() error
 }
 
+// MiddlewareFunc wraps a [HandlerFunc]. The outer function may inspect or
+// modify the message, add context values, or short-circuit the call.
+// The canonical pattern mirrors [net/http.Handler]:
+//
+//	func LogMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
+//	    return func(ctx context.Context, m *bot.Message, args []string) error {
+//	        slog.Info("message", "sender", m.Sender(), "body", m.Body())
+//	        return next(ctx, m, args)
+//	    }
+//	}
+type MiddlewareFunc func(next HandlerFunc) HandlerFunc
+
 // Bot wraps a [Client] with registered dispatchers.
 type Bot struct {
 	cli Client
 	log *slog.Logger
 
 	mu           sync.RWMutex
+	middleware   []MiddlewareFunc
 	textHandlers []textHandler
 	closed       bool
 
@@ -87,6 +100,18 @@ func Wrap(cli Client) *Bot { return wrap(cli, slog.Default()) }
 
 func wrap(cli Client, log *slog.Logger) *Bot {
 	return &Bot{cli: cli, log: log}
+}
+
+// Use registers a global middleware that wraps every handler. Middleware
+// is applied outermost-first: the first Use call produces the outermost
+// wrapper in the call chain.
+//
+// Global middleware runs before any per-handler middleware registered via
+// [Match.Use].
+func (b *Bot) Use(mw MiddlewareFunc) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.middleware = append(b.middleware, mw)
 }
 
 // OnError sets the callback invoked when a handler returns a non-nil
@@ -149,6 +174,7 @@ func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 	}
 	b.mu.RLock()
 	handlers := append([]textHandler(nil), b.textHandlers...)
+	globalMW := append([]MiddlewareFunc(nil), b.middleware...)
 	onErr := b.onError
 	b.mu.RUnlock()
 
@@ -157,7 +183,9 @@ func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 		if !matched {
 			continue
 		}
-		err := h.run(ctx, m, matches)
+		run := applyMiddleware(h.run, h.middleware) // per-handler (inner)
+		run = applyMiddleware(run, globalMW)        // global (outer)
+		err := run(ctx, m, matches)
 		if errors.Is(err, ErrPass) {
 			continue
 		}
@@ -172,11 +200,51 @@ func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 	}
 }
 
+// applyMiddleware wraps h in the provided middleware chain. mws[0] is the
+// outermost wrapper; mws[len-1] wraps h directly.
+func applyMiddleware(h HandlerFunc, mws []MiddlewareFunc) HandlerFunc {
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
+	}
+	return h
+}
+
 // Match is the public matcher type returned by the OnText / OnRegex /
-// OnCommand registration helpers. Callers attach a handler via Do.
+// OnCommand registration helpers. Callers attach a handler via Do, optionally
+// narrowing scope with DM / Group / From and adding middleware via Use.
 type Match struct {
 	bot *Bot
 	m   matcher
+	mw  []MiddlewareFunc
+}
+
+// DM narrows the match to direct (non-group) messages only.
+func (h Match) DM() Match {
+	h.m.dmOnly = true
+	return h
+}
+
+// Group narrows the match to group-thread messages only.
+func (h Match) Group() Match {
+	h.m.groupOnly = true
+	return h
+}
+
+// From narrows the match to messages whose sender ACI equals aci.
+func (h Match) From(aci string) Match {
+	h.m.fromACI = aci
+	return h
+}
+
+// Use attaches per-handler middleware. Middleware registered here runs
+// after any global middleware from [Bot.Use] but before the handler.
+// Multiple calls chain in registration order (first = outermost).
+func (h Match) Use(mw MiddlewareFunc) Match {
+	dst := make([]MiddlewareFunc, len(h.mw)+1)
+	copy(dst, h.mw)
+	dst[len(h.mw)] = mw
+	h.mw = dst
+	return h
 }
 
 // Do registers handler for the current matcher. Handlers receive
@@ -185,8 +253,9 @@ func (h Match) Do(handler HandlerFunc) {
 	h.bot.mu.Lock()
 	defer h.bot.mu.Unlock()
 	h.bot.textHandlers = append(h.bot.textHandlers, textHandler{
-		matcher: h.m,
-		run:     handler,
+		matcher:    h.m,
+		run:        handler,
+		middleware: h.mw,
 	})
 }
 
@@ -220,6 +289,7 @@ func (b *Bot) OnCommand(name string) Match {
 }
 
 type textHandler struct {
-	matcher matcher
-	run     HandlerFunc
+	matcher    matcher
+	run        HandlerFunc
+	middleware []MiddlewareFunc
 }

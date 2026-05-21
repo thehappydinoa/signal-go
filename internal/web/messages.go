@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // ---------- GET /v2/keys/{serviceID}/{deviceID} ----------
@@ -83,6 +84,11 @@ const (
 	// CiphertextTypePreKey is the first message in a new session — it
 	// carries the initial X3DH/PQXDH bundle.
 	CiphertextTypePreKey CiphertextType = 3
+	// CiphertextTypeUnidentifiedSender is a sealed-sender envelope. The
+	// Content field holds a serialized UnidentifiedSenderMessageContent
+	// (USMC) rather than a raw CiphertextMessage. The server does not see
+	// the sender's ACI for these envelopes.
+	CiphertextTypeUnidentifiedSender CiphertextType = 6
 	// CiphertextTypeSenderKey is for group v2 messages (Phase 5).
 	CiphertextTypeSenderKey CiphertextType = 7
 	// CiphertextTypePlaintext is libsignal's "plaintext content" for
@@ -176,6 +182,40 @@ func (c *Client) SendMessage(ctx context.Context, creds Credentials, recipientSe
 		Credentials: creds,
 		Body:        req,
 		Out:         &resp,
+	})
+	if err != nil {
+		return nil, mapSendError(err)
+	}
+	return &resp, nil
+}
+
+// SendMessageUnidentified issues PUT /v1/messages/{recipientACI} with an
+// Unidentified-Access-Key header instead of Basic auth. The server does not
+// record the sender's ACI — this is the sealed-sender delivery path.
+//
+// uak must be the recipient's 16-byte unidentified access key, derived from
+// their profile key. The error handling (409/410 mapping) is identical to
+// [SendMessage].
+func (c *Client) SendMessageUnidentified(ctx context.Context, uak []byte, recipientServiceID string, req SendMessageRequest) (*SendMessageResponse, error) {
+	if len(uak) == 0 {
+		return nil, errors.New("web.SendMessageUnidentified: UAK required")
+	}
+	if recipientServiceID == "" {
+		return nil, errors.New("web.SendMessageUnidentified: recipient required")
+	}
+	if len(req.Messages) == 0 {
+		return nil, errors.New("web.SendMessageUnidentified: no messages")
+	}
+	var resp SendMessageResponse
+	err := c.Do(ctx, Request{
+		Method: http.MethodPut,
+		Path:   "/v1/messages/" + recipientServiceID,
+		Query:  url.Values{"story": []string{"false"}},
+		Headers: http.Header{
+			"Unidentified-Access-Key": []string{base64.StdEncoding.EncodeToString(uak)},
+		},
+		Body: req,
+		Out:  &resp,
 	})
 	if err != nil {
 		return nil, mapSendError(err)

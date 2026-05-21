@@ -329,3 +329,234 @@ func TestOpenRequiresStores(t *testing.T) {
 		t.Error("expected error when AccountStore + SignalStores missing")
 	}
 }
+
+// groupMsgEv is like msgEv but includes a group ID.
+func groupMsgEv(sender, groupID, body string) *signal.MessageEvent {
+	return &signal.MessageEvent{
+		Sender:    sender,
+		GroupID:   groupID,
+		Body:      body,
+		Timestamp: time.Now(),
+	}
+}
+
+// --- scope tests ---
+
+func TestDMScopeFiltersGroupMessages(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.OnText("hi").DM().Do(func(_ context.Context, _ *Message, _ []string) error {
+		t.Fatal("DM handler must not fire for group messages")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- groupMsgEv("alice", "group-id-abc", "hi")
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
+}
+
+func TestDMScopeAllowsDirectMessages(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	b.OnText("hi").DM().Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi") // no GroupID → DM
+	wg.Wait()
+	cancel()
+	_ = wait()
+}
+
+func TestGroupScopeFiltersDirectMessages(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.OnText("hi").Group().Do(func(_ context.Context, _ *Message, _ []string) error {
+		t.Fatal("Group handler must not fire for DM messages")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
+}
+
+func TestGroupScopeAllowsGroupMessages(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	b.OnText("hi").Group().Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- groupMsgEv("alice", "group-id-abc", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+}
+
+func TestFromScopeFiltersOtherSenders(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.OnText("hi").From("allowed-aci").Do(func(_ context.Context, _ *Message, _ []string) error {
+		t.Fatal("From filter must not fire for other senders")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("other-aci", "hi")
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
+}
+
+func TestFromScopeAllowsMatchingSender(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	b.OnText("hi").From("alice-aci").Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice-aci", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+}
+
+// --- middleware tests ---
+
+func TestPerHandlerMiddlewareWrapsHandler(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+
+	var order []string
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	mw := func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, m *Message, args []string) error {
+			order = append(order, "mw")
+			return next(ctx, m, args)
+		}
+	}
+	b.OnText("hi").Use(mw).Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		order = append(order, "handler")
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+
+	if len(order) != 2 || order[0] != "mw" || order[1] != "handler" {
+		t.Errorf("order = %v, want [mw handler]", order)
+	}
+}
+
+func TestGlobalMiddlewareWrapsAllHandlers(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+
+	var order []string
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	b.Use(func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, m *Message, args []string) error {
+			order = append(order, "global")
+			return next(ctx, m, args)
+		}
+	})
+	b.OnText("hi").Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		order = append(order, "handler")
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+
+	if len(order) != 2 || order[0] != "global" || order[1] != "handler" {
+		t.Errorf("order = %v, want [global handler]", order)
+	}
+}
+
+func TestGlobalMiddlewareOuterPerHandlerMiddlewareInner(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+
+	var order []string
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	b.Use(func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, m *Message, args []string) error {
+			order = append(order, "global")
+			return next(ctx, m, args)
+		}
+	})
+	b.OnText("hi").Use(func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, m *Message, args []string) error {
+			order = append(order, "per-handler")
+			return next(ctx, m, args)
+		}
+	}).Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		order = append(order, "handler")
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+
+	if len(order) != 3 || order[0] != "global" || order[1] != "per-handler" || order[2] != "handler" {
+		t.Errorf("order = %v, want [global per-handler handler]", order)
+	}
+}
+
+func TestMiddlewareErrPassFallsThrough(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Middleware that returns ErrPass without calling next.
+	b.OnText("hi").Use(func(_ HandlerFunc) HandlerFunc {
+		return func(_ context.Context, _ *Message, _ []string) error {
+			return ErrPass
+		}
+	}).Do(func(_ context.Context, _ *Message, _ []string) error {
+		t.Fatal("this handler must not fire when middleware returns ErrPass")
+		return nil
+	})
+	// Fallthrough handler.
+	b.OnText("hi").Do(func(_ context.Context, _ *Message, _ []string) error {
+		defer wg.Done()
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+}

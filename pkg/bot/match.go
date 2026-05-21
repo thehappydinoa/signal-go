@@ -18,16 +18,30 @@ const (
 )
 
 // matcher describes one registered pattern. Only the relevant fields
-// for the kind are populated.
+// for the kind are populated. Scope filters (dmOnly, groupOnly, fromACI)
+// are evaluated before the pattern match.
 type matcher struct {
-	kind matchKind
-	text string
-	re   *regexp.Regexp
+	kind      matchKind
+	text      string
+	re        *regexp.Regexp
+	dmOnly    bool
+	groupOnly bool
+	fromACI   string
 }
 
-// match evaluates the matcher against an inbound message event. It
-// returns (capture-groups-or-args, true) on match, (nil, false) otherwise.
-func (m matcher) match(ev *signal.MessageEvent, _ *Message) ([]string, bool) {
+// match evaluates the matcher against an inbound message event. Scope
+// filters are tested first; then the pattern match runs. Returns
+// (capture-groups-or-args, true) on match, (nil, false) otherwise.
+func (m matcher) match(ev *signal.MessageEvent, msg *Message) ([]string, bool) {
+	if m.dmOnly && msg.IsGroup() {
+		return nil, false
+	}
+	if m.groupOnly && !msg.IsGroup() {
+		return nil, false
+	}
+	if m.fromACI != "" && ev.Sender != m.fromACI {
+		return nil, false
+	}
 	body := ev.Body
 	switch m.kind {
 	case matchExact:
