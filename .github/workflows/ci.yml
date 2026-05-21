@@ -91,7 +91,7 @@ jobs:
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           # Pinned to golangci-lint v2: golangci-lint refuses to lint
           # a `go 1.25` module if the binary was built with an older
