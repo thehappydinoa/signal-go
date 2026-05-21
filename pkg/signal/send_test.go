@@ -155,6 +155,93 @@ func newRecipient(t *testing.T, aci string, devID, regID uint32) *recipientFixtu
 	}
 }
 
+// newRecipientWithIdentity is like newRecipient but uses the provided identity
+// key pair rather than generating a fresh one. This is required for multi-device
+// fixtures where all devices of the same account must share one identity key:
+// libsignal verifies every prekey signature against the identity key reported
+// in the bundle, so both must come from the same keypair.
+func newRecipientWithIdentity(t *testing.T, aci string, devID, regID uint32, ident *libsignal.IdentityKeyPair) *recipientFixture {
+	t.Helper()
+
+	spkPriv, err := libsignal.GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("spk priv: %v", err)
+	}
+	spkPub, err := spkPriv.PublicKey()
+	if err != nil {
+		t.Fatalf("spk pub: %v", err)
+	}
+	spkPubBytes, _ := spkPub.Serialize()
+	spkSig, err := libsignal.Sign(ident.Private, spkPubBytes)
+	if err != nil {
+		t.Fatalf("sign spk: %v", err)
+	}
+
+	kkp, err := libsignal.GenerateKyberKeyPair()
+	if err != nil {
+		t.Fatalf("kyber pair: %v", err)
+	}
+	kpkPub, _ := kkp.Public()
+	kpkBytes, _ := kpkPub.Serialize()
+	kpkSig, err := libsignal.Sign(ident.Private, kpkBytes)
+	if err != nil {
+		t.Fatalf("sign kpk: %v", err)
+	}
+
+	ss := memstore.NewSignalStores()
+	idPubBytes, _ := ident.Public.Serialize()
+	idPrivBytes, _ := ident.Private.Serialize()
+	ss.SetLocalIdentity(idPubBytes, idPrivBytes, regID)
+
+	const epochTS = uint64(0)
+	spkBlob, err := libsignal.NewSignedPreKeyRecordBlob(1, epochTS, spkPub, spkPriv, spkSig)
+	if err != nil {
+		t.Fatalf("signed prekey blob: %v", err)
+	}
+	if err := ss.StoreSignedPreKey(1, spkBlob); err != nil {
+		t.Fatalf("store signed prekey: %v", err)
+	}
+	kpkBlob, err := libsignal.NewKyberPreKeyRecordBlob(1, epochTS, kkp, kpkSig)
+	if err != nil {
+		t.Fatalf("kyber prekey blob: %v", err)
+	}
+	if err := ss.StoreKyberPreKey(1, kpkBlob); err != nil {
+		t.Fatalf("store kyber prekey: %v", err)
+	}
+
+	otPriv, err := libsignal.GeneratePrivateKey()
+	if err != nil {
+		t.Fatalf("one-time priv: %v", err)
+	}
+	otPub, err := otPriv.PublicKey()
+	if err != nil {
+		t.Fatalf("one-time pub: %v", err)
+	}
+	otRec, err := libsignal.NewPreKeyRecord(2, otPriv, otPub)
+	if err != nil {
+		t.Fatalf("one-time record: %v", err)
+	}
+	otBlob, err := otRec.Serialize()
+	if err != nil {
+		t.Fatalf("one-time serialize: %v", err)
+	}
+	if err := ss.StorePreKey(2, otBlob); err != nil {
+		t.Fatalf("store one-time: %v", err)
+	}
+
+	acct := &account.Account{
+		ACI: aci, PNI: "pni-" + aci, Number: "+15551110001",
+		DeviceID: devID, Password: "bob-password",
+	}
+	return &recipientFixture{
+		t: t, aci: aci, devID: devID, regID: regID, stores: ss, acct: acct,
+		identityKey:  ident,
+		signedPreKey: &signedPreKeyTriple{id: 1, pub: spkPub, priv: spkPriv, sig: spkSig},
+		kyberPreKey:  &kyberPreKeyTriple{id: 1, pub: kpkPub, pair: kkp, sig: kpkSig},
+		oneTimeKey:   &oneTimePreKeyPair{id: 2, pub: otPub, priv: otPriv},
+	}
+}
+
 // bundleDevice builds the web.BundleDevice for this fixture.
 func (r *recipientFixture) bundleDevice() web.BundleDevice {
 	spkBytes, _ := r.signedPreKey.pub.Serialize()
@@ -362,10 +449,12 @@ func TestSendSecondMessageReusesSession(t *testing.T) {
 func TestSendMultiDeviceFanOut(t *testing.T) {
 	// Bob has two linked devices. Send should produce one envelope per device
 	// in a single PUT /v1/messages request.
+	//
+	// Both devices must share one identity key (Signal's invariant). We use
+	// newRecipientWithIdentity for device 2 so its prekeys are signed by the
+	// same keypair that the bundle response advertises.
 	bobDev1 := newRecipient(t, "bob-aci-uuid", 1, 4242)
-	bobDev2 := newRecipient(t, "bob-aci-uuid", 2, 5555)
-	// Device 2 shares the same identity key as device 1 (same account).
-	bobDev2.identityKey = bobDev1.identityKey
+	bobDev2 := newRecipientWithIdentity(t, "bob-aci-uuid", 2, 5555, bobDev1.identityKey)
 
 	var (
 		mu      sync.Mutex
@@ -417,9 +506,10 @@ func TestSendRetryOnMismatchedDevices(t *testing.T) {
 	// The server initially reports only device 1 in the bundle response,
 	// then the first PUT returns 409 with missingDevices=[2]. Send must
 	// fetch a bundle for device 2, then retry and succeed.
+	//
+	// Device 2 uses the same identity key as device 1 (shared account identity).
 	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
-	bob2 := newRecipient(t, "bob-aci-uuid", 2, 5555)
-	bob2.identityKey = bob.identityKey
+	bob2 := newRecipientWithIdentity(t, "bob-aci-uuid", 2, 5555, bob.identityKey)
 
 	var (
 		mu      sync.Mutex

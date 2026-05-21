@@ -110,7 +110,10 @@ func (c *Client) discoverAndEnsureSessions(ctx context.Context, creds web.Creden
 		deviceIDs = make([]uint32, 0, len(resp.Devices))
 		for _, dev := range resp.Devices {
 			addr := store.Address{ServiceID: recipientACI, DeviceID: dev.DeviceID}
-			if _, serr := c.stores.LoadSession(addr); errors.Is(serr, store.ErrRecordNotFound) {
+			if _, serr := c.stores.LoadSession(addr); serr != nil {
+				if !errors.Is(serr, store.ErrRecordNotFound) {
+					return nil, fmt.Errorf("signal.Send: load session: %w", serr)
+				}
 				if err := c.processBundle(resp.IdentityKey, dev, addr); err != nil {
 					return nil, err
 				}
@@ -128,7 +131,10 @@ func (c *Client) discoverAndEnsureSessions(ctx context.Context, creds web.Creden
 		// were deleted (e.g. because the last send returned HTTP 410).
 		for _, devID := range deviceIDs {
 			addr := store.Address{ServiceID: recipientACI, DeviceID: devID}
-			if _, err := c.stores.LoadSession(addr); errors.Is(err, store.ErrRecordNotFound) {
+			if _, serr := c.stores.LoadSession(addr); serr != nil {
+				if !errors.Is(serr, store.ErrRecordNotFound) {
+					return nil, fmt.Errorf("signal.Send: load session: %w", serr)
+				}
 				if err := c.fetchAndProcessBundle(ctx, creds, recipientACI, devID); err != nil {
 					return nil, err
 				}
@@ -161,7 +167,9 @@ func (c *Client) handleSendError(
 	case errors.As(sendErr, &mde):
 		// Drop sessions for devices Bob no longer has.
 		for _, devID := range mde.ExtraDevices {
-			_ = c.stores.DeleteSession(store.Address{ServiceID: recipientACI, DeviceID: devID})
+			if err := c.stores.DeleteSession(store.Address{ServiceID: recipientACI, DeviceID: devID}); err != nil {
+				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: delete extra device %d: %w", devID, err)
+			}
 		}
 		addrs = filterOutDevices(addrs, mde.ExtraDevices)
 
