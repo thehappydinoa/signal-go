@@ -79,6 +79,45 @@ func DecryptSealedSenderToUSMC(ctext []byte, h *StoreHandle) (*UnidentifiedSende
 	return wrapUSMC(out), nil
 }
 
+// NewUSMC wraps a per-device Double Ratchet ciphertext in a sealed-sender
+// UnidentifiedSenderMessageContent. The result can be serialized and used
+// as the envelope payload in an UNIDENTIFIED_SENDER PUT.
+//
+// For 1:1 messages the groupID must be nil. content_hint is set to 0
+// (DEFAULT — the server stores and re-delivers the message if the recipient
+// is offline).
+func NewUSMC(msg *CiphertextMessage, cert *SenderCertificate) (*UnidentifiedSenderMessageContent, error) {
+	if msg == nil {
+		return nil, errors.New("libsignal.NewUSMC: nil ciphertext message")
+	}
+	if cert == nil {
+		return nil, errors.New("libsignal.NewUSMC: nil sender certificate")
+	}
+	var out C.SignalMutPointerUnidentifiedSenderMessageContent
+	err := checkError(C.signal_unidentified_sender_message_content_new(
+		&out,
+		msg.constPtr(),
+		cert.constPtr(),
+		0,                        // content_hint: DEFAULT
+		C.SignalBorrowedBuffer{}, // group_id: empty for 1:1
+	))
+	runtime.KeepAlive(cert) // prevent finalizer from destroying cert during FFI
+	if err != nil {
+		return nil, err
+	}
+	return wrapUSMC(out), nil
+}
+
+// Serialize returns the wire encoding of the USMC. This is the bytes placed
+// into a sealed-sender MessageEnvelope's Content field.
+func (u *UnidentifiedSenderMessageContent) Serialize() ([]byte, error) {
+	var buf C.SignalOwnedBuffer
+	if err := checkError(C.signal_unidentified_sender_message_content_serialize(&buf, u.constPtr())); err != nil {
+		return nil, err
+	}
+	return goBytesFromOwnedBuffer(buf), nil
+}
+
 // MessageType returns the inner ciphertext type (whisper, prekey, etc.).
 func (u *UnidentifiedSenderMessageContent) MessageType() (CiphertextMessageType, error) {
 	var t C.uint8_t
@@ -123,6 +162,21 @@ func (u *UnidentifiedSenderMessageContent) SenderCert() (*SenderCertificate, err
 	return wrapSenderCertificate(out), nil
 }
 
+// DeserializeSenderCertificate parses the wire encoding returned by
+// GET /v1/certificate/delivery.
+func DeserializeSenderCertificate(data []byte) (*SenderCertificate, error) {
+	if len(data) == 0 {
+		return nil, errors.New("libsignal.DeserializeSenderCertificate: empty input")
+	}
+	var out C.SignalMutPointerSenderCertificate
+	err := checkError(C.signal_sender_certificate_deserialize(&out, borrowed(data)))
+	keepAlive(data)
+	if err != nil {
+		return nil, err
+	}
+	return wrapSenderCertificate(out), nil
+}
+
 // SenderUUID returns the sender's ACI/PNI string.
 func (c *SenderCertificate) SenderUUID() (string, error) {
 	var cstr *C.char
@@ -141,6 +195,25 @@ func (c *SenderCertificate) SenderDeviceID() (uint32, error) {
 		return 0, err
 	}
 	return uint32(out), nil
+}
+
+// Expiration returns when this certificate expires (milliseconds since epoch,
+// converted to a [time.Time]).
+func (c *SenderCertificate) Expiration() (time.Time, error) {
+	var ms C.uint64_t
+	if err := checkError(C.signal_sender_certificate_get_expiration(&ms, c.constPtr())); err != nil {
+		return time.Time{}, err
+	}
+	return time.UnixMilli(int64(ms)), nil
+}
+
+// Serialize returns the canonical wire encoding of the certificate.
+func (c *SenderCertificate) Serialize() ([]byte, error) {
+	var buf C.SignalOwnedBuffer
+	if err := checkError(C.signal_sender_certificate_get_serialized(&buf, c.constPtr())); err != nil {
+		return nil, err
+	}
+	return goBytesFromOwnedBuffer(buf), nil
 }
 
 // Validate checks the sender certificate against trustRoots at validationTime.

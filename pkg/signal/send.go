@@ -51,13 +51,41 @@ func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, 
 		return Receipt{}, err
 	}
 
-	req, err := c.buildSendRequest(uint64(ts), addrs, padded)
+	// Use sealed sender when the recipient's UAK is known; fall back to
+	// basic auth otherwise. Sealed sender requires a valid sender cert from
+	// the server in addition to the UAK.
+	c.mu.Lock()
+	uak := c.knownUAKs[recipientACI]
+	c.mu.Unlock()
+
+	if len(uak) > 0 {
+		if cert, certErr := c.cachedSenderCert(ctx, creds); certErr == nil {
+			return c.deliverSealed(ctx, creds, recipientACI, addrs, padded, uint64(ts), cert, uak)
+		}
+		c.log.Debug("sender cert unavailable; falling back to basic auth", "recipient", recipientACI)
+	}
+	return c.deliverBasicAuth(ctx, creds, recipientACI, addrs, padded, uint64(ts))
+}
+
+// deliverBasicAuth sends using HTTP Basic auth. The server sees the sender's ACI.
+func (c *Client) deliverBasicAuth(
+	ctx context.Context,
+	creds web.Credentials,
+	recipientACI string,
+	addrs []store.Address,
+	padded []byte,
+	ts uint64,
+) (Receipt, error) {
+	req, err := c.buildSendRequest(ts, addrs, padded)
 	if err != nil {
 		return Receipt{}, err
 	}
-
 	if _, err := c.webc.SendMessage(ctx, creds, recipientACI, req); err != nil {
-		addrs, req, err = c.handleSendError(ctx, creds, recipientACI, addrs, padded, uint64(ts), err)
+		addrs, err = c.handleSendError(ctx, creds, recipientACI, addrs, err)
+		if err != nil {
+			return Receipt{}, err
+		}
+		req, err = c.buildSendRequest(ts, addrs, padded)
 		if err != nil {
 			return Receipt{}, err
 		}
@@ -65,8 +93,39 @@ func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, 
 			return Receipt{}, fmt.Errorf("signal.Send: %w", err)
 		}
 	}
+	return Receipt{Timestamp: time.UnixMilli(int64(ts)), RecipientACI: recipientACI}, nil
+}
 
-	return Receipt{Timestamp: time.UnixMilli(ts), RecipientACI: recipientACI}, nil
+// deliverSealed sends using sealed-sender (USMC envelopes + UAK header).
+// The server does not record the sender's ACI.
+func (c *Client) deliverSealed(
+	ctx context.Context,
+	creds web.Credentials,
+	recipientACI string,
+	addrs []store.Address,
+	padded []byte,
+	ts uint64,
+	cert *libsignal.SenderCertificate,
+	uak []byte,
+) (Receipt, error) {
+	req, err := c.buildSealedSendRequest(ts, addrs, padded, cert)
+	if err != nil {
+		return Receipt{}, err
+	}
+	if _, err := c.webc.SendMessageUnidentified(ctx, uak, recipientACI, req); err != nil {
+		addrs, err = c.handleSendError(ctx, creds, recipientACI, addrs, err)
+		if err != nil {
+			return Receipt{}, err
+		}
+		req, err = c.buildSealedSendRequest(ts, addrs, padded, cert)
+		if err != nil {
+			return Receipt{}, err
+		}
+		if _, err := c.webc.SendMessageUnidentified(ctx, uak, recipientACI, req); err != nil {
+			return Receipt{}, fmt.Errorf("signal.Send: %w", err)
+		}
+	}
+	return Receipt{Timestamp: time.UnixMilli(int64(ts)), RecipientACI: recipientACI}, nil
 }
 
 // Receipt is what [Client.Send] returns on success. The timestamp is
@@ -149,39 +208,40 @@ func (c *Client) discoverAndEnsureSessions(ctx context.Context, creds web.Creden
 	return addrs, nil
 }
 
-// handleSendError interprets an HTTP 409 or 410 response, fixes up the
-// session state and address list, and returns the corrected values ready
-// for a single retry. Non-device-set errors are returned unchanged.
+// handleSendError interprets an HTTP 409 or 410 response and fixes up
+// the session state and address list for a retry. It returns the updated
+// address list. Non-device-set errors are returned unchanged.
+//
+// The caller is responsible for rebuilding the send request with the
+// updated addresses.
 func (c *Client) handleSendError(
 	ctx context.Context,
 	creds web.Credentials,
 	recipientACI string,
 	addrs []store.Address,
-	padded []byte,
-	ts uint64,
 	sendErr error,
-) ([]store.Address, web.SendMessageRequest, error) {
+) ([]store.Address, error) {
 	var mde *web.MismatchedDevicesError
 	var sde *web.StaleDevicesError
 	switch {
 	case errors.As(sendErr, &mde):
-		// Drop sessions for devices Bob no longer has.
+		// Drop sessions for devices the recipient no longer has.
 		for _, devID := range mde.ExtraDevices {
 			if err := c.stores.DeleteSession(store.Address{ServiceID: recipientACI, DeviceID: devID}); err != nil {
-				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: delete extra device %d: %w", devID, err)
+				return nil, fmt.Errorf("signal.Send: delete extra device %d: %w", devID, err)
 			}
 		}
 		addrs = filterOutDevices(addrs, mde.ExtraDevices)
 
-		// Establish sessions for Bob's new devices.
+		// Establish sessions for newly-added devices.
 		for _, devID := range mde.MissingDevices {
 			if err := c.fetchAndProcessBundle(ctx, creds, recipientACI, devID); err != nil {
-				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: missing device %d: %w", devID, err)
+				return nil, fmt.Errorf("signal.Send: missing device %d: %w", devID, err)
 			}
 			addrs = append(addrs, store.Address{ServiceID: recipientACI, DeviceID: devID})
 		}
 
-		// Update the cache to reflect the corrected device set.
+		// Update the in-memory device cache.
 		c.mu.Lock()
 		c.knownDevices[recipientACI] = addressDeviceIDs(addrs)
 		c.mu.Unlock()
@@ -191,23 +251,18 @@ func (c *Client) handleSendError(
 		for _, devID := range sde.StaleDevices {
 			addr := store.Address{ServiceID: recipientACI, DeviceID: devID}
 			if err := c.stores.DeleteSession(addr); err != nil {
-				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: delete stale session %d: %w", devID, err)
+				return nil, fmt.Errorf("signal.Send: delete stale session %d: %w", devID, err)
 			}
 			if err := c.fetchAndProcessBundle(ctx, creds, recipientACI, devID); err != nil {
-				return nil, web.SendMessageRequest{}, fmt.Errorf("signal.Send: stale device %d: %w", devID, err)
+				return nil, fmt.Errorf("signal.Send: stale device %d: %w", devID, err)
 			}
 		}
 		// addrs is unchanged — same set of devices, new sessions.
 
 	default:
-		return nil, web.SendMessageRequest{}, sendErr
+		return nil, sendErr
 	}
-
-	req, err := c.buildSendRequest(ts, addrs, padded)
-	if err != nil {
-		return nil, web.SendMessageRequest{}, err
-	}
-	return addrs, req, nil
+	return addrs, nil
 }
 
 // fetchAndProcessBundle fetches a single device's prekey bundle and
@@ -244,6 +299,97 @@ func (c *Client) processBundle(identityKeyB64 string, dev web.BundleDevice, addr
 		return fmt.Errorf("signal.Send: process bundle for %s: %w", addr, err)
 	}
 	return nil
+}
+
+// cachedSenderCert returns a valid sender certificate, fetching one from
+// /v1/certificate/delivery if the cached copy is absent or within 5 minutes
+// of its expiry timestamp.
+func (c *Client) cachedSenderCert(ctx context.Context, creds web.Credentials) (*libsignal.SenderCertificate, error) {
+	c.certMu.Lock()
+	defer c.certMu.Unlock()
+	const headroom = 5 * time.Minute
+	if c.senderCert != nil && time.Now().Before(c.certExpiry.Add(-headroom)) {
+		return c.senderCert, nil
+	}
+	certBytes, err := c.webc.FetchSenderCertificate(ctx, creds)
+	if err != nil {
+		return nil, fmt.Errorf("signal.Send: fetch sender cert: %w", err)
+	}
+	cert, err := libsignal.DeserializeSenderCertificate(certBytes)
+	if err != nil {
+		return nil, fmt.Errorf("signal.Send: parse sender cert: %w", err)
+	}
+	expiry, err := cert.Expiration()
+	if err != nil {
+		return nil, fmt.Errorf("signal.Send: sender cert expiry: %w", err)
+	}
+	c.senderCert = cert
+	c.certExpiry = expiry
+	return cert, nil
+}
+
+// sealedEncryptForDevice wraps one device's Double Ratchet ciphertext in a
+// sealed-sender USMC. Returns (USMC bytes, recipient registration ID, error).
+func (c *Client) sealedEncryptForDevice(addr store.Address, padded []byte, cert *libsignal.SenderCertificate) ([]byte, uint32, error) {
+	remote, err := libsignal.NewAddress(addr.ServiceID, addr.DeviceID)
+	if err != nil {
+		return nil, 0, err
+	}
+	local, err := libsignal.NewAddress(c.acct.ACI, c.acct.DeviceID)
+	if err != nil {
+		return nil, 0, err
+	}
+	h := libsignal.NewStoreHandle(c.stores)
+	defer h.Release()
+	cipher, err := libsignal.EncryptMessage(padded, remote, local, h, time.Now())
+	if err != nil {
+		return nil, 0, fmt.Errorf("signal.Send: sealed encrypt: %w", err)
+	}
+	usmc, err := libsignal.NewUSMC(cipher, cert)
+	if err != nil {
+		return nil, 0, fmt.Errorf("signal.Send: build USMC: %w", err)
+	}
+	usmcBytes, err := usmc.Serialize()
+	if err != nil {
+		return nil, 0, fmt.Errorf("signal.Send: serialize USMC: %w", err)
+	}
+
+	sessBlob, err := c.stores.LoadSession(addr)
+	if err != nil {
+		return nil, 0, fmt.Errorf("signal.Send: load session post-seal-encrypt: %w", err)
+	}
+	sess, err := libsignal.DeserializeSessionRecord(sessBlob)
+	if err != nil {
+		return nil, 0, err
+	}
+	regID, err := sess.RemoteRegistrationID()
+	if err != nil {
+		return nil, 0, err
+	}
+	return usmcBytes, regID, nil
+}
+
+// buildSealedSendRequest assembles a [web.SendMessageRequest] using sealed-
+// sender USMC envelopes (type 6 = UNIDENTIFIED_SENDER).
+func (c *Client) buildSealedSendRequest(ts uint64, addrs []store.Address, padded []byte, cert *libsignal.SenderCertificate) (web.SendMessageRequest, error) {
+	msgs := make([]web.MessageEnvelope, 0, len(addrs))
+	for _, addr := range addrs {
+		usmcBytes, regID, err := c.sealedEncryptForDevice(addr, padded, cert)
+		if err != nil {
+			return web.SendMessageRequest{}, err
+		}
+		msgs = append(msgs, web.MessageEnvelope{
+			Type:                      web.CiphertextTypeUnidentifiedSender,
+			DestinationDeviceID:       addr.DeviceID,
+			DestinationRegistrationID: regID,
+			Content:                   base64.StdEncoding.EncodeToString(usmcBytes),
+		})
+	}
+	return web.SendMessageRequest{
+		Timestamp: ts,
+		Urgent:    true,
+		Messages:  msgs,
+	}, nil
 }
 
 // buildSendRequest encrypts padded content for every address and

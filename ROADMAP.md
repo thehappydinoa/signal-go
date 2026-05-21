@@ -84,10 +84,14 @@ the "Link this device?" prompt; we won't yet complete the link).
       (refresh bundles, drop stale sessions, resend — at-most-one retry)
 - [x] Multi-device fan-out (GET `/*` on first send; per-recipient device
       list cached in-memory; one envelope per device in a single PUT)
-- [ ] Sealed-sender encrypt → server doesn't see our ACI as the
-      sender. Needs `signal_sealed_sender_multi_recipient_encrypt`
-      wrapper + sender-certificate fetch from `/v1/certificate/delivery`
-- [ ] Unidentified-access certificate refresh + cache
+- [x] Sealed-sender encrypt → server doesn't see our ACI as the sender.
+      Per-device USMC via `signal_unidentified_sender_message_content_new`
+      + serialization; sender-cert fetch from `/v1/certificate/delivery`
+      with 5-minute-headroom cache ([ADR 0015](docs/adr/0015-sealed-sender-encrypt.md)).
+      Activated automatically once the recipient's UAK is provided via
+      `Client.SetRecipientUAK` (populated by profile fetch, Phase 5).
+- [x] Unidentified-access certificate refresh + cache (sender cert cached
+      in `Client.senderCert`; re-fetched when < 5 min from expiry)
 - [ ] Profile fetch (decrypt with profile key via libsignal `ProfileCipher`)
 - [ ] Read/delivery receipts
 
@@ -119,11 +123,14 @@ bots as ergonomic as Telegram or Slack Bolt:
 - [x] Custom error handler via `Bot.OnError`
 - [x] Graceful shutdown via `Bot.Close` + `Bot.Run(ctx)`; structured
       logging via the injected `*slog.Logger`
-- [ ] Scopes: `.DM()`, `.Group()`, `.From("+15551234567")`
+- [x] Scopes: `.DM()` (direct-message only), `.Group()` (group only),
+      `.From(aci)` (sender filter)
 - [ ] Group `Reply` once Phase 5 surfaces the group identifier + send
       path; `ReplyAttachment`, `React`, `Typing`, `MarkRead`
 - [ ] Reaction and edit event handlers
-- [ ] Middleware chain: logging, rate-limit, auth, per-conversation state
+- [x] Middleware chain: `Bot.Use(MiddlewareFunc)` for global middleware;
+      `Match.Use(MiddlewareFunc)` for per-handler middleware; outermost-first
+      ordering; `ErrPass` still causes dispatcher to try the next handler
 - [ ] Conversation state (sessions / wizards) via in-memory or persistent store
 
 See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
@@ -148,9 +155,11 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
       2. Patch upstream BoringSSL / submit a PR to `signalapp/boring`
          to add `.note.GNU-stack` to the affected `.S` files (the
          long-term fix; tracked at the libsignal layer).
-      3. Pass `-Wl,--no-warn-execstack` via `internal/libsignal/cgo.go`
-         `#cgo LDFLAGS`. Hides the warning without addressing the
-         underlying object — acceptable as a stop-gap.
+      3. **Done (stop-gap shipped)**: `-Wl,--no-warn-execstack` added to
+         `internal/libsignal/cgo.go` linux `#cgo LDFLAGS`. Hides the
+         warning without fixing the root cause. The long-term fix (upstream
+         BoringSSL `.note.GNU-stack` patch) is tracked at the libsignal
+         layer.
 
 ## Phase 8 — Security audit **(planned; required before v0.1.0)**
 
@@ -162,13 +171,26 @@ threat model, and what "pass" means.
 
 Internal review (we do this before any external work):
 
-- [ ] `internal/libsignal` cgo audit:
-  - every `*Buffer` lifetime, `keepAlive`, finalizer, and `cgo.Handle` is
-    accounted for
-  - no Go pointers cross into Rust except via the documented borrowed/owned
-    rules in `doc.go`
-  - errors free their underlying `SignalFfiError` exactly once
-  - confirm we link the *release* libsignal_ffi.a, not any `*-testing*`
+- [ ] **Memory safety + profiling audit** (`internal/libsignal` and all
+      cgo boundaries):
+  - Run `go test -run=. -memprofile=mem.out ./...` and inspect with
+    `go tool pprof` for unexpected heap growth across long-running
+    receive + send sessions
+  - Verify every `*Buffer` lifetime, `keepAlive`, finalizer, and
+    `cgo.Handle` is correctly accounted for — a missed `keepAlive`
+    allows the GC to collect a slice whose backing array is still
+    referenced by Rust
+  - Confirm `CiphertextMessage` (currently no finalizer in `session.go`)
+    is either explicitly destroyed or harmlessly short-lived before any
+    GC cycle
+  - Run `valgrind --tool=memcheck` (or `sanitizers` via `CGO_CFLAGS=
+    -fsanitize=address`) on a cgo-linked test binary to catch
+    use-after-free and double-free in the C/Rust boundary
+  - No Go pointers cross into Rust except via the documented
+    borrowed/owned rules in `doc.go`
+  - Errors free their underlying `SignalFfiError` exactly once
+  - Confirm we link the *release* `libsignal_ffi.a`, not any
+    `*-testing*` variant
 - [ ] `internal/provisioning` cipher review:
   - constant-time MAC compare (`hmac.Equal`) on every branch
   - constant-time PKCS-7 unpad

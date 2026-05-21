@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/chat"
 	"github.com/thehappydinoa/signal-go/internal/cipher"
+	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/prekeymaint"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 	"github.com/thehappydinoa/signal-go/internal/store"
@@ -108,9 +110,15 @@ type Client struct {
 	webc   *web.Client
 	stores store.SignalStores
 
-	// mu guards knownDevices.
+	// mu guards knownDevices and knownUAKs.
 	mu           sync.Mutex
 	knownDevices map[string][]uint32 // recipientACI → device ID set
+	knownUAKs    map[string][]byte   // recipientACI → 16-byte unidentified access key
+
+	// certMu guards the sender-certificate cache.
+	certMu     sync.Mutex
+	senderCert *libsignal.SenderCertificate
+	certExpiry time.Time
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -204,6 +212,29 @@ func (c *Client) Close() error {
 
 // Account returns the linked account metadata.
 func (c *Client) Account() *account.Account { return c.acct }
+
+// SetRecipientUAK stores the 16-byte unidentified access key for a recipient.
+// Once set, subsequent [Send] calls to that ACI will use sealed-sender
+// delivery (the server does not see the sender's ACI).
+//
+// The UAK is derived from the recipient's profile key:
+//
+//	HKDF-SHA256(ikm=profileKey, salt=zeroes, info="Unidentified Access Key")[:16]
+//
+// It is populated automatically when profile fetch is implemented (Phase 5).
+// Passing a nil or empty uak removes any cached key (reverts to basic auth).
+func (c *Client) SetRecipientUAK(aci string, uak []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.knownUAKs == nil {
+		c.knownUAKs = make(map[string][]byte)
+	}
+	if len(uak) == 0 {
+		delete(c.knownUAKs, aci)
+		return
+	}
+	c.knownUAKs[aci] = uak
+}
 
 // Done returns a channel closed when the underlying connection exits.
 func (c *Client) Done() <-chan struct{} { return c.conn.Done() }
