@@ -41,7 +41,7 @@ jobs:
           echo "libsignal pinned at: $v"
 
       - id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: internal/libsignal/lib
           key: libsignal-${{ steps.version.outputs.version }}-ubuntu-latest-x86_64-v1
