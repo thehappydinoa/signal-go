@@ -90,10 +90,10 @@ The `Client` connects to Signal's authenticated chat websocket, handles
 auto-reconnection with exponential backoff, and dispatches incoming
 envelopes as typed events.
 
-**Note**: Full end-to-end decryption (sealed sender, session cipher) is
-pending — the current implementation uses a passthrough decryptor. Plug
-in a real `Decryptor` via `OpenOptions.Decryptor` once the libsignal
-cgo wrappers are complete.
+[`signal.Open`](../../pkg/signal/client.go) wires a libsignal-backed
+[`cipher.EnvelopeDecryptor`](../../internal/cipher/envelope.go) by default
+(sealed sender, session cipher, prekey messages). Override
+`OpenOptions.Decryptor` only for tests or custom backends.
 
 ## Non-interactive
 
@@ -121,8 +121,8 @@ listed (or whatever you passed to `-name`).
 
 ## What's next
 
-- **Receive** (Phase 3): connection + dispatch are working; sealed-sender
-  and session decrypt via libsignal are pending.
+- **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
+  working; prekey rotation on use is still open.
 - **Send** (Phase 4): pending. The [send flow](../diagrams/send-flow.md)
   describes the planned shape.
 - **Bot framework** (Phase 6): pending. See [ADR 0008](../adr/0008-bot-framework.md).

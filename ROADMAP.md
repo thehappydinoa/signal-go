@@ -61,7 +61,8 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Authenticated websocket with auto-reconnect + backoff
       (`internal/chat.Connection`)
 - [x] Envelope dispatch loop (`pkg/signal.Client.processEnvelope`)
-- [ ] Sealed-sender unwrap → session decrypt (Double Ratchet via libsignal)
+- [x] Sealed-sender unwrap → session decrypt (Double Ratchet via libsignal)
+      (`internal/libsignal` decrypt + `internal/cipher.EnvelopeDecryptor`)
 - [x] Content protobuf decode → typed events
       (`*MessageEvent`, `*ReceiptEvent`, `*TypingEvent`, `*SyncMessageEvent`)
 - [x] Decryption-error handling (`*DecryptionErrorEvent` emitted without
@@ -190,8 +191,8 @@ Phase B — broaden:
 - [ ] Windows runners (`windows-latest`) once we've validated the cgo
       build path
 - [ ] `staticcheck` and (post-triage) `gosec` as separate jobs
-- [ ] Coverage report uploaded as a PR check (we already have
-      `task cover`; need a CI consumer)
+- [x] Coverage report uploaded as a PR check (`ci.yml` `cover` job;
+      `task cover` locally)
 
 Phase C — release pipeline (lands with v0.1.0):
 - [ ] `.github/workflows/release.yml`: build `signal-go` binaries on

@@ -10,6 +10,7 @@ import (
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/chat"
+	"github.com/thehappydinoa/signal-go/internal/cipher"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 	"github.com/thehappydinoa/signal-go/internal/store"
 )
@@ -19,8 +20,7 @@ import (
 var ErrNotLinked = account.ErrNotLinked
 
 // Decryptor transforms raw encrypted envelope content into a plaintext
-// Content protobuf. The concrete implementation will wire up libsignal
-// once the Phase 3 cgo decrypt wrappers land.
+// Content protobuf via libsignal ([cipher.EnvelopeDecryptor] by default).
 type Decryptor interface {
 	// Decrypt takes an envelope and returns the decrypted Content bytes
 	// plus the verified sender address. For sealed-sender envelopes the
@@ -59,10 +59,8 @@ type OpenOptions struct {
 	// Default: 256.
 	EventBufferSize int
 
-	// Decryptor overrides the default envelope decryptor. If nil, a
-	// passthrough decryptor is used that treats envelope content as
-	// already-decrypted Content protobuf bytes. Wire up the real
-	// libsignal decryptor via this field once Phase 3 cgo wrappers land.
+	// Decryptor overrides the default libsignal-backed decryptor built
+	// from the linked account + SignalStores. Useful for tests.
 	Decryptor Decryptor
 
 	// DialFunc overrides websocket dial for testing.
@@ -115,7 +113,11 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 
 	dec := opts.Decryptor
 	if dec == nil {
-		dec = passthroughDecryptor{}
+		libDec, err := cipher.NewEnvelopeDecryptor(acct, opts.SignalStores)
+		if err != nil {
+			return nil, fmt.Errorf("signal.Open: %w", err)
+		}
+		dec = libDec
 	}
 
 	c := &Client{

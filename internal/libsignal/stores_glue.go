@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include <stdlib.h>
 
 // Forward declarations of the //export'd Go functions in stores.go.
 // We cannot include "_cgo_export.h" directly because this file is
@@ -92,7 +93,9 @@ static inline SignalSenderKeyStore signalgo_sender_key_store(void) {
 import "C"
 
 import (
+	"runtime"
 	"runtime/cgo"
+	"unsafe"
 
 	"github.com/thehappydinoa/signal-go/internal/store"
 )
@@ -107,25 +110,121 @@ import (
 type StoreHandle struct {
 	value any
 	h     cgo.Handle
+	// ctxPtr holds the handle integer at a stable heap address so we can
+	// hand libsignal a real pointer without tripping checkptr under -race.
+	ctxPtr *uintptr
+
+	// Go-side templates; copied into C.malloc'd blobs for FFI calls.
+	session  C.SignalSessionStore
+	identity C.SignalIdentityKeyStore
+	preKey   C.SignalPreKeyStore
+	signed   C.SignalSignedPreKeyStore
+	kyber    C.SignalKyberPreKeyStore
+	sender   C.SignalSenderKeyStore
+
+	cSession  *C.SignalSessionStore
+	cIdentity *C.SignalIdentityKeyStore
+	cPreKey   *C.SignalPreKeyStore
+	cSigned   *C.SignalSignedPreKeyStore
+	cKyber    *C.SignalKyberPreKeyStore
 }
 
 // NewStoreHandle registers any store implementation through a
 // [runtime/cgo.Handle]. The handle can then be used to materialise the
 // libsignal callback structs.
 func NewStoreHandle(s any) *StoreHandle {
-	return &StoreHandle{value: s, h: cgo.NewHandle(s)}
+	h := cgo.NewHandle(s)
+	ctx := new(uintptr)
+	*ctx = uintptr(h)
+	sh := &StoreHandle{value: s, h: h, ctxPtr: ctx}
+	ctxPtr := sh.Ctx()
+	sh.session = SessionStoreFor(sh)
+	sh.session.ctx = ctxPtr
+	sh.identity = IdentityKeyStoreFor(sh)
+	sh.identity.ctx = ctxPtr
+	sh.preKey = PreKeyStoreFor(sh)
+	sh.preKey.ctx = ctxPtr
+	sh.signed = SignedPreKeyStoreFor(sh)
+	sh.signed.ctx = ctxPtr
+	sh.kyber = KyberPreKeyStoreFor(sh)
+	sh.kyber.ctx = ctxPtr
+	sh.sender = SenderKeyStoreFor(sh)
+	sh.sender.ctx = ctxPtr
+	sh.allocCStores()
+	return sh
+}
+
+func (h *StoreHandle) allocCStores() {
+	h.cSession = allocSessionStoreCopy(&h.session)
+	h.cIdentity = allocIdentityStoreCopy(&h.identity)
+	h.cPreKey = allocPreKeyStoreCopy(&h.preKey)
+	h.cSigned = allocSignedStoreCopy(&h.signed)
+	h.cKyber = allocKyberStoreCopy(&h.kyber)
+}
+
+func allocSessionStoreCopy(src *C.SignalSessionStore) *C.SignalSessionStore {
+	return (*C.SignalSessionStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
+}
+
+func allocIdentityStoreCopy(src *C.SignalIdentityKeyStore) *C.SignalIdentityKeyStore {
+	return (*C.SignalIdentityKeyStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
+}
+
+func allocPreKeyStoreCopy(src *C.SignalPreKeyStore) *C.SignalPreKeyStore {
+	return (*C.SignalPreKeyStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
+}
+
+func allocSignedStoreCopy(src *C.SignalSignedPreKeyStore) *C.SignalSignedPreKeyStore {
+	return (*C.SignalSignedPreKeyStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
+}
+
+func allocKyberStoreCopy(src *C.SignalKyberPreKeyStore) *C.SignalKyberPreKeyStore {
+	return (*C.SignalKyberPreKeyStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
+}
+
+func allocCopy(src unsafe.Pointer, size C.size_t) unsafe.Pointer {
+	n := int(size)
+	dst := C.malloc(size)
+	if dst == nil {
+		panic("libsignal: C.malloc failed")
+	}
+	// Copy in Go so we never pass a Go pointer into a C function.
+	copy(unsafe.Slice((*byte)(dst), n), unsafe.Slice((*byte)(src), n))
+	return dst
 }
 
 // Ctx returns the void* libsignal expects in the callback ctx slot.
-func (h *StoreHandle) Ctx() C.uintptr_t { return C.uintptr_t(h.h) }
+func (h *StoreHandle) Ctx() unsafe.Pointer { return unsafe.Pointer(h.ctxPtr) }
+
+// pinForFFI pins every field that crosses the cgo boundary (store structs
+// embed Go pointers in their ctx slots).
+func (h *StoreHandle) pinForFFI(p *runtime.Pinner) {
+	p.Pin(h.ctxPtr)
+}
 
 // Release frees the cgo handle. Idempotent.
 func (h *StoreHandle) Release() {
 	if h == nil || h.h == 0 {
 		return
 	}
+	h.freeCStores()
 	h.h.Delete()
 	h.h = 0
+}
+
+func (h *StoreHandle) freeCStores() {
+	freeIfSet(unsafe.Pointer(h.cSession))
+	freeIfSet(unsafe.Pointer(h.cIdentity))
+	freeIfSet(unsafe.Pointer(h.cPreKey))
+	freeIfSet(unsafe.Pointer(h.cSigned))
+	freeIfSet(unsafe.Pointer(h.cKyber))
+	h.cSession, h.cIdentity, h.cPreKey, h.cSigned, h.cKyber = nil, nil, nil, nil, nil
+}
+
+func freeIfSet(p unsafe.Pointer) {
+	if p != nil {
+		C.free(p)
+	}
 }
 
 // SessionStoreFor returns the libsignal SessionStore wired to h. h must
@@ -168,4 +267,29 @@ func KyberPreKeyStoreFor(h *StoreHandle) C.SignalKyberPreKeyStore {
 func SenderKeyStoreFor(h *StoreHandle) C.SignalSenderKeyStore {
 	_ = h.value.(store.SenderKeyStore)
 	return C.signalgo_sender_key_store()
+}
+
+// SessionStoreStruct returns the FFI session store wired to h's ctx.
+func (h *StoreHandle) SessionStoreStruct() C.SignalConstPointerFfiSessionStoreStruct {
+	return C.SignalConstPointerFfiSessionStoreStruct{raw: h.cSession}
+}
+
+// IdentityKeyStoreStruct returns the FFI identity store wired to h's ctx.
+func (h *StoreHandle) IdentityKeyStoreStruct() C.SignalConstPointerFfiIdentityKeyStoreStruct {
+	return C.SignalConstPointerFfiIdentityKeyStoreStruct{raw: h.cIdentity}
+}
+
+// PreKeyStoreStruct returns the FFI prekey store wired to h's ctx.
+func (h *StoreHandle) PreKeyStoreStruct() C.SignalConstPointerFfiPreKeyStoreStruct {
+	return C.SignalConstPointerFfiPreKeyStoreStruct{raw: h.cPreKey}
+}
+
+// SignedPreKeyStoreStruct returns the FFI signed-prekey store wired to h's ctx.
+func (h *StoreHandle) SignedPreKeyStoreStruct() C.SignalConstPointerFfiSignedPreKeyStoreStruct {
+	return C.SignalConstPointerFfiSignedPreKeyStoreStruct{raw: h.cSigned}
+}
+
+// KyberPreKeyStoreStruct returns the FFI Kyber-prekey store wired to h's ctx.
+func (h *StoreHandle) KyberPreKeyStoreStruct() C.SignalConstPointerFfiKyberPreKeyStoreStruct {
+	return C.SignalConstPointerFfiKyberPreKeyStoreStruct{raw: h.cKyber}
 }

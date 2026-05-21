@@ -7,6 +7,12 @@
 #
 # Re-running with the same LIBSIGNAL_VERSION is a no-op if the artifacts exist.
 # Override LIBSIGNAL_VERSION or pass FORCE=1 to rebuild.
+#
+# Dev VM notes (cloud agents / minimal images): BoringSSL needs nasm, protoc,
+# and a working C++ toolchain. If the default clang cannot link -lstdc++, use:
+#   export CC=gcc CXX=g++
+# When linking Go tests against libsignal_ffi.a you may also need:
+#   export CGO_LDFLAGS="-lstdc++"
 set -euo pipefail
 
 LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-v0.94.1}"
