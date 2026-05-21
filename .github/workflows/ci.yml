@@ -91,12 +91,13 @@ jobs:
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v8
         with:
-          # Pinned to v2: golangci-lint refuses to lint a `go 1.25`
-          # module if the binary was built with an older Go (our
-          # go.mod targets 1.25 via x/crypto). v2 binaries are built
-          # with go1.25+.
+          # Pinned to golangci-lint v2: golangci-lint refuses to lint
+          # a `go 1.25` module if the binary was built with an older
+          # Go (our go.mod targets 1.25 via x/crypto). v2 binaries are
+          # built with go1.25+. The action major must be v7+ to install
+          # v2; v6 only knows about v1.x releases.
           version: v2.12.2
           args: --config .golangci.yml
 
