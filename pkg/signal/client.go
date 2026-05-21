@@ -11,8 +11,10 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/chat"
 	"github.com/thehappydinoa/signal-go/internal/cipher"
+	"github.com/thehappydinoa/signal-go/internal/prekeymaint"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 	"github.com/thehappydinoa/signal-go/internal/store"
+	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
 // ErrNotLinked is returned by [Open] when no linked account exists in the
@@ -50,6 +52,9 @@ type OpenOptions struct {
 	// ChatURL overrides the authenticated websocket endpoint. Default:
 	// production Signal.
 	ChatURL string
+	// APIBaseURL overrides the REST endpoint for prekey top-up. Default:
+	// production Signal.
+	APIBaseURL string
 	// UserAgent is sent in X-Signal-Agent headers. Default: "signal-go".
 	UserAgent string
 	// Logger for structured diagnostics. Default: slog.Default().
@@ -62,6 +67,11 @@ type OpenOptions struct {
 	// Decryptor overrides the default libsignal-backed decryptor built
 	// from the linked account + SignalStores. Useful for tests.
 	Decryptor Decryptor
+
+	// DisablePreKeyMaintenance turns off automatic PUT /v2/keys top-up
+	// after inbound prekey decrypts. Default: enabled when using the
+	// built-in [cipher.EnvelopeDecryptor].
+	DisablePreKeyMaintenance bool
 
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
@@ -116,6 +126,14 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		libDec, err := cipher.NewEnvelopeDecryptor(acct, opts.SignalStores)
 		if err != nil {
 			return nil, fmt.Errorf("signal.Open: %w", err)
+		}
+		if !opts.DisablePreKeyMaintenance {
+			webc := web.New(opts.APIBaseURL, opts.UserAgent)
+			libDec.SetPreKeyMaintainer(prekeymaint.NewMaintainer(
+				opts.AccountStore,
+				opts.SignalStores,
+				webc,
+			))
 		}
 		dec = libDec
 	}

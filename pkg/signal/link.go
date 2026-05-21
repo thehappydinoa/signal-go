@@ -9,6 +9,7 @@ import (
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
+	"github.com/thehappydinoa/signal-go/internal/prekeymaint"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
 	"github.com/thehappydinoa/signal-go/internal/web"
@@ -172,32 +173,19 @@ func (o LinkOptions) skipOneTimePreKeys() bool {
 	return o.testSkipPreKeyUpload
 }
 
-// uploadOneTimePreKeys generates count one-time Curve25519 + Kyber prekeys
-// for ident, uploads them via PUT /v2/keys, and returns the identity with
-// its NextPreKeyID / NextKyberPreKeyID bumped.
 func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int) (account.Identity, error) {
-	identityPriv, err := libsignal.DeserializePrivateKey(ident.PrivateKey)
-	if err != nil {
-		return ident, fmt.Errorf("identity priv: %w", err)
+	upload := prekeymaint.UploadIdentity{
+		PublicKey:         ident.PublicKey,
+		PrivateKey:        ident.PrivateKey,
+		NextPreKeyID:      ident.NextPreKeyID,
+		NextKyberPreKeyID: ident.NextKyberPreKeyID,
 	}
-	ecBatch, err := prekeys.GenerateOneTimePreKeys(ident.NextPreKeyID, count)
-	if err != nil {
-		return ident, err
-	}
-	kemBatch, err := prekeys.GenerateOneTimeKyberPreKeys(identityPriv, ident.NextKyberPreKeyID, count)
+	upload, err := prekeymaint.UploadOneTimeBatch(ctx, webc, creds, kind, upload, count, nil)
 	if err != nil {
 		return ident, err
 	}
-	req := web.UploadPreKeysRequest{
-		IdentityKey: base64.StdEncoding.EncodeToString(ident.PublicKey),
-		PreKeys:     web.ECPreKeysFrom(ecBatch),
-		PqPreKeys:   web.KEMPreKeysFrom(kemBatch),
-	}
-	if err := webc.UploadPreKeys(ctx, creds, kind, req); err != nil {
-		return ident, err
-	}
-	ident.NextPreKeyID += uint32(count)
-	ident.NextKyberPreKeyID += uint32(count)
+	ident.NextPreKeyID = upload.NextPreKeyID
+	ident.NextKyberPreKeyID = upload.NextKyberPreKeyID
 	return ident, nil
 }
 

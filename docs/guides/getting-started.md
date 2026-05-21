@@ -122,7 +122,8 @@ listed (or whatever you passed to `-name`).
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
-  working; prekey rotation on use is still open.
+  working; inbound prekey decrypt triggers automatic `PUT /v2/keys` top-up
+  when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): pending. The [send flow](../diagrams/send-flow.md)
   describes the planned shape.
 - **Bot framework** (Phase 6): pending. See [ADR 0008](../adr/0008-bot-framework.md).

@@ -69,7 +69,8 @@ the "Link this device?" prompt; we won't yet complete the link).
       killing the receive loop; retry token pending Phase 4 send)
 - [x] Public API: `signal.Open` + `signal.Client` with buffered `Events()`
       channel, `Decryptor` interface for pluggable decrypt backends
-- [ ] Prekey rotation on use; top-up endpoint
+- [x] Prekey rotation on use; top-up endpoint
+      (`internal/prekeymaint.Maintainer`, `PUT /v2/keys` after inbound prekey decrypt)
 
 ## Phase 4 — Send 1:1 **(planned)**
 

@@ -230,3 +230,21 @@ func (s *SignalStores) StoreSenderKey(sender store.Address, distID string, recor
 	s.senderKeys[senderKeyKey{sender.String(), distID}] = bytes.Clone(record)
 	return nil
 }
+
+// CountAvailableOneTimePreKeys implements [store.PreKeyInventory].
+func (s *SignalStores) CountAvailableOneTimePreKeys(lastResortKyberID uint32) (int, int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ec := len(s.preKeys)
+	kem := 0
+	for id := range s.kyberKeys {
+		if id == lastResortKyberID {
+			continue
+		}
+		if _, used := s.usedKyber[id]; used {
+			continue
+		}
+		kem++
+	}
+	return ec, kem, nil
+}

@@ -139,6 +139,36 @@ func TestSignalStoresSignedPreKey(t *testing.T) {
 	}
 }
 
+func TestSignalStoresCountAvailableOneTimePreKeys(t *testing.T) {
+	s := memstore.NewSignalStores()
+	const lastResort uint32 = 1
+	if err := s.StorePreKey(10, []byte("a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.StorePreKey(11, []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.StoreKyberPreKey(lastResort, []byte("lr")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.StoreKyberPreKey(20, []byte("k1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.StoreKyberPreKey(21, []byte("k2")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkKyberPreKeyUsed(20); err != nil {
+		t.Fatal(err)
+	}
+	ec, kem, err := s.CountAvailableOneTimePreKeys(lastResort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ec != 2 || kem != 1 {
+		t.Fatalf("ec=%d kem=%d, want 2 and 1", ec, kem)
+	}
+}
+
 func TestSignalStoresKyberPreKey(t *testing.T) {
 	s := memstore.NewSignalStores()
 	if err := s.StoreKyberPreKey(3, []byte("kpk")); err != nil {
