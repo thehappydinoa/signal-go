@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  # Go module dependencies. Audit policy lives in ADR 0002: every new
+  # direct dep needs an entry in the allowlist table. Dependabot may
+  # propose PRs for transitive bumps freely; the ADR check applies to
+  # direct deps only.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      # Group all golang.org/x bumps together — they're tightly
+      # versioned and noisy if split.
+      golang-x:
+        patterns:
+          - 'golang.org/x/*'
+
+  # GitHub Actions versions. Bumps are usually trivial (SHA / version
+  # pin only) and we want them as soon as upstream cuts a release.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+      include: scope
