@@ -18,3 +18,4 @@ with a new ADR that links back to the one it replaces.
 | 0008 | Bot framework: `pkg/bot` API sketch            | Accepted |
 | 0009 | Licensing: AGPL-3.0-only (libsignal-driven)    | Accepted |
 | 0010 | Phase 3: authenticated receive pipeline        | Accepted |
+| 0011 | Security audit methodology + threat model      | Accepted |

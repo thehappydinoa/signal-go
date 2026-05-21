@@ -108,6 +108,60 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 - [ ] SQLite-backed store
 - [ ] Backup/restore (linked-device "synchronized start")
 
+## Phase 8 — Security audit **(planned; required before v0.1.0)**
+
+A focused review before we cut a `v0.1.0` tag and put `signal-go` in front
+of real Signal accounts. Scope is **our Go code and our cgo boundary** —
+libsignal itself is out of scope (we trust upstream Signal). See
+[ADR 0011](./docs/adr/0011-security-audit.md) for the methodology,
+threat model, and what "pass" means.
+
+Internal review (we do this before any external work):
+
+- [ ] `internal/libsignal` cgo audit:
+  - every `*Buffer` lifetime, `keepAlive`, finalizer, and `cgo.Handle` is
+    accounted for
+  - no Go pointers cross into Rust except via the documented borrowed/owned
+    rules in `doc.go`
+  - errors free their underlying `SignalFfiError` exactly once
+  - confirm we link the *release* libsignal_ffi.a, not any `*-testing*`
+- [ ] `internal/provisioning` cipher review:
+  - constant-time MAC compare (`hmac.Equal`) on every branch
+  - constant-time PKCS-7 unpad
+  - structural validation before any cryptographic operation
+  - fuzz test for `DecryptEnvelope` (corpus seeded from real envelopes)
+- [ ] `internal/store/fsstore` review:
+  - filesystem perms `0700` dir / `0600` files
+  - atomic rename for every write
+  - account.json never logs Password or PrivateKey
+- [ ] `internal/web` TLS posture:
+  - `MinVersion: tls.VersionTLS12` (or 1.3) explicit
+  - Signal's chat.signal.org pinned-CA option (off by default, available)
+  - no credentials in URL query strings or log lines
+- [ ] Receive pipeline (Phase 3+) decrypt-error handling:
+  - bad ciphertext / wrong identity / replayed envelope each fail closed
+    and surface a typed event without taking the connection down
+  - `DecryptionErrorMessage` retry token round-trips
+- [ ] Sealed-sender certificate validation against Signal's trust roots
+- [ ] zkgroup credential cache eviction on identity-key change
+- [ ] Code-level checklists:
+  - `go vet ./...`, `staticcheck`, `gosec ./...` all clean
+  - `govulncheck ./...` clean (or every finding triaged in this PR)
+  - `golangci-lint run` with our pinned config clean
+  - `go test -race -count=10 ./...` stable across 10 runs
+  - fuzz targets run at least 5 minutes each in CI
+- [ ] Documentation:
+  - threat model written up under `docs/security/threat-model.md`
+  - responsible-disclosure policy in `SECURITY.md`
+  - public-key contact for security reports
+
+External review (after the internal pass is clean):
+
+- [ ] Engage an external auditor familiar with Signal/libsignal-FFI
+      bindings (e.g. someone who reviewed `pkg/libsignalgo`)
+- [ ] Publish the audit report and our remediation in
+      `docs/security/audits/`
+
 ## Non-goals
 
 - We will not implement the Signal protocol cryptography in Go. All crypto goes
