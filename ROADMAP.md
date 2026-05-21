@@ -72,13 +72,23 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Prekey rotation on use; top-up endpoint
       (`internal/prekeymaint.Maintainer`, `PUT /v2/keys` after inbound prekey decrypt)
 
-## Phase 4 — Send 1:1 **(planned)**
+## Phase 4 — Send 1:1 **(in progress)**
 
+- [x] Establish session: prekey bundle fetch (`GET /v2/keys/{aci}/{dev}`)
+      → `ProcessPreKeyBundle` (`pkg/signal.Client.Send` first-call path)
+- [x] Encrypt with session cipher; emit basic-auth `PUT /v1/messages/{uuid}`
+      with the wire-format envelope (`web.SendMessage` + `MessageEnvelope`)
+- [x] Mismatched / stale device responses surfaced as typed errors
+      (`*web.MismatchedDevicesError`, `*web.StaleDevicesError`); auto-
+      retry is the next slice
+- [ ] Auto-retry on `*MismatchedDevicesError` / `*StaleDevicesError`
+      (refresh bundles, drop stale sessions, resend)
+- [ ] Multi-device fan-out (currently only sends to device 1)
+- [ ] Sealed-sender encrypt → server doesn't see our ACI as the
+      sender. Needs `signal_sealed_sender_multi_recipient_encrypt`
+      wrapper + sender-certificate fetch from `/v1/certificate/delivery`
+- [ ] Unidentified-access certificate refresh + cache
 - [ ] Profile fetch (decrypt with profile key via libsignal `ProfileCipher`)
-- [ ] Unidentified-access certificate refresh
-- [ ] Establish session: prekey bundle fetch → `PreKeySignalMessage` first send
-- [ ] Sealed-sender encrypt → `PUT /v1/messages/{uuid}`
-- [ ] Multi-device fan-out, mismatched/stale-device handling
 - [ ] Read/delivery receipts
 
 ## Phase 5 — Groups v2 **(planned)**
@@ -86,24 +96,35 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [ ] zkgroup credential cache (server params + auth credentials)
 - [ ] Group master key handling, GroupSecretParams
 - [ ] Fetch + decrypt group state (`/v1/groups`)
+- [ ] **Surface group membership + admin roles** on the public API:
+      parse the decrypted group state into typed Go (`signal.Group{
+      Title, Description, Avatar, Members[], Admins[]}`), expose a
+      `(*bot.Bot).Groups(ctx)` to list joined groups, and a
+      `(*bot.Message).Group(ctx)` accessor to fetch the parsed group
+      for a group-thread message. Needed so bots can branch on
+      `m.Group().IsAdmin(m.Sender())` for restricted commands.
 - [ ] Sender-key distribution; group message encrypt/decrypt
 - [ ] Group membership changes (join/leave/role)
 
-## Phase 6 — Bot framework **(planned)**
+## Phase 6 — Bot framework **(in progress)**
 
 A higher-level `pkg/bot` package on top of `pkg/signal` that makes Signal
 bots as ergonomic as Telegram or Slack Bolt:
 
-- [ ] `bot.Open(ctx, opts)` — load an existing linked-device account from a
-      store directory (or guide the user through `signal-go link` if missing)
-- [ ] Pattern dispatchers: `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/foo")`
+- [x] `bot.Open(ctx, opts)` — loads the persisted account, connects the
+      chat ws, returns a dispatcher; `bot.Wrap(client)` for tests
+- [x] Pattern dispatchers: `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/foo")`,
+      first-match-wins ordering, `ErrPass` to fall through
+- [x] `Reply` helper on `*Message` (1:1 only — group reply lands with Phase 5)
+- [x] Custom error handler via `Bot.OnError`
+- [x] Graceful shutdown via `Bot.Close` + `Bot.Run(ctx)`; structured
+      logging via the injected `*slog.Logger`
 - [ ] Scopes: `.DM()`, `.Group()`, `.From("+15551234567")`
-- [ ] Reply helpers on `*Message`: `Reply`, `ReplyAttachment`, `React`,
-      `Typing`, `MarkRead`
+- [ ] Group `Reply` once Phase 5 surfaces the group identifier + send
+      path; `ReplyAttachment`, `React`, `Typing`, `MarkRead`
 - [ ] Reaction and edit event handlers
 - [ ] Middleware chain: logging, rate-limit, auth, per-conversation state
 - [ ] Conversation state (sessions / wizards) via in-memory or persistent store
-- [ ] Graceful shutdown, structured logging via `log/slog`
 
 See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 
@@ -114,6 +135,22 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 - [ ] CDSI contact discovery
 - [ ] SQLite-backed store
 - [ ] Backup/restore (linked-device "synchronized start")
+- [ ] **Suppress the `missing .note.GNU-stack section implies executable stack`
+      linker warning** on every Go build that links libsignal_ffi.a. The
+      warning comes from a BoringSSL assembly object inside libsignal's
+      static archive that lacks the `.note.GNU-stack` ELF section, so
+      GNU ld assumes it wants an executable stack and warns. The Go-
+      produced binary is fine (Go's linker injects PT_GNU_STACK as
+      non-exec regardless), it's just noisy. Options:
+      1. Post-process `libsignal_ffi.a` in `scripts/build-libsignal.sh`:
+         extract objects, run `objcopy --add-section .note.GNU-stack=/dev/null`
+         (or a small `as` snippet) on the offending member, repack.
+      2. Patch upstream BoringSSL / submit a PR to `signalapp/boring`
+         to add `.note.GNU-stack` to the affected `.S` files (the
+         long-term fix; tracked at the libsignal layer).
+      3. Pass `-Wl,--no-warn-execstack` via `internal/libsignal/cgo.go`
+         `#cgo LDFLAGS`. Hides the warning without addressing the
+         underlying object — acceptable as a stop-gap.
 
 ## Phase 8 — Security audit **(planned; required before v0.1.0)**
 

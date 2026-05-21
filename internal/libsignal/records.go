@@ -43,6 +43,19 @@ func (r *SessionRecord) Serialize() ([]byte, error) {
 	return goBytesFromOwnedBuffer(buf), nil
 }
 
+// RemoteRegistrationID returns the registration ID baked into the
+// remote peer's bundle, recorded in the session record when the session
+// was established. Required for assembling outbound messages: the
+// recipient's server expects each message to carry the deviceId +
+// registrationId of the recipient device.
+func (r *SessionRecord) RemoteRegistrationID() (uint32, error) {
+	var out C.uint32_t
+	if err := checkError(C.signal_session_record_get_remote_registration_id(&out, r.constPtr())); err != nil {
+		return 0, err
+	}
+	return uint32(out), nil
+}
+
 func (r *SessionRecord) constPtr() C.SignalConstPointerSessionRecord {
 	return C.SignalConstPointerSessionRecord{raw: r.raw.raw}
 }
