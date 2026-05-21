@@ -22,8 +22,15 @@ Three workflows under `.github/workflows/`:
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `ci.yml` | push to `main`, PRs to `main` | build libsignal (cached), lint, vet, test, govulncheck |
-| `codeql.yml` | push, PR, weekly schedule | GitHub's CodeQL security scanning for Go |
+| `codeql.yml` | **weekly schedule only** + `workflow_dispatch` | GitHub's CodeQL security scanning for Go |
 | `dependabot.yml` (config) | weekly | bump `go.mod` modules + action versions |
+
+**Why CodeQL is schedule-only**: running it on every push/PR alongside
+`ci.yml` meant two parallel jobs both building `libsignal_ffi.a` (the
+cache can't deduplicate when both miss simultaneously). That doubled
+our Actions quota for marginal per-PR signal. CodeQL is a periodic
+security scan, not a per-PR gate. Weekly runs cache-hit from any
+recent PR run (caches live 7 days) and stay fast.
 
 ### libsignal caching strategy
 
