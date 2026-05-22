@@ -266,8 +266,8 @@ below):
 - [x] Documentation:
   - [x] Threat model in [`docs/security/threat-model.md`](./docs/security/threat-model.md)
   - [x] Responsible-disclosure policy in [`SECURITY.md`](./SECURITY.md)
-  - [ ] Real PGP / e-mail contact for security reports (placeholder
-        pending the v0.1.0 release cut)
+  - [x] Real e-mail contact for security reports — published in
+        [`SECURITY.md`](./SECURITY.md) (PGP exchange on request)
 
 External review (after the internal pass is clean):
 

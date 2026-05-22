@@ -85,9 +85,9 @@ the short version:
 
 1. Preferred: open a private advisory via GitHub Private Vulnerability
    Reporting.
-2. Alternate: e-mail `security@thehappydinoa.example` *(placeholder —
-   update before tagging v0.1.0)*. PGP public key fingerprint and
-   key-server URL also placeholders pending the v0.1.0 release.
+2. Alternate: e-mail <signal-go-security@thehappydinoa.dev>. PGP is
+   available on request; mention it in your first message and we'll
+   exchange keys before you send the report body.
 
 We acknowledge within 72 hours and triage within a week. Once a fix is
 ready, we coordinate disclosure with you (default 90 days from triage).
