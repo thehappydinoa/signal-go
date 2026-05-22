@@ -123,6 +123,7 @@ func (c *Client) FetchGroup(ctx context.Context, masterKey []byte) (*Group, erro
 			c.log.Warn("group send endorsements unavailable", "group", masterKeyHex, "err", err)
 		}
 	}
+	c.storeGroupRevision(masterKeyHex, grp.Revision)
 	return grp, nil
 }
 

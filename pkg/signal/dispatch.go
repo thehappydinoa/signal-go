@@ -61,6 +61,25 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 		return
 	}
 
+	if gv2 := dm.GetGroupV2(); gv2 != nil && len(gv2.GetGroupChange()) > 0 {
+		rev := gv2.GetRevision()
+		c.emit(&GroupUpdateEvent{
+			Sender:          sender,
+			SenderDevice:    senderDevice,
+			Timestamp:       ts,
+			ServerTimestamp: srvTS,
+			GroupID:         groupID,
+			Revision:        rev,
+			GroupChange:     append([]byte(nil), gv2.GetGroupChange()...),
+		})
+		if len(gv2.GetMasterKey()) > 0 {
+			c.maybeAutoSyncGroupUpdate(gv2.GetMasterKey(), rev)
+		}
+		if dm.GetBody() == "" {
+			return
+		}
+	}
+
 	ev := &MessageEvent{
 		Sender:          sender,
 		SenderDevice:    senderDevice,

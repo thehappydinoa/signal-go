@@ -267,6 +267,22 @@ page, err := client.FetchGroupLogs(ctx, masterKey, signal.GroupLogsFetchOptions{
 })
 ```
 
+Inbound peer changes arrive as `GroupUpdateEvent` (empty body, populated
+`groupChange`). Handle them in a bot or on the raw client event stream:
+
+```go
+b.OnGroupUpdate(func(ctx context.Context, u *bot.GroupUpdate) error {
+    grp, err := u.Sync(ctx) // applies via SyncGroup from cached revision
+    if err != nil { return err }
+    log.Printf("group %s now at revision %d", u.GroupID(), grp.Revision)
+    return nil
+})
+```
+
+Enable background sync on every inbound update with
+`bot.Options{AutoSyncGroupUpdates: true}` (or the same field on
+`signal.OpenOptions`). See [ADR 0025](../adr/0025-inbound-group-updates.md).
+
 ### Groups v2 (control messages)
 
 React and typing in groups use the same sender-key multi-recipient path as
@@ -302,9 +318,11 @@ See [ADR 0021](../adr/0021-group-control-messages.md) and
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
 - **Groups v2** (Phase 5): done. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md)
-  through [ADR 0024](../adr/0024-group-log-sync.md).
-- **Bot framework** (Phase 6): wizard sugar + group helpers shipped. See
-  [ADR 0008](../adr/0008-bot-framework.md) and [ADR 0022](../adr/0022-phase5-finish.md).
+  through [ADR 0025](../adr/0025-inbound-group-updates.md).
+- **Bot framework** (Phase 6): wizard sugar, group helpers, and
+  `OnGroupUpdate` shipped. See [ADR 0008](../adr/0008-bot-framework.md),
+  [ADR 0022](../adr/0022-phase5-finish.md), and
+  [ADR 0025](../adr/0025-inbound-group-updates.md).
 
 ## Troubleshooting
 

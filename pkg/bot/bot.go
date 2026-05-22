@@ -30,6 +30,10 @@ type Options struct {
 	// store; bots that need state to survive process restarts can
 	// supply a backing implementation.
 	ConvoStore ConvoStore
+
+	// AutoSyncGroupUpdates passes through to [signal.OpenOptions] so
+	// inbound group change notifications trigger background log sync.
+	AutoSyncGroupUpdates bool
 }
 
 // ErrPass tells the dispatcher "I didn't really handle this event; try
@@ -73,12 +77,13 @@ type Bot struct {
 	log   *slog.Logger
 	convo *Conversations
 
-	mu               sync.RWMutex
-	middleware       []MiddlewareFunc
-	textHandlers     []textHandler
-	reactionHandlers []reactionHandler
-	editHandlers     []editHandler
-	closed           bool
+	mu                  sync.RWMutex
+	middleware          []MiddlewareFunc
+	textHandlers        []textHandler
+	reactionHandlers    []reactionHandler
+	editHandlers        []editHandler
+	groupUpdateHandlers []groupUpdateHandler
+	closed              bool
 
 	onError ErrorHandler
 }
@@ -97,12 +102,13 @@ func Open(ctx context.Context, opts Options) (*Bot, error) {
 		log = slog.Default()
 	}
 	cli, err := signal.Open(ctx, signal.OpenOptions{
-		AccountStore: opts.AccountStore,
-		SignalStores: opts.SignalStores,
-		ChatURL:      opts.ChatURL,
-		APIBaseURL:   opts.APIBaseURL,
-		UserAgent:    opts.UserAgent,
-		Logger:       log,
+		AccountStore:         opts.AccountStore,
+		SignalStores:         opts.SignalStores,
+		ChatURL:              opts.ChatURL,
+		APIBaseURL:           opts.APIBaseURL,
+		UserAgent:            opts.UserAgent,
+		Logger:               log,
+		AutoSyncGroupUpdates: opts.AutoSyncGroupUpdates,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bot.Open: %w", err)
@@ -205,10 +211,10 @@ func (b *Bot) Underlying() Client { return b.cli }
 func (b *Bot) Convo() *Conversations { return b.convo }
 
 // dispatch routes one event through the registered handlers. Bot
-// dispatches [*signal.MessageEvent], [*signal.ReactionEvent], and
-// [*signal.EditMessageEvent]; other event types are silently ignored
-// at this layer — bots that want them can reach down via
-// [Bot.Underlying] and consume the raw Events channel.
+// dispatches [*signal.MessageEvent], [*signal.ReactionEvent],
+// [*signal.EditMessageEvent], and [*signal.GroupUpdateEvent]; other
+// event types are silently ignored at this layer — bots that want them
+// can reach down via [Bot.Underlying] and consume the raw Events channel.
 func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 	switch e := ev.(type) {
 	case *signal.MessageEvent:
@@ -217,6 +223,27 @@ func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 		b.dispatchReaction(ctx, e)
 	case *signal.EditMessageEvent:
 		b.dispatchEdit(ctx, e)
+	case *signal.GroupUpdateEvent:
+		b.dispatchGroupUpdate(ctx, e)
+	}
+}
+
+func (b *Bot) dispatchGroupUpdate(ctx context.Context, ev *signal.GroupUpdateEvent) {
+	u := &GroupUpdate{event: ev, bot: b}
+	b.mu.RLock()
+	handlers := append([]groupUpdateHandler(nil), b.groupUpdateHandlers...)
+	onErr := b.onError
+	b.mu.RUnlock()
+
+	for _, h := range handlers {
+		err := h.run(ctx, u)
+		if errors.Is(err, ErrPass) {
+			continue
+		}
+		if err != nil {
+			b.handleErr(ctx, ev, err, onErr)
+		}
+		return
 	}
 }
 
@@ -559,4 +586,12 @@ func (b *Bot) OnAnyReaction() ReactionMatch {
 // chained scope helpers (DM/Group/From) to narrow.
 func (b *Bot) OnEdit() EditMatch {
 	return EditMatch{bot: b}
+}
+
+// OnGroupUpdate registers a handler for inbound Groups v2 change
+// notifications (membership or metadata updates from peers).
+func (b *Bot) OnGroupUpdate(handler GroupUpdateHandlerFunc) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.groupUpdateHandlers = append(b.groupUpdateHandlers, groupUpdateHandler{run: handler})
 }

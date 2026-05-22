@@ -33,6 +33,30 @@ type MessageEvent struct {
 
 func (e *MessageEvent) eventTimestamp() time.Time { return e.Timestamp }
 
+// GroupUpdateEvent is emitted when a peer delivers a Groups v2 change
+// notification (DataMessage.groupV2.groupChange). These often have an
+// empty body. Callers may invoke [Client.SyncGroup] to apply the change
+// via the storage log; with [OpenOptions.AutoSyncGroupUpdates] the client
+// syncs automatically in the background.
+type GroupUpdateEvent struct {
+	// Sender is the ACI UUID of the member who authored the change.
+	Sender string
+	// SenderDevice is the device that sent the update.
+	SenderDevice uint32
+	// Timestamp is the update message timestamp.
+	Timestamp time.Time
+	// ServerTimestamp is the server-side receive time.
+	ServerTimestamp time.Time
+	// GroupID is the hex-encoded group v2 master key.
+	GroupID string
+	// Revision is the post-change group revision advertised in the update.
+	Revision uint32
+	// GroupChange is the signed change blob (groupspb.GroupChange wire bytes).
+	GroupChange []byte
+}
+
+func (e *GroupUpdateEvent) eventTimestamp() time.Time { return e.Timestamp }
+
 // ReceiptType distinguishes delivery, read, and viewed receipts.
 type ReceiptType int
 

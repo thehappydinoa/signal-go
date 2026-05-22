@@ -161,6 +161,8 @@ bots as ergonomic as Telegram or Slack Bolt:
 - [x] Wizard sugar on top of the conversation-state primitives
       ([ADR 0022](docs/adr/0022-phase5-finish.md)): `b.Wizard("name").Step(...)`,
       `Begin` / `Advance`, and [Bot.OnAnyText] for stage-gated steps.
+- [x] Group update handler: `Bot.OnGroupUpdate`, optional auto-sync via
+      `Options.AutoSyncGroupUpdates` ([ADR 0025](docs/adr/0025-inbound-group-updates.md)).
 
 See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 
