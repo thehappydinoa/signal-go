@@ -42,6 +42,37 @@ func (c *Client) SendGroup(ctx context.Context, masterKey []byte, text string) (
 		return Receipt{}, fmt.Errorf("signal.SendGroup: fetch group: %w", err)
 	}
 
+	ts := uint64(time.Now().UnixMilli())
+	contentBytes, err := buildGroupDataMessageContent(text, ts, masterKey, grp.Revision)
+	if err != nil {
+		return Receipt{}, err
+	}
+
+	return c.deliverGroupPayload(ctx, masterKey, grp, contentBytes, ts, groupDeliveryOpts{
+		online:         false,
+		urgent:         true,
+		distributeSKDM: true,
+	})
+}
+
+type groupDeliveryOpts struct {
+	online         bool
+	urgent         bool
+	distributeSKDM bool
+}
+
+func (c *Client) deliverGroupPayload(
+	ctx context.Context,
+	masterKey []byte,
+	grp *Group,
+	contentBytes []byte,
+	ts uint64,
+	opts groupDeliveryOpts,
+) (Receipt, error) {
+	if c.webc == nil || c.stores == nil {
+		return Receipt{}, errors.New("signal: Client was opened without send-side dependencies")
+	}
+
 	distID, err := c.groupDistributionID(hex.EncodeToString(masterKey))
 	if err != nil {
 		return Receipt{}, err
@@ -54,33 +85,28 @@ func (c *Client) SendGroup(ctx context.Context, masterKey []byte, text string) (
 	h := libsignal.NewStoreHandle(c.stores)
 	defer h.Release()
 
-	skdm, err := libsignal.CreateSenderKeyDistributionMessage(local, distID, h)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("signal.SendGroup: create SKDM: %w", err)
-	}
-	skdmBytes, err := skdm.Serialize()
-	if err != nil {
-		return Receipt{}, err
+	if opts.distributeSKDM {
+		skdm, err := libsignal.CreateSenderKeyDistributionMessage(local, distID, h)
+		if err != nil {
+			return Receipt{}, fmt.Errorf("signal: create SKDM: %w", err)
+		}
+		skdmBytes, err := skdm.Serialize()
+		if err != nil {
+			return Receipt{}, err
+		}
+		if err := c.distributeSenderKeyToMembers(ctx, grp, skdmBytes); err != nil {
+			return Receipt{}, err
+		}
 	}
 
 	creds := c.credentials()
-	if err := c.distributeSenderKeyToMembers(ctx, grp, skdmBytes); err != nil {
-		return Receipt{}, err
-	}
-
-	ts := uint64(time.Now().UnixMilli())
-	contentBytes, err := buildGroupDataMessageContent(text, ts, masterKey, grp.Revision)
-	if err != nil {
-		return Receipt{}, err
-	}
-
 	payload, auth, err := c.buildGroupMultiRecipientPayload(ctx, creds, grp, masterKey, distID, local, h, padContent(contentBytes))
 	if err != nil {
 		return Receipt{}, err
 	}
 
-	if err := c.webc.SendMultiRecipientMessage(ctx, auth, payload, ts, false, true); err != nil {
-		return Receipt{}, fmt.Errorf("signal.SendGroup: deliver: %w", err)
+	if err := c.webc.SendMultiRecipientMessage(ctx, auth, payload, ts, opts.online, opts.urgent); err != nil {
+		return Receipt{}, fmt.Errorf("signal: deliver group payload: %w", err)
 	}
 
 	return Receipt{

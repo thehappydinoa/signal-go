@@ -2,7 +2,7 @@ package bot
 
 import "errors"
 
-// ErrReplyNotSupportedInGroup is returned by [Message.Reply] (and the
-// other group-targeted helpers) for group messages. Group send lands
-// with Phase 5.
-var ErrReplyNotSupportedInGroup = errors.New("bot: replying in group threads requires Phase 5 (groups v2)")
+// ErrReplyNotSupportedInGroup is returned when a bot helper cannot act
+// in a group thread. Group text reply, reactions, and typing are
+// supported via Phase 5; attachment replies remain deferred.
+var ErrReplyNotSupportedInGroup = errors.New("bot: operation not supported in group threads")

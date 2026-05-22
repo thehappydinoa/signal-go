@@ -57,6 +57,30 @@ func TestGroupSecretParamsBlobRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGroupIdentifierFromMasterKeyDeterministic(t *testing.T) {
+	master := make([]byte, GroupMasterKeyLen)
+	for i := range master {
+		master[i] = byte(i + 9)
+	}
+	id1, err := GroupIdentifierFromMasterKey(master)
+	if err != nil {
+		t.Fatalf("GroupIdentifierFromMasterKey: %v", err)
+	}
+	id2, err := GroupIdentifierFromMasterKey(master)
+	if err != nil {
+		t.Fatalf("GroupIdentifierFromMasterKey second call: %v", err)
+	}
+	if id1 != id2 {
+		t.Fatalf("identifier not deterministic: %x vs %x", id1, id2)
+	}
+}
+
+func TestGroupIdentifierFromMasterKeyRejectsShortInput(t *testing.T) {
+	if _, err := GroupIdentifierFromMasterKey([]byte{1, 2, 3}); err == nil {
+		t.Fatal("expected error for short master key")
+	}
+}
+
 func TestGroupSecretParamsServiceIDRoundTrip(t *testing.T) {
 	master := make([]byte, GroupMasterKeyLen)
 	for i := range master {
