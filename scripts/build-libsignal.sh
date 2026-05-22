@@ -8,6 +8,13 @@
 # Re-running with the same LIBSIGNAL_VERSION is a no-op if the artifacts exist.
 # Override LIBSIGNAL_VERSION or pass FORCE=1 to rebuild.
 #
+# Supported hosts:
+#   linux/amd64, linux/arm64    — native build
+#   darwin/amd64, darwin/arm64  — native build
+#   windows/amd64               — build via Git Bash / MSYS2; we explicitly
+#                                 target x86_64-pc-windows-gnu so the resulting
+#                                 .a links against MinGW-w64 (what cgo expects).
+#
 # Dev VM notes (cloud agents / minimal images): BoringSSL needs nasm, protoc,
 # and a working C++ toolchain. If the default clang cannot link -lstdc++, use:
 #   export CC=gcc CXX=g++
@@ -27,13 +34,73 @@ STAMP="$LIB_DIR/.version"
 
 mkdir -p "$LIB_DIR" "$INCLUDE_DIR" "$BUILD_DIR"
 
+# detect_host classifies the host OS/arch so the rest of the script can pick
+# the right cargo target triple and post-processing steps.
+detect_host() {
+  HOST_OS="$(uname -s)"
+  HOST_ARCH="$(uname -m)"
+  case "$HOST_OS" in
+    Linux)
+      OS_KIND="linux"
+      ;;
+    Darwin)
+      OS_KIND="darwin"
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      OS_KIND="windows"
+      ;;
+    *)
+      echo "unsupported host OS: $HOST_OS" >&2
+      exit 1
+      ;;
+  esac
+
+  case "$HOST_ARCH" in
+    x86_64|amd64) ARCH_KIND="amd64" ;;
+    aarch64|arm64) ARCH_KIND="arm64" ;;
+    *)
+      echo "unsupported host arch: $HOST_ARCH" >&2
+      exit 1
+      ;;
+  esac
+
+  # Map to a Rust target triple. CARGO_TARGET may be overridden externally
+  # (e.g. by the release workflow to cross-compile). When empty we let
+  # Cargo pick its default for the host, which keeps the legacy
+  # `target/release/` output path and avoids invalidating existing
+  # incremental-build caches on dev machines.
+  if [[ -z "${CARGO_TARGET:-}" ]]; then
+    case "$OS_KIND/$ARCH_KIND" in
+      linux/amd64|linux/arm64|darwin/amd64|darwin/arm64)
+        CARGO_TARGET=""  # use host default
+        ;;
+      windows/amd64)
+        # cgo on Windows expects the MinGW (windows-gnu) ABI; the MSVC
+        # default would produce signal_ffi.lib, which won't link.
+        CARGO_TARGET="x86_64-pc-windows-gnu"
+        ;;
+      *)
+        echo "unsupported host platform: $OS_KIND/$ARCH_KIND" >&2
+        exit 1
+        ;;
+    esac
+  fi
+}
+detect_host
+
 # patch_gnu_stack appends a zero-length `.note.GNU-stack` ELF section to
 # every member of libsignal_ffi.a missing one. BoringSSL ships a handful
 # of assembly objects without the section, so GNU ld emits a noisy
 # "executable stack" warning on every Go link. The Go-produced binary
 # itself is fine (Go injects PT_GNU_STACK as non-exec regardless), but
 # the warning is alarming. Patching is idempotent.
+#
+# Only meaningful on Linux: ELF is Linux-only, so macOS (Mach-O) and
+# Windows (PE/COFF) skip this step.
 patch_gnu_stack() {
+  if [[ "$OS_KIND" != "linux" ]]; then
+    return 0
+  fi
   if ! command -v ar >/dev/null || ! command -v objcopy >/dev/null || ! command -v readelf >/dev/null; then
     echo ">> warning: ar/objcopy/readelf not found; skipping GNU-stack patch" >&2
     return 0
@@ -60,12 +127,23 @@ patch_gnu_stack() {
   rm -rf "$PATCH_DIR"
 }
 
-if [[ "${FORCE:-0}" != "1" && -f "$LIB_DIR/libsignal_ffi.a" && -f "$STAMP" && "$(cat "$STAMP")" == "$LIBSIGNAL_VERSION" ]]; then
-  echo "libsignal_ffi.a already built for $LIBSIGNAL_VERSION (use FORCE=1 to rebuild)"
-  # The patch is idempotent and cheap; re-running guarantees existing
-  # caches built before the patch landed (Phase 7 option 1) get fixed.
-  patch_gnu_stack
-  exit 0
+# Stamp format is `<version>-<os>-<arch>`. Older builds wrote just `<version>`;
+# treat those as compatible to avoid pointless rebuilds on dev machines that
+# upgrade through this commit.
+STAMP_NEW="$LIBSIGNAL_VERSION-$OS_KIND-$ARCH_KIND"
+STAMP_LEGACY="$LIBSIGNAL_VERSION"
+if [[ "${FORCE:-0}" != "1" && -f "$LIB_DIR/libsignal_ffi.a" && -f "$STAMP" ]]; then
+  current="$(cat "$STAMP")"
+  if [[ "$current" == "$STAMP_NEW" || "$current" == "$STAMP_LEGACY" ]]; then
+    if [[ "$current" == "$STAMP_LEGACY" ]]; then
+      echo "$STAMP_NEW" > "$STAMP"
+    fi
+    echo "libsignal_ffi.a already built for $LIBSIGNAL_VERSION on $OS_KIND/$ARCH_KIND (use FORCE=1 to rebuild)"
+    # The patch is idempotent and cheap; re-running guarantees existing
+    # caches built before the patch landed (Phase 7 option 1) get fixed.
+    patch_gnu_stack
+    exit 0
+  fi
 fi
 
 # Shallow-clone (or refresh) at the pinned tag.
@@ -78,16 +156,36 @@ else
   git -C "$BUILD_DIR" checkout -q "$LIBSIGNAL_VERSION"
 fi
 
-echo ">> cargo build --release -p libsignal-ffi  (this takes a while)"
+CARGO_FLAGS=(build --release -p libsignal-ffi)
+if [[ -n "$CARGO_TARGET" ]]; then
+  CARGO_FLAGS+=(--target "$CARGO_TARGET")
+  # Ensure the rustup target is installed when rustup is on PATH (it
+  # usually is on GitHub Actions runners after dtolnay/rust-toolchain).
+  # On bare systems without rustup the call is a no-op; cargo will error
+  # later if the toolchain is genuinely missing.
+  if command -v rustup >/dev/null 2>&1; then
+    echo ">> ensuring rustup target $CARGO_TARGET is installed"
+    rustup target add "$CARGO_TARGET" >/dev/null 2>&1 || true
+  fi
+fi
+
+echo ">> cargo ${CARGO_FLAGS[*]}  (this takes a while)"
 (
   cd "$BUILD_DIR"
-  # libsignal-ffi declares crate-type = ["staticlib"], so this produces libsignal_ffi.a
-  cargo build --release -p libsignal-ffi
+  # libsignal-ffi declares crate-type = ["staticlib"], so this produces
+  # libsignal_ffi.a on every supported host (including windows-gnu).
+  cargo "${CARGO_FLAGS[@]}"
 )
 
-SRC_LIB="$BUILD_DIR/target/release/libsignal_ffi.a"
+if [[ -n "$CARGO_TARGET" ]]; then
+  SRC_LIB="$BUILD_DIR/target/$CARGO_TARGET/release/libsignal_ffi.a"
+else
+  SRC_LIB="$BUILD_DIR/target/release/libsignal_ffi.a"
+fi
 if [[ ! -f "$SRC_LIB" ]]; then
   echo "build did not produce $SRC_LIB" >&2
+  echo "contents of build output dir:" >&2
+  ls -la "$(dirname "$SRC_LIB")" 2>&1 | head -30 >&2 || true
   exit 1
 fi
 
@@ -98,7 +196,7 @@ patch_gnu_stack
 
 # The cbindgen-generated header lives in the Swift consumer tree of upstream.
 cp -f "$BUILD_DIR/swift/Sources/SignalFfi/signal_ffi.h" "$INCLUDE_DIR/signal_ffi.h"
-echo "$LIBSIGNAL_VERSION" > "$STAMP"
+echo "$STAMP_NEW" > "$STAMP"
 
 echo ">> done"
 ls -lh "$LIB_DIR/libsignal_ffi.a" "$INCLUDE_DIR/signal_ffi.h"
