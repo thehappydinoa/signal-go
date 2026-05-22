@@ -22,6 +22,10 @@
 #   export CGO_LDFLAGS="-lstdc++"
 set -euo pipefail
 
+# Apply repo-local dev env (MinGW PATH, TEMP, PROTOC_INCLUDE, CGO_ENABLED, …).
+# shellcheck source=dev-env.sh
+source "$(dirname "$0")/dev-env.sh"
+
 LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-v0.94.1}"
 REPO_URL="https://github.com/signalapp/libsignal.git"
 
@@ -127,6 +131,35 @@ patch_gnu_stack() {
   rm -rf "$PATCH_DIR"
 }
 
+# BoringSSL only assembles fiat_p256_adx_{mul,sqr} for Mach-O/ELF. MinGW emits
+# COFF, so bcm.cc.obj references those symbols without defining them. Compile
+# portable fallbacks and append to libsignal_ffi.a (idempotent).
+needs_windows_fiat_adx_stubs() {
+  [[ "$OS_KIND" == "windows" ]] || return 1
+  [[ -f "$LIB_DIR/libsignal_ffi.a" ]] || return 1
+  ! nm "$LIB_DIR/libsignal_ffi.a" 2>/dev/null | grep -q ' T fiat_p256_adx_mul'
+}
+
+patch_windows_fiat_adx_stubs() {
+  if ! needs_windows_fiat_adx_stubs; then
+    return 0
+  fi
+  local boring_out stub_o cxx
+  boring_out="$(find "$BUILD_DIR/target" -path '*/build/boring-sys-*/out/boringssl' -type d 2>/dev/null | head -1)"
+  if [[ -z "$boring_out" || ! -f "$boring_out/include/openssl/base.h" ]]; then
+    echo ">> warning: boring-sys build tree not found; cannot add fiat_p256_adx stubs" >&2
+    echo ">>   Re-run without a cache hit (FORCE=1) after a full cargo build." >&2
+    return 1
+  fi
+  cxx="${CXX:-g++}"
+  stub_o="$BUILD_DIR/fiat_p256_adx_stub.o"
+  echo ">> appending Windows fiat_p256_adx stubs to libsignal_ffi.a"
+  "$cxx" -c -O2 -DOPENSSL_NO_ASM=1 -DOPENSSL_STATIC=1 \
+    -I"$boring_out/include" -I"$boring_out" \
+    -o "$stub_o" "$ROOT/scripts/win_fiat_p256_adx_stub.cc"
+  ar q "$LIB_DIR/libsignal_ffi.a" "$stub_o"
+}
+
 # Stamp format is `<version>-<os>-<arch>`. Older builds wrote just `<version>`;
 # treat those as compatible to avoid pointless rebuilds on dev machines that
 # upgrade through this commit.
@@ -142,6 +175,7 @@ if [[ "${FORCE:-0}" != "1" && -f "$LIB_DIR/libsignal_ffi.a" && -f "$STAMP" ]]; t
     # The patch is idempotent and cheap; re-running guarantees existing
     # caches built before the patch landed (Phase 7 option 1) get fixed.
     patch_gnu_stack
+    patch_windows_fiat_adx_stubs || true
     exit 0
   fi
 fi
@@ -196,6 +230,7 @@ echo ">> installing artifacts"
 cp -f "$SRC_LIB" "$LIB_DIR/libsignal_ffi.a"
 
 patch_gnu_stack
+patch_windows_fiat_adx_stubs
 
 # The cbindgen-generated header lives in the Swift consumer tree of upstream.
 cp -f "$BUILD_DIR/swift/Sources/SignalFfi/signal_ffi.h" "$INCLUDE_DIR/signal_ffi.h"

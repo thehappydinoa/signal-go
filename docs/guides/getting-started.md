@@ -7,17 +7,63 @@ automatic sealed-sender when a profile key is known (Phase 4).
 ## Prerequisites
 
 - **Go 1.25+** (we use `crypto/hkdf` and other stdlib bits from recent releases)
-- **A C toolchain** (gcc/clang on Linux/macOS, MSVC on Windows)
+- **A C toolchain** (gcc/clang on Linux/macOS; on Windows use **MSYS2
+  MinGW-w64**, not MSVC — see below)
 - **Rust** — only required *once* to build the pinned `libsignal_ffi.a`
 - **`protoc`** if you need to regenerate the protobufs (we ship the
   generated code, so most contributors skip this)
 - **A real Signal account** on your phone (to scan the QR)
+
+### Environment (`.env`)
+
+CI only sets a few globals (`GO_VERSION`, `CGO_ENABLED`, pinned
+`LIBSIGNAL_VERSION`). The **Windows release** leg in
+[`.github/workflows/release.yml`](../../.github/workflows/release.yml)
+is the reference for native Windows: MSYS2 `mingw-w64-x86_64-gcc`, writable
+`TEMP`, explicit `PROTOC` / include path, and `CC=gcc` / `CXX=g++`.
+
+Locally:
+
+```sh
+cp .env.example .env
+# Edit paths (especially TMP/TEMP and PROTOC_INCLUDE on Windows).
+```
+
+[`Taskfile.yml`](../../Taskfile.yml) loads `.env` automatically. For a bare
+shell session:
+
+```sh
+set -a && source .env && set +a
+# or:
+source scripts/dev-env.sh
+```
+
+**`CGO_ENABLED` must be `1`.** If `go env CGO_ENABLED` prints `0`, either
+`go env -w CGO_ENABLED=1` or set it in `.env` (some Windows Go installs
+ship with cgo disabled).
+
+### Windows (Git Bash + MSYS2)
+
+1. Install [MSYS2](https://www.msys2.org/) and, in the **MINGW64** shell:
+   `pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-toolchain mingw-w64-x86_64-nasm git`
+2. Install `protoc` with the standard `google/protobuf/*.proto` includes
+   (WinGet `Google.Protobuf`, or MSYS `mingw-w64-x86_64-protobuf`).
+3. Copy `.env.example` → `.env` and set `TMP`/`TEMP` to your user Temp
+   folder (not `C:\WINDOWS`).
+4. From **Git Bash** at the repo root: `source scripts/dev-env.sh` then
+   `task libsignal` and `task build`.
+
+Native Windows builds are still **experimental** (see
+[ADR 0033](../adr/0033-release-pipeline.md)); Linux/macOS match CI today.
+WSL2 with the Linux flow is the easiest path if MSYS linking blocks you.
 
 ## Build
 
 ```sh
 git clone https://github.com/thehappydinoa/signal-go
 cd signal-go
+
+cp .env.example .env   # optional but recommended on Windows
 
 # One-time: build the pinned libsignal_ffi.a (~5–10 min on first run; cached after).
 task libsignal
@@ -491,3 +537,8 @@ See [ADR 0029](../adr/0029-sqlite-backed-store.md).
   The header (`internal/libsignal/include/signal_ffi.h`) and static
   library (`internal/libsignal/lib/libsignal_ffi.a`) must come from the
   same upstream tag.
+- *`undefined reference to fiat_p256_adx_mul` (Windows)* — your
+  `libsignal_ffi.a` predates the MinGW stub step in
+  `scripts/build-libsignal.sh`. Run `task libsignal` again (or
+  `FORCE=1 task libsignal`); the script appends portable ADX fallbacks
+  for COFF linkers.

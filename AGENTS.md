@@ -35,6 +35,11 @@ On cloud VMs you may need `export CC=gcc CXX=g++` if clang cannot link `-lstdc++
 
 ### Environment notes
 
+- Copy [`.env.example`](./.env.example) to `.env` (gitignored). `task` loads it
+  via `dotenv`; otherwise `source scripts/dev-env.sh` before `go`/`bash`.
+  Windows needs MSYS2 MinGW on `PATH`, writable `TEMP`, `CGO_ENABLED=1`, and
+  `PROTOC` + `PROTOC_INCLUDE` (see `release.yml` and
+  [`docs/guides/getting-started.md`](./docs/guides/getting-started.md)).
 - `GOPATH/bin` must be on `PATH` for `task`, `golangci-lint`, and `protoc-gen-go`.
 - The Taskfile requires task v3.51+ (the repo's `Taskfile.yml` uses YAML-quoted
   strings for commands containing colons).
