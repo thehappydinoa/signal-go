@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -191,14 +190,7 @@ func TestKDFMetaRoundTrip(t *testing.T) {
 	if err := writeKDFMeta(dir, want); err != nil {
 		t.Fatalf("writeKDFMeta: %v", err)
 	}
-	// Confirm file mode is 0600.
-	info, err := os.Stat(filepath.Join(dir, kdfFile))
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("kdf.json mode = %v, want 0600", info.Mode().Perm())
-	}
+	AssertFileMode0600(t, filepath.Join(dir, kdfFile))
 	got, err := readKDFMeta(dir)
 	if err != nil {
 		t.Fatalf("readKDFMeta: %v", err)

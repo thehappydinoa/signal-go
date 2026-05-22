@@ -62,13 +62,7 @@ func TestNewWithKeyRoundTrip(t *testing.T) {
 		t.Errorf("plaintext account.json should not exist: stat err = %v", err)
 	}
 	encPath := filepath.Join(dir, "account.enc")
-	info, err := os.Stat(encPath)
-	if err != nil {
-		t.Fatalf("stat account.enc: %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("account.enc mode = %v, want 0600", info.Mode().Perm())
-	}
+	fsstore.AssertFileMode0600(t, encPath)
 	// And the contents must not be the plaintext password.
 	enc, _ := os.ReadFile(encPath)
 	if containsBytes(enc, []byte("deadbeef")) {
@@ -114,14 +108,7 @@ func TestNewWithPassphraseRoundTrip(t *testing.T) {
 		t.Fatalf("SaveAccount: %v", err)
 	}
 
-	// kdf.json should exist with mode 0600.
-	info, err := os.Stat(filepath.Join(dir, "kdf.json"))
-	if err != nil {
-		t.Fatalf("stat kdf.json: %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("kdf.json mode = %v, want 0600", info.Mode().Perm())
-	}
+	fsstore.AssertFileMode0600(t, filepath.Join(dir, "kdf.json"))
 
 	// Re-open with the same passphrase — should reuse kdf.json.
 	s2, err := fsstore.NewWithPassphrase(dir, "hunter2")
