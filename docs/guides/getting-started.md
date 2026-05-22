@@ -119,14 +119,71 @@ ls -l ./.signal-data
 Open the Signal app → *Linked devices* and you should see "signal-go"
 listed (or whatever you passed to `-name`).
 
+## Build a bot (Phase 6)
+
+`pkg/bot` is a thin dispatcher on top of `pkg/signal` modeled on
+Telegram bot / Slack Bolt. You register handlers, scope them with
+`DM()`/`Group()`/`From()`/`Stage()`, and reply with `m.Reply(ctx, …)`:
+
+```go
+import "github.com/thehappydinoa/signal-go/pkg/bot"
+
+b, err := bot.Open(ctx, bot.Options{
+    AccountStore: acctStore,
+    SignalStores: signalStores,
+})
+if err != nil { return err }
+defer b.Close()
+
+b.OnText("ping").DM().Do(func(ctx context.Context, m *bot.Message, _ []string) error {
+    return m.Reply(ctx, "pong")
+})
+return b.Run(ctx)
+```
+
+### Conversation state
+
+Each conversation (sender ACI + optional group ID) has a small
+key/value store accessible via `m.Convo()`. Pair it with the
+`Stage()` matcher to build multi-step flows without writing your
+own per-user FSM table:
+
+```go
+b.OnCommand("signup").DM().Do(func(ctx context.Context, m *bot.Message, _ []string) error {
+    m.Convo().SetStage("await_email")
+    return m.Reply(ctx, "what's your email?")
+})
+b.OnRegex(emailRE).Stage("await_email").Do(func(ctx context.Context, m *bot.Message, args []string) error {
+    m.Convo().Set("email", args[0])
+    m.Convo().SetStage("await_age")
+    return m.Reply(ctx, "and your age?")
+})
+b.OnRegex(numRE).Stage("await_age").Do(func(ctx context.Context, m *bot.Message, args []string) error {
+    m.Convo().Set("age", args[0])
+    m.Convo().ClearStage()
+    return m.Reply(ctx, "thanks, " + m.Convo().Get("email") + "!")
+})
+b.OnCommand("cancel").DM().AnyStage().Do(func(ctx context.Context, m *bot.Message, _ []string) error {
+    m.Convo().Clear()
+    return m.Reply(ctx, "ok, cancelled")
+})
+```
+
+The default store is in-memory (`bot.MemoryConvoStore`). Pass
+`bot.Options.ConvoStore` to plug in a persistent backend (the
+`ConvoStore` interface is small enough that wrapping any
+key/value store works).
+
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
   working; inbound prekey decrypt triggers automatic `PUT /v2/keys` top-up
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
-- **Send** (Phase 4): pending. The [send flow](../diagrams/send-flow.md)
-  describes the planned shape.
-- **Bot framework** (Phase 6): pending. See [ADR 0008](../adr/0008-bot-framework.md).
+- **Send** (Phase 4): mostly done. The [send flow](../diagrams/send-flow.md)
+  describes the shape; profile fetch is the last open item.
+- **Bot framework** (Phase 6): in progress — DM dispatch, scopes,
+  middleware, and conversation state shipped; group reply lands with
+  Phase 5. See [ADR 0008](../adr/0008-bot-framework.md).
 
 ## Troubleshooting
 

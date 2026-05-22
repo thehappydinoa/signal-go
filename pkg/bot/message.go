@@ -102,6 +102,16 @@ func (m *Message) MarkViewed(ctx context.Context) error {
 // fields not exposed via the Message helpers.
 func (m *Message) Event() *signal.MessageEvent { return m.event }
 
+// ConvoKey returns the conversation key for this message: sender + group.
+func (m *Message) ConvoKey() ConvoKey {
+	return ConvoKey{Sender: m.event.Sender, GroupID: m.event.GroupID}
+}
+
+// Convo returns the [Convo] handle for this message's sender +
+// group, providing per-conversation key/value state. Equivalent to
+// b.Convo().For(m.ConvoKey()).
+func (m *Message) Convo() *Convo { return m.bot.convo.For(m.ConvoKey()) }
+
 // Reaction is the per-event handle for reaction handlers registered
 // via [Bot.OnReaction] / [Bot.OnAnyReaction].
 type Reaction struct {
@@ -133,6 +143,14 @@ func (r *Reaction) GroupID() string { return r.event.GroupID }
 // Event returns the wrapped reaction event.
 func (r *Reaction) Event() *signal.ReactionEvent { return r.event }
 
+// ConvoKey returns the conversation key for this reaction: sender + group.
+func (r *Reaction) ConvoKey() ConvoKey {
+	return ConvoKey{Sender: r.event.Sender, GroupID: r.event.GroupID}
+}
+
+// Convo returns the [Convo] handle for this reaction's sender + group.
+func (r *Reaction) Convo() *Convo { return r.bot.convo.For(r.ConvoKey()) }
+
 // Edit is the per-event handle for edit handlers registered via
 // [Bot.OnEdit].
 type Edit struct {
@@ -162,3 +180,11 @@ func (e *Edit) GroupID() string { return e.event.GroupID }
 
 // Event returns the wrapped edit event.
 func (e *Edit) Event() *signal.EditMessageEvent { return e.event }
+
+// ConvoKey returns the conversation key for this edit: sender + group.
+func (e *Edit) ConvoKey() ConvoKey {
+	return ConvoKey{Sender: e.event.Sender, GroupID: e.event.GroupID}
+}
+
+// Convo returns the [Convo] handle for this edit's sender + group.
+func (e *Edit) Convo() *Convo { return e.bot.convo.For(e.ConvoKey()) }

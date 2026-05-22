@@ -139,7 +139,15 @@ bots as ergonomic as Telegram or Slack Bolt:
 - [x] Middleware chain: `Bot.Use(MiddlewareFunc)` for global middleware;
       `Match.Use(MiddlewareFunc)` for per-handler middleware; outermost-first
       ordering; `ErrPass` still causes dispatcher to try the next handler
-- [ ] Conversation state (sessions / wizards) via in-memory or persistent store
+- [x] Conversation state (sessions): per-conversation key/value
+      [`bot.ConvoStore`] (default in-memory), with [`bot.Convo`] /
+      [`Message.Convo`] handles, FSM-style stage helpers
+      (`Convo.Stage`/`SetStage`/`ClearStage`), and a `Match.Stage` /
+      `Match.AnyStage` matcher to gate handlers on the current stage.
+      Wizard sugar (multi-step builder) tracked as a follow-up.
+- [ ] Wizard sugar on top of the conversation-state primitives
+      (multi-step `b.Wizard("name").Step(...)` builder that drives
+      `Convo.SetStage` for the user)
 
 See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 

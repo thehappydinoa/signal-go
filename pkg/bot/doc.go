@@ -7,7 +7,7 @@
 //
 // Use:
 //
-//	b, err := bot.Open(ctx, bot.Options{Store: …, SignalStores: …})
+//	b, err := bot.Open(ctx, bot.Options{AccountStore: …, SignalStores: …})
 //	if err != nil { return err }
 //	defer b.Close()
 //
@@ -26,6 +26,16 @@
 // Handlers are evaluated in registration order; the first match wins.
 // Returning nil from a handler stops dispatch for that event; returning
 // [ErrPass] continues to the next handler.
+//
+// # Conversation state
+//
+// Each conversation (sender ACI plus optional group ID) has a small
+// per-key/value store accessed via [Message.Convo]. Stages provide a
+// lightweight FSM: write the next step with [Convo.SetStage], gate
+// the follow-up handlers with [Match.Stage] / [Match.AnyStage], and
+// clear the flow with [Convo.ClearStage] or [Convo.Clear]. The default
+// backend is in-memory; supply [Options.ConvoStore] to persist state
+// across restarts.
 //
 // This package deliberately wraps the public [signal.Client] only — it
 // does not reach into protocol internals. That lets bots target the

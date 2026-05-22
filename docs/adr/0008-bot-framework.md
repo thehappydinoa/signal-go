@@ -95,16 +95,57 @@ func (m *Message) Typing(ctx context.Context) (stop func(), err error)
 func (m *Message) MarkRead(ctx context.Context) error
 ```
 
-### Conversation state (post-MVP)
+### Conversation state
+
+Implemented in Phase 6. The shape is slightly different from the
+original sketch — we expose a per-key handle rather than passing the
+key to every call, which composes better with handler bodies that
+already hold a `*Message`:
 
 ```go
-type ConvoKey struct{ Address; GroupID string }
-b.Convo().Set(key, "stage", "awaiting_email")
-v, ok := b.Convo().Get(key, "stage")
+type ConvoKey struct {
+    Sender  string // ACI of the other party
+    GroupID string // empty for DMs
+}
+
+type ConvoStore interface {
+    Get(key ConvoKey, field string) (string, bool)
+    Set(key ConvoKey, field, value string)
+    Delete(key ConvoKey, field string)
+    Clear(key ConvoKey)
+    All(key ConvoKey) map[string]string
+}
+
+// Per-message scoped handle, plus stage helpers for FSM-style flows:
+m.Convo().SetStage("awaiting_email")
+v, ok := m.Convo().Get("email")
+
+// Bot-wide handle for cross-conversation queries:
+b.Convo().For(ConvoKey{Sender: "alice"}).Stage()
 ```
 
-Default impl is in-memory; users can plug in a `bot.ConvoStore` interface
-for persistence.
+The `Match.Stage("awaiting_email")` / `Match.AnyStage()` filter wires
+the stage into the dispatcher itself so handlers fire only when the
+conversation is in a matching stage. FSM-style flows fall out of:
+
+```go
+b.OnCommand("signup").DM().Do(func(ctx context.Context, m *bot.Message, _ []string) error {
+    m.Convo().SetStage("await_email")
+    return m.Reply(ctx, "what's your email?")
+})
+b.OnText("").Stage("await_email").Do(func(ctx context.Context, m *bot.Message, _ []string) error {
+    m.Convo().Set("email", m.Body())
+    m.Convo().SetStage("await_age")
+    return m.Reply(ctx, "and your age?")
+})
+```
+
+Default impl (`bot.MemoryConvoStore`) is in-memory; bots that need
+state to survive process restart can supply a custom `ConvoStore` via
+`bot.Options.ConvoStore` (or `bot.WrapWithOptions` in tests).
+
+Multi-step "wizard" sugar that auto-advances stages is a follow-up
+once we've shaken out the bare primitives.
 
 ### Error handling
 
