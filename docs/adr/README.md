@@ -29,3 +29,4 @@ with a new ADR that links back to the one it replaces.
 | 0019 | Groups v2 sender-key distribution + group send | Accepted |
 | 0020 | Group send endorsements + membership changes   | Accepted |
 | 0021 | Group control messages (react, typing, receipts) | Accepted |
+| 0022 | Profile-key presentations, add/remove member, wizard | Accepted |

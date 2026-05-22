@@ -37,9 +37,8 @@ membership changes.
    - After role change, a group update `DataMessage` notifies peers (revision +
      optional serialized `GroupChange`)
 
-5. **Deferred:** add-member (requires profile-key presentations), invite-link
-   join, group log sync (`GET /v2/groups/logs/{version}`), persistent
-   endorsement cache in fsstore.
+5. **Deferred:** invite-link join, group log sync (`GET /v2/groups/logs/{version}`),
+   persistent endorsement cache in fsstore.
 
 ## Consequences
 

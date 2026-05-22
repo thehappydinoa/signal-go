@@ -230,13 +230,20 @@ legacy fallback. See [ADR 0019](../adr/0019-group-sender-key.md) and
 
 ### Groups v2 (membership)
 
-Administrators can promote/demote; any member can leave:
+Administrators can promote/demote, add/remove members, or any member can leave:
 
 ```go
 err := client.LeaveGroup(ctx, masterKey)
 grp, err := client.PromoteMember(ctx, masterKey, memberACI)
 grp, err := client.DemoteMember(ctx, masterKey, memberACI)
+grp, err := client.RemoveMember(ctx, masterKey, memberACI)
+grp, err := client.AddMember(ctx, masterKey, memberACI, profileKey, signal.GroupRoleDefault)
 ```
+
+[AddMember] fetches an expiring profile key credential from the chat service
+(requires the member's 32-byte profile key). Optional
+`OpenOptions.GroupDistributionStore` (e.g. `fsstore.NewGroupDistributionStore`)
+persists sender-key distribution UUIDs across restarts.
 
 ### Groups v2 (control messages)
 
@@ -250,7 +257,20 @@ _, err := client.SendReceipt(ctx, authorACI, signal.ReceiptRead, []time.Time{msg
 ```
 
 Bot helpers (`m.React`, `m.Typing`, `m.MarkRead`, …) branch automatically
-when `m.IsGroup()`. See [ADR 0021](../adr/0021-group-control-messages.md).
+when `m.IsGroup()`. Multi-step flows use [bot.Wizard]:
+
+```go
+signup := b.Wizard("signup")
+signup.Step("await_email", func(ctx context.Context, m *bot.Message, _ []string) error {
+    m.Convo().Set("email", m.Body())
+    signup.Advance(m, "await_age")
+    return m.Reply(ctx, "age?")
+})
+signup.Register()
+```
+
+See [ADR 0021](../adr/0021-group-control-messages.md) and
+[ADR 0022](../adr/0022-phase5-finish.md).
 
 ## What's next
 
@@ -259,13 +279,11 @@ when `m.IsGroup()`. See [ADR 0021](../adr/0021-group-control-messages.md).
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): fetch/decrypt/send/endorsements/membership/control
-  messages done; add-member and invite-link join remain. See
-  [ADR 0018](../adr/0018-groups-v2-bootstrap.md) through
-  [ADR 0021](../adr/0021-group-control-messages.md).
-- **Bot framework** (Phase 6): in progress — DM + group dispatch, scopes,
-  middleware, conversation state, group helpers shipped. See
-  [ADR 0008](../adr/0008-bot-framework.md).
+- **Groups v2** (Phase 5): core group features done; invite-link join and
+  group log sync remain. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md)
+  through [ADR 0022](../adr/0022-phase5-finish.md).
+- **Bot framework** (Phase 6): wizard sugar + group helpers shipped. See
+  [ADR 0008](../adr/0008-bot-framework.md) and [ADR 0022](../adr/0022-phase5-finish.md).
 
 ## Troubleshooting
 

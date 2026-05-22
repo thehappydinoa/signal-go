@@ -116,9 +116,11 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Group send endorsement tokens ([ADR 0020](docs/adr/0020-group-endorsements-membership.md)):
       cache GSE from fetch; prefer `Group-Send-Token` over combined UAK.
 - [x] Group membership changes — leave, promote/demote ([ADR 0020](docs/adr/0020-group-endorsements-membership.md));
-      add-member / invite-link join deferred.
+      add-member / remove-member ([ADR 0022](docs/adr/0022-phase5-finish.md)); invite-link join deferred.
 - [x] Group control messages — reactions + typing via sender-key;
       read/viewed receipts to message author ([ADR 0021](docs/adr/0021-group-control-messages.md)).
+- [x] Profile-key presentation member decode; persistent group distribution UUIDs
+      ([ADR 0022](docs/adr/0022-phase5-finish.md)).
 
 ## Phase 6 — Bot framework **(in progress)**
 
@@ -152,9 +154,9 @@ bots as ergonomic as Telegram or Slack Bolt:
       (`Convo.Stage`/`SetStage`/`ClearStage`), and a `Match.Stage` /
       `Match.AnyStage` matcher to gate handlers on the current stage.
       Wizard sugar (multi-step builder) tracked as a follow-up.
-- [ ] Wizard sugar on top of the conversation-state primitives
-      (multi-step `b.Wizard("name").Step(...)` builder that drives
-      `Convo.SetStage` for the user)
+- [x] Wizard sugar on top of the conversation-state primitives
+      ([ADR 0022](docs/adr/0022-phase5-finish.md)): `b.Wizard("name").Step(...)`,
+      `Begin` / `Advance`, and [Bot.OnAnyText] for stage-gated steps.
 
 See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 

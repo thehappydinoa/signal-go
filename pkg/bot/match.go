@@ -15,6 +15,7 @@ const (
 	matchPrefix
 	matchRegex
 	matchCommand
+	matchAnyText
 )
 
 // matcher describes one registered pattern. Only the relevant fields
@@ -92,6 +93,8 @@ func (m matcher) bodyMatch(body string) ([]string, bool) {
 		if args, ok := parseCommand(body, m.text); ok {
 			return args, true
 		}
+	case matchAnyText:
+		return nil, true
 	}
 	return nil, false
 }

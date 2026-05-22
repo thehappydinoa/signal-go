@@ -31,6 +31,29 @@ func (c *Client) FetchVersionedProfile(
 	aci, profileKeyVersion string,
 	uak []byte,
 ) (*VersionedProfileResponse, error) {
+	return c.fetchVersionedProfile(ctx, aci, profileKeyVersion, uak, "")
+}
+
+// FetchExpiringProfileKeyCredential issues GET /v1/profile/{aci}/{version}/{request}
+// with credentialType=expiringProfileKey and returns the raw credential
+// response bytes (497 bytes).
+func (c *Client) FetchExpiringProfileKeyCredential(
+	ctx context.Context,
+	aci, profileKeyVersion string,
+	uak, credentialRequest []byte,
+) ([]byte, error) {
+	if len(credentialRequest) != 329 {
+		return nil, fmt.Errorf("web.FetchExpiringProfileKeyCredential: request length %d, want 329", len(credentialRequest))
+	}
+	return c.fetchVersionedProfileRaw(ctx, aci, profileKeyVersion, uak, credentialRequest)
+}
+
+func (c *Client) fetchVersionedProfile(
+	ctx context.Context,
+	aci, profileKeyVersion string,
+	uak []byte,
+	credentialType string,
+) (*VersionedProfileResponse, error) {
 	if aci == "" {
 		return nil, errors.New("web.FetchVersionedProfile: aci required")
 	}
@@ -40,10 +63,14 @@ func (c *Client) FetchVersionedProfile(
 	if len(uak) != 16 {
 		return nil, fmt.Errorf("web.FetchVersionedProfile: uak length %d, want 16", len(uak))
 	}
+	path := fmt.Sprintf("/v1/profile/%s/%s", aci, profileKeyVersion)
+	if credentialType != "" {
+		path += "?credentialType=" + credentialType
+	}
 	var resp VersionedProfileResponse
 	if err := c.Do(ctx, Request{
 		Method: http.MethodGet,
-		Path:   fmt.Sprintf("/v1/profile/%s/%s", aci, profileKeyVersion),
+		Path:   path,
 		Headers: http.Header{
 			"Unidentified-Access-Key": {base64.StdEncoding.EncodeToString(uak)},
 		},
@@ -52,6 +79,35 @@ func (c *Client) FetchVersionedProfile(
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (c *Client) fetchVersionedProfileRaw(
+	ctx context.Context,
+	aci, profileKeyVersion string,
+	uak, credentialRequest []byte,
+) ([]byte, error) {
+	if aci == "" {
+		return nil, errors.New("web.FetchExpiringProfileKeyCredential: aci required")
+	}
+	if profileKeyVersion == "" {
+		return nil, errors.New("web.FetchExpiringProfileKeyCredential: profileKeyVersion required")
+	}
+	if len(uak) != 16 {
+		return nil, fmt.Errorf("web.FetchExpiringProfileKeyCredential: uak length %d, want 16", len(uak))
+	}
+	path := fmt.Sprintf("/v1/profile/%s/%s/%x?credentialType=expiringProfileKey", aci, profileKeyVersion, credentialRequest)
+	var raw []byte
+	if err := c.Do(ctx, Request{
+		Method: http.MethodGet,
+		Path:   path,
+		Headers: http.Header{
+			"Unidentified-Access-Key": {base64.StdEncoding.EncodeToString(uak)},
+		},
+		RawOut: &raw,
+	}); err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 // DecodeBase64Field decodes a nullable base64 profile field from the wire

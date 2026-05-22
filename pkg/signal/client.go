@@ -79,6 +79,10 @@ type OpenOptions struct {
 	// built-in [cipher.EnvelopeDecryptor].
 	DisablePreKeyMaintenance bool
 
+	// GroupDistributionStore persists sender-key distribution UUIDs per
+	// group master key. When nil, distribution IDs are in-memory only.
+	GroupDistributionStore store.GroupDistributionStore
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -132,6 +136,8 @@ type Client struct {
 	// groupDistMu guards per-group sender-key distribution UUIDs.
 	groupDistMu sync.Mutex
 	groupDistID map[string]string // hex master key → distribution UUID
+	// groupDistStore optionally persists distribution UUIDs across restarts.
+	groupDistStore store.GroupDistributionStore
 
 	// groupEndorseMu guards group send endorsement caches.
 	groupEndorseMu    sync.Mutex
@@ -186,13 +192,14 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	}
 
 	c := &Client{
-		acct:        acct,
-		events:      events,
-		log:         log,
-		dec:         dec,
-		webc:        webc,
-		storageWebc: storageWebc,
-		stores:      opts.SignalStores,
+		acct:           acct,
+		events:         events,
+		log:            log,
+		dec:            dec,
+		webc:           webc,
+		storageWebc:    storageWebc,
+		stores:         opts.SignalStores,
+		groupDistStore: opts.GroupDistributionStore,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{
