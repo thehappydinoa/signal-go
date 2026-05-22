@@ -3,12 +3,13 @@ name: Release
 # Build and publish `signal-go` binaries on every tag push that looks like
 # a SemVer release tag (`v0.1.0`, `v1.2.3-rc1`, ...).
 #
-# `workflow_dispatch` lets a maintainer dry-run the matrix without
-# cutting a tag — when invoked manually the upload-to-release step is
-# skipped, so the artifacts are only kept on the workflow run (1-day
-# retention, see `dry_run` in the env block).
+# To cut a real release: run the "Create release tag" workflow
+# (create-release-tag.yml), which pushes a v* tag and triggers this file.
 #
-# See ADR 0033 for the release pipeline rationale.
+# `workflow_dispatch` here is a dry-run only — no tag, no draft GitHub
+# Release; artifacts stay on the workflow run (7-day retention).
+#
+# See ADR 0033 and docs/guides/releasing.md.
 
 on:
   push:

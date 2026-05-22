@@ -63,17 +63,23 @@ once we have shipped one clean release through it.
 
 - **`push: tags: ['v*']`** — the real release path. Builds every leg
   and uploads to a **draft** GitHub Release. A maintainer reviews the
-  generated notes + asset list and clicks **Publish** manually. Cut a
-  release with the `:` git tag, then go check the draft.
-- **`workflow_dispatch`** — manual dry-run. Builds every leg and keeps
-  the resulting archives as 7-day workflow artifacts; the publish step
-  is gated behind `startsWith(github.ref, 'refs/tags/v')`, so a dry-run
-  cannot accidentally cut a release.
+  generated notes + asset list and clicks **Publish** manually.
+- **`workflow_dispatch`** on `release.yml` — manual dry-run. Builds
+  every leg and keeps the resulting archives as 7-day workflow artifacts;
+  the publish step is gated behind `startsWith(github.ref, 'refs/tags/v')`,
+  so a dry-run cannot accidentally cut a release.
 
-`workflow_dispatch` is the mechanism we use to validate Windows /
-macOS plumbing between releases — there is no separate "cross-platform
-CI" job on every PR. PR latency stays low, and the Windows leg
-specifically is too expensive to gate every PR on.
+**Tag creation** is a separate workflow,
+[`.github/workflows/create-release-tag.yml`](../../.github/workflows/create-release-tag.yml)
+(Actions → *Create release tag*). Maintainers run it after updating
+`CHANGELOG.md`; it validates SemVer + changelog section, creates an
+annotated `v*` tag on `main` (or a chosen ref), and pushes to `origin`.
+That push triggers `release.yml` automatically. Maintainer guide:
+[`docs/guides/releasing.md`](../guides/releasing.md).
+
+`release.yml` `workflow_dispatch` (without tagging) is how we validate
+Windows / macOS plumbing between releases — there is no separate
+cross-platform CI job on every PR.
 
 ### Caching
 

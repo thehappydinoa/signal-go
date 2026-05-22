@@ -6,7 +6,7 @@
 ## Context
 
 We have a Taskfile that runs lint / vet / test / build locally and a
-[Phase 8 checklist](../../ROADMAP.md#phase-8--security-audit-planned-required-before-v010)
+[Phase 8 checklist](../../ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010)
 that lists the tooling we want passing before `v0.1.0`. None of it
 runs automatically on PRs yet — every contributor is on the honour
 system. We need automation before the project grows past trivially-

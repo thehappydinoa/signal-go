@@ -1,7 +1,7 @@
 # Send flow (Phase 4 — shipped)
 
-Sending a 1:1 message. Fan-out, retry, and basic-auth send are live.
-Sealed-sender is the next planned enhancement.
+Sending a 1:1 message. Fan-out, retry, sealed-sender (when UAK is known),
+and basic-auth send are live.
 
 ```mermaid
 sequenceDiagram
@@ -71,13 +71,13 @@ sequenceDiagram
   Double Ratchet session.
 - **Retry**: at most one retry on 409/410. A second failure propagates
   to the caller.
-- **Sealed sender** is the next planned enhancement. Recipients would
-  receive envelopes that don't reveal the sender's ACI to the server.
-  Requires `signal_sealed_sender_multi_recipient_encrypt` wrapper +
-  sender-certificate cache.
+- **Sealed sender** activates when the recipient's unidentified-access key
+  is known (`SetRecipientUAK` or profile-key derivation). Per-device USMC
+  + sender-certificate cache ([ADR 0015](../adr/0015-sealed-sender-encrypt.md)).
 
 ## Linked design records
 
 - [ADR 0014 — Send retry and multi-device fan-out strategy](../adr/0014-send-retry-fanout.md)
-- [Roadmap Phase 4](../../ROADMAP.md#phase-4--send-11-in-progress)
+- [ADR 0015 — Sealed-sender encrypt](../adr/0015-sealed-sender-encrypt.md)
+- [Roadmap Phase 4](../../ROADMAP.md#phase-4--send-11-done)
 - [Sealed Sender (Signal blog)](https://signal.org/blog/sealed-sender/)

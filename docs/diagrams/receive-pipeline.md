@@ -65,8 +65,8 @@ flowchart TB
   (default for [`signal.Open`](../pkg/signal/client.go)).
 - **Prekey top-up**: after inbound prekey decrypt, [prekeymaint.Maintainer]
   uploads `PUT /v2/keys` when local one-time counts fall below the threshold.
-  sender-key / group decrypt (Phase 5), multi-recipient sealed-sender
-  edge cases.
+- **Groups**: inbound sender-key / group decrypt and `*GroupUpdateEvent`
+  ([ADR 0019](../adr/0019-group-sender-key.md), [ADR 0025](../adr/0025-inbound-group-updates.md)).
 
 ## What to look at
 

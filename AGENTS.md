@@ -48,3 +48,6 @@ On cloud VMs you may need `export CC=gcc CXX=g++` if clang cannot link `-lstdc++
 - The `signal-go link` command requires an interactive passphrase prompt and a real
   Signal account to scan the QR code — it cannot be fully exercised without a phone.
   Use `--help` to verify the binary works.
+- **Releases:** maintainers use Actions → *Create release tag* (see
+  [`docs/guides/releasing.md`](./docs/guides/releasing.md)); that pushes `v*` and
+  triggers [`release.yml`](./.github/workflows/release.yml).

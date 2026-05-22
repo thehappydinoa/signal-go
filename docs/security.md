@@ -72,7 +72,7 @@ security properties we care about. See [ADR 0009](./adr/0009-licensing.md).
 
 Pre-alpha. We have **not yet** had an external audit. The Phase-8
 internal-review checklist in the
-[roadmap](../ROADMAP.md#phase-8--security-audit-planned-required-before-v010)
+[roadmap](../ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010)
 is what we satisfy before cutting `v0.1.0`. The internal pass is
 documented in [ADR 0032](./adr/0032-phase-8-internal-audit.md);
 [`docs/security/threat-model.md`](./security/threat-model.md) is the
