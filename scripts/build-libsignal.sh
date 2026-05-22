@@ -159,13 +159,16 @@ fi
 CARGO_FLAGS=(build --release -p libsignal-ffi)
 if [[ -n "$CARGO_TARGET" ]]; then
   CARGO_FLAGS+=(--target "$CARGO_TARGET")
-  # Ensure the rustup target is installed when rustup is on PATH (it
-  # usually is on GitHub Actions runners after dtolnay/rust-toolchain).
-  # On bare systems without rustup the call is a no-op; cargo will error
-  # later if the toolchain is genuinely missing.
+  # Ensure the rustup target is installed on the toolchain that cargo
+  # will actually invoke. libsignal upstream pins a nightly via
+  # $BUILD_DIR/rust-toolchain; running `rustup target add` from the
+  # signal-go repo root would resolve to the system default (stable)
+  # and silently leave the pinned nightly without the cross-target
+  # std lib — which is how the first Windows release run failed
+  # ("error[E0463]: can't find crate for `core`" on cfg-if).
   if command -v rustup >/dev/null 2>&1; then
-    echo ">> ensuring rustup target $CARGO_TARGET is installed"
-    rustup target add "$CARGO_TARGET" >/dev/null 2>&1 || true
+    echo ">> ensuring rustup target $CARGO_TARGET is installed for libsignal's pinned toolchain"
+    (cd "$BUILD_DIR" && rustup target add "$CARGO_TARGET") || true
   fi
 fi
 
