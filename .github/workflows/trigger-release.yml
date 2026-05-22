@@ -1,0 +1,59 @@
+name: Trigger Release for tag
+
+# Recovery workflow: start release.yml for an existing v* tag (e.g. if Create
+# release tag ran before the GITHUB_TOKEN → workflow_dispatch fix).
+# Normal releases should use Create release tag instead.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build (e.g. v0.1.0-rc2)'
+        required: true
+        type: string
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    name: Dispatch Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Validate tag name
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.tag }}'
+          tag="${tag#v}"
+          tag="v${tag}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Invalid tag: ${{ inputs.tag }}"
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag exists on origin
+        shell: bash
+        run: |
+          git ls-remote --exit-code origin "refs/tags/${{ steps.meta.outputs.tag }}"
+
+      - name: Run Release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml \
+            --repo "${{ github.repository }}" \
+            --ref "${{ steps.meta.outputs.tag }}"
+          sleep 8
+          gh run list --repo "${{ github.repository }}" --workflow=release.yml --limit 5
+
+      - name: Summary
+        run: |
+          echo "Dispatched **Release** on \`${{ steps.meta.outputs.tag }}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Open the [Release workflow](https://github.com/${{ github.repository }}/actions/workflows/release.yml) runs list." >> "$GITHUB_STEP_SUMMARY"

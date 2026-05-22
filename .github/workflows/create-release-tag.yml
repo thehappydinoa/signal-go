@@ -29,6 +29,7 @@ on:
 
 permissions:
   contents: write
+  actions: write # workflow_dispatch on release.yml (GITHUB_TOKEN tag push does not)
 
 concurrency:
   group: create-release-tag
@@ -39,10 +40,16 @@ jobs:
     name: Create and push tag
     runs-on: ubuntu-latest
     steps:
+      # Pushing a tag with the default GITHUB_TOKEN does *not* trigger other
+      # workflows (GitHub anti-recursion). Optional RELEASE_TAG_PUSH_TOKEN
+      # (classic PAT, repo contents:write) makes `git push` behave like a
+      # human push and auto-starts release.yml. Otherwise we dispatch Release
+      # explicitly below.
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_TAG_PUSH_TOKEN || github.token }}
 
       - name: Resolve version and tag name
         id: meta
@@ -96,6 +103,19 @@ jobs:
       - name: Push tag to origin
         run: git push origin '${{ steps.meta.outputs.tag }}'
 
+      - name: Trigger Release workflow
+        if: ${{ secrets.RELEASE_TAG_PUSH_TOKEN == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='${{ steps.meta.outputs.tag }}'
+          echo "Tag was pushed with GITHUB_TOKEN — dispatching Release on ref ${tag}"
+          gh workflow run release.yml --repo "${{ github.repository }}" --ref "${tag}"
+          echo "Waiting for Release run to appear…"
+          sleep 10
+          gh run list --repo "${{ github.repository }}" --workflow=release.yml --limit 3
+
       - name: Summary
         run: |
           {
@@ -105,6 +125,12 @@ jobs:
             echo "- **Ref:** \`${{ inputs.ref }}\`"
             echo "- **Version:** \`${{ steps.meta.outputs.version }}\`"
             echo ""
-            echo "The [Release](https://github.com/${{ github.repository }}/actions/workflows/release.yml) workflow should start automatically."
+            if [ -n "${{ secrets.RELEASE_TAG_PUSH_TOKEN }}" ]; then
+              echo "Release should start automatically (tag pushed with RELEASE_TAG_PUSH_TOKEN)."
+            else
+              echo "Release was dispatched via workflow_dispatch (GITHUB_TOKEN tag pushes do not trigger other workflows)."
+            fi
+            echo ""
+            echo "Track: [Release workflow](https://github.com/${{ github.repository }}/actions/workflows/release.yml)"
             echo "When it finishes, open the **draft** GitHub Release, verify assets + notes, then click **Publish release**."
           } >> "$GITHUB_STEP_SUMMARY"

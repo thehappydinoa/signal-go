@@ -8,14 +8,27 @@ onward. Pre-1.0 tags may break API without a major bump.
 Architectural *why* lives in [`docs/adr/`](./docs/adr/README.md); this file
 is *what* changed and *when*.
 
+## [Unreleased]
+
+### Fixed
+
+- **Create release tag** now dispatches **Release** after the tag push. Pushes
+  made with the default `GITHUB_TOKEN` do not trigger other workflows on GitHub.
+
+### Added
+
+- **Trigger Release for tag** workflow to start **Release** for an existing `v*`
+  tag (recovery).
+
 ## [0.1.0-rc2] - 2026-05-22
 
 ### Added
 
 - **Create release tag** GitHub Actions workflow
   (`.github/workflows/create-release-tag.yml`): maintainer `workflow_dispatch`
-  validates SemVer + `CHANGELOG.md`, pushes an annotated `v*` tag, and
-  triggers the release build. Guide: [`docs/guides/releasing.md`](./docs/guides/releasing.md).
+  validates SemVer + `CHANGELOG.md`, pushes an annotated `v*` tag. Guide:
+  [`docs/guides/releasing.md`](./docs/guides/releasing.md). *(Release dispatch
+  fix landed after this tag — use **Trigger Release for tag** for `v0.1.0-rc2`.)*
 
 ### Changed
 
@@ -66,5 +79,6 @@ support, and TLS trust fixes for Signal's private CA.
   ([`SECURITY.md`](./SECURITY.md)).
 - ROADMAP: Phase B/C CI and release pipeline items marked done.
 
-[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0-rc1...HEAD
+[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0-rc2...HEAD
+[0.1.0-rc2]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc2
 [0.1.0-rc1]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc1

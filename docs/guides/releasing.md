@@ -53,7 +53,16 @@ Design rationale: [ADR 0033](../adr/0033-release-pipeline.md).
      is missing.
 3. Run. The workflow creates an annotated tag and `git push origin v…`.
 
-That push triggers **Release** automatically (`on.push.tags: v*`).
+**Release** then starts in one of two ways:
+
+| Setup | What happens |
+|-------|----------------|
+| Default (no extra secret) | After push, the workflow **dispatches Release** on the new tag (`workflow_dispatch`). You should see a **Release** run within ~30s. |
+| Optional `RELEASE_TAG_PUSH_TOKEN` | Store a [classic PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) with `contents: write` as repo secret `RELEASE_TAG_PUSH_TOKEN`. Tag push uses the PAT and **Release** starts via normal `on.push.tags` (same as a laptop `git push`). |
+
+GitHub **does not** run other workflows when a tag is pushed using the
+built-in `GITHUB_TOKEN` (anti-recursion). That is why an older version of
+*Create release tag* could succeed without starting **Release**.
 
 ### Dry-run without tagging
 
@@ -98,8 +107,9 @@ produces a dev binary tagged `(devel)` unless you pass `-ldflags` yourself.
 
 | Symptom | Check |
 |---------|--------|
+| Create tag succeeds but **no Release run** | Expected on workflows **before** the dispatch fix. Run **Actions → Trigger Release for tag** with `v0.1.0-rc2`, or **Release → Run workflow** with **Use workflow from** set to that tag. |
 | Create tag fails on CHANGELOG | Add `## [x.y.z] - YYYY-MM-DD` matching the version input (no `v` prefix in the heading). |
 | Tag already exists | Pick a new version or delete the remote tag only if the release was mistaken. |
-| Release workflow did not start | Confirm the tag matches `v*` and was pushed to `origin`. |
+| Release workflow did not start | Tag must match `v*` on `origin`. With PAT configured, push must use `RELEASE_TAG_PUSH_TOKEN`. Without PAT, *Create release tag* must include the **Trigger Release workflow** step (current `main`). |
 | Windows leg failed | See [getting-started — Windows](./getting-started.md#windows-git-bash--msys2); other platforms may still have published assets. |
 | Empty draft release | `publish` job only runs on tag push, not on Release `workflow_dispatch`. |
