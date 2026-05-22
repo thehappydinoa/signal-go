@@ -11,6 +11,23 @@ A separate ADR — [`docs/adr/README.md`](./docs/adr/README.md) — tracks
 
 ## [Unreleased]
 
+### Fixed (release dry-run round 3)
+
+- All three non-Linux legs of `release.yml` still failed with
+  `Could not find protoc` from the `spqr` crate's prost-build
+  invocation — round 2's per-platform tweaks (apt/brew install,
+  MSYS2 `mingw-w64-x86_64-protobuf`, conditional `PROTOC` env var)
+  each hit a different platform-specific path-resolution failure
+  mode. Replaced the three platform-specific protoc installs with
+  a single `arduino/setup-protoc@v3` step that drops a known
+  tool-cache binary onto every runner, and pointed `PROTOC` env at
+  `${{ steps.protoc.outputs.path }}/bin/protoc[.exe]` so
+  prost-build's cargo child-process never has to PATH-search.
+- Added a `Verify protoc resolves` diagnostic step that runs
+  `protoc --version` before the libsignal build, so any future
+  regression surfaces with the actual path and `ls` output
+  instead of prost-build's generic "Could not find protoc" panic.
+
 ### Fixed (release dry-run round 2)
 
 - macOS legs of `release.yml` failed Go compilation with

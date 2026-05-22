@@ -112,18 +112,15 @@ jobs:
           path: internal/libsignal/lib
           key: libsignal-${{ steps.version.outputs.version }}-${{ matrix.cache_key_suffix }}-v1
 
-      # ---------------- Linux deps ----------------
-      - name: (Linux) Install protoc
-        if: matrix.os_name == 'linux' && steps.cache-libsignal.outputs.cache-hit != 'true'
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      # ---------------- macOS deps ----------------
-      - name: (macOS) Install protoc + nasm
+      # ---------------- BoringSSL deps (nasm) ----------------
+      # protoc is handled cross-platform by arduino/setup-protoc below;
+      # we still need nasm (for BoringSSL's hand-written assembly) from
+      # the host package manager because no comparable cross-platform
+      # action exists. Linux runners ship nasm in the runner image.
+      - name: (macOS) Install nasm
         if: matrix.os_name == 'darwin' && steps.cache-libsignal.outputs.cache-hit != 'true'
-        run: |
-          brew install protobuf nasm
+        run: brew install nasm
 
-      # ---------------- Windows deps ----------------
       - name: (Windows) Install MSYS2 / MinGW-w64
         if: matrix.os_name == 'windows' && steps.cache-libsignal.outputs.cache-hit != 'true'
         uses: msys2/setup-msys2@v2
@@ -133,7 +130,6 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-protobuf
             mingw-w64-x86_64-nasm
             git
 
@@ -145,6 +141,41 @@ jobs:
           # the gcc/g++ that link the static archive.
           echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
           echo "C:/msys64/usr/bin" >> "$GITHUB_PATH"
+
+      # ---------------- protoc (cross-platform) ----------------
+      # libsignal's `spqr` (Sparse Post Quantum Ratchet) crate's
+      # build.rs uses prost-build, which shells out to `protoc`.
+      # Sourcing protoc from each host's package manager (apt /
+      # brew / pacman) ran into per-platform path-discovery issues
+      # (macOS brew didn't end up with /usr/local/bin/protoc on PATH
+      # for cargo's child processes; Windows MSYS2 protoc was on
+      # GITHUB_PATH but the Win32 cargo lookup missed it). Using
+      # arduino/setup-protoc gives us one tool-cache binary on every
+      # runner, plus an output we can wire into the `PROTOC` env
+      # explicitly so prost-build never has to PATH-search.
+      - name: Install protoc
+        id: protoc
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        uses: arduino/setup-protoc@v3
+        with:
+          # Pinned `repo-token` avoids the unauthenticated rate limit
+          # on the protobuf releases API when setup-protoc resolves
+          # the `23.x` default.
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify protoc resolves
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          PROTOC: ${{ steps.protoc.outputs.path }}/bin/protoc${{ matrix.os_name == 'windows' && '.exe' || '' }}
+        run: |
+          # If this step fails the libsignal build would have failed
+          # with a less direct error from prost-build; surfacing
+          # protoc's location explicitly is much easier to debug.
+          echo "PROTOC=${PROTOC}"
+          test -x "${PROTOC}" || { echo "PROTOC not executable: ${PROTOC}"; ls -la "$(dirname "${PROTOC}")" || true; exit 1; }
+          "${PROTOC}" --version
+          command -v protoc || echo "(protoc not on PATH, but PROTOC env will be used by prost-build)"
 
       # ---------------- Rust ----------------
       - name: Install Rust toolchain
@@ -163,14 +194,11 @@ jobs:
           # On cloud VMs clang can fail to find -lstdc++; force gcc.
           CC: gcc
           CXX: g++
-          # libsignal's `spqr` crate uses prost-build, which invokes
-          # `which::which("protoc")`. On the GitHub Windows runner the
-          # MSYS2-installed protoc is on PATH via GITHUB_PATH, but the
-          # cargo child-process lookup can still miss it (different PATH
-          # semantics between bash and the Win32 process tree). Setting
-          # PROTOC explicitly is the upstream-documented escape hatch.
-          # Empty on linux/macOS so PATH-based lookup kicks in.
-          PROTOC: ${{ matrix.os_name == 'windows' && 'C:/msys64/mingw64/bin/protoc.exe' || '' }}
+          # Point prost-build at the tool-cache protoc that
+          # setup-protoc just installed, so the cargo child-process
+          # lookup never has to PATH-resolve (which is what bit us
+          # on macOS and Windows in the previous two dry-runs).
+          PROTOC: ${{ steps.protoc.outputs.path }}/bin/protoc${{ matrix.os_name == 'windows' && '.exe' || '' }}
         run: bash scripts/build-libsignal.sh
 
       # ---------------- Go ----------------
