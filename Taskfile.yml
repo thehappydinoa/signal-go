@@ -27,7 +27,7 @@ tasks:
     desc: Point git at the versioned hooks in .githooks/ (run once per clone)
     cmds:
       - git config core.hooksPath .githooks
-      - echo "Git hooks installed. Pre-push checks: vet → lint → test."
+      - 'echo "Git hooks installed. Pre-push checks: vet, lint, test."'
 
   libsignal:
     desc: Build libsignal_ffi.a from pinned upstream tag (slow first time, cached after)
