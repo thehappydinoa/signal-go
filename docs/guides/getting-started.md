@@ -223,8 +223,20 @@ _, err := client.SendGroup(ctx, masterKey, "hello group")
 ```
 
 SKDM is distributed to members over 1:1 sessions; the payload is delivered
-via `PUT /v1/messages/multi_recipient`. See
-[ADR 0019](../adr/0019-group-sender-key.md).
+via `PUT /v1/messages/multi_recipient`. Send prefers a **group send
+endorsement token** from the latest [FetchGroup]; combined UAK is the
+legacy fallback. See [ADR 0019](../adr/0019-group-sender-key.md) and
+[ADR 0020](../adr/0020-group-endorsements-membership.md).
+
+### Groups v2 (membership)
+
+Administrators can promote/demote; any member can leave:
+
+```go
+err := client.LeaveGroup(ctx, masterKey)
+grp, err := client.PromoteMember(ctx, masterKey, memberACI)
+grp, err := client.DemoteMember(ctx, masterKey, memberACI)
+```
 
 ## What's next
 
@@ -233,10 +245,11 @@ via `PUT /v1/messages/multi_recipient`. See
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): in progress — fetch/decrypt/send done;
-  membership changes (join/leave/role) remain. See
-  [ADR 0018](../adr/0018-groups-v2-bootstrap.md) and
-  [ADR 0019](../adr/0019-group-sender-key.md).
+- **Groups v2** (Phase 5): fetch/decrypt/send/endorsements/membership done;
+  add-member and invite-link join remain. See
+  [ADR 0018](../adr/0018-groups-v2-bootstrap.md),
+  [ADR 0019](../adr/0019-group-sender-key.md), and
+  [ADR 0020](../adr/0020-group-endorsements-membership.md).
 - **Bot framework** (Phase 6): in progress — DM + group dispatch, scopes,
   middleware, conversation state, and group `Reply` shipped. See
   [ADR 0008](../adr/0008-bot-framework.md).

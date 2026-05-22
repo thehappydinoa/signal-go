@@ -132,6 +132,11 @@ type Client struct {
 	// groupDistMu guards per-group sender-key distribution UUIDs.
 	groupDistMu sync.Mutex
 	groupDistID map[string]string // hex master key → distribution UUID
+
+	// groupEndorseMu guards group send endorsement caches.
+	groupEndorseMu    sync.Mutex
+	groupEndorsements map[string]*groupSendEndorsementCache
+	groupSecretParams map[string][libsignal.GroupSecretParamsLen]byte
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
