@@ -123,10 +123,10 @@ func TestE2E_Recv(t *testing.T) {
 				continue
 			}
 			if expectSubstr != "" && !strings.Contains(msg.Body, expectSubstr) {
-				t.Logf("ignoring message from %s (body %q)", msg.Sender, truncate(msg.Body, 80))
+				t.Logf("ignoring message from %s (body %q)", msg.Sender, truncateRunes(msg.Body, 80))
 				continue
 			}
-			t.Logf("received from %s device %d at %s: %q", msg.Sender, msg.SenderDevice, msg.Timestamp, truncate(msg.Body, 200))
+			t.Logf("received from %s device %d at %s: %q", msg.Sender, msg.SenderDevice, msg.Timestamp, truncateRunes(msg.Body, 200))
 			return
 		case <-ctx.Done():
 			t.Fatalf("timeout waiting for recv: %v", ctx.Err())
@@ -250,9 +250,9 @@ func openE2EDB(t *testing.T) *sqlstore.DB {
 	if os.Getenv("SIGNAL_E2E_PLAINTEXT") == "1" {
 		db, err = sqlstore.Open(abs)
 	} else {
-		passphrase, err := e2ePassphrase()
-		if err != nil {
-			t.Fatalf("passphrase: %v", err)
+		passphrase, passErr := e2ePassphrase()
+		if passErr != nil {
+			t.Fatalf("passphrase: %v", passErr)
 		}
 		db, err = sqlstore.OpenWithPassphrase(abs, passphrase)
 	}
@@ -333,9 +333,9 @@ func decodeMasterKey(t *testing.T, hexKey string) []byte {
 	return raw
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncateRunes(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "…"
+	return s[:maxLen] + "…"
 }
