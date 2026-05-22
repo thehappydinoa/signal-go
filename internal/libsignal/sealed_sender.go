@@ -87,25 +87,128 @@ func DecryptSealedSenderToUSMC(ctext []byte, h *StoreHandle) (*UnidentifiedSende
 // (DEFAULT — the server stores and re-delivers the message if the recipient
 // is offline).
 func NewUSMC(msg *CiphertextMessage, cert *SenderCertificate) (*UnidentifiedSenderMessageContent, error) {
+	return newUSMC(msg, cert, nil)
+}
+
+// NewUSMCForGroup wraps a sender-key ciphertext for multi-recipient group
+// delivery. groupMasterKey is the 32-byte Groups v2 master key.
+func NewUSMCForGroup(msg *CiphertextMessage, cert *SenderCertificate, groupMasterKey []byte) (*UnidentifiedSenderMessageContent, error) {
+	if len(groupMasterKey) == 0 {
+		return nil, errors.New("libsignal.NewUSMCForGroup: empty group master key")
+	}
+	return newUSMC(msg, cert, groupMasterKey)
+}
+
+func newUSMC(msg *CiphertextMessage, cert *SenderCertificate, groupMasterKey []byte) (*UnidentifiedSenderMessageContent, error) {
 	if msg == nil {
 		return nil, errors.New("libsignal.NewUSMC: nil ciphertext message")
 	}
 	if cert == nil {
 		return nil, errors.New("libsignal.NewUSMC: nil sender certificate")
 	}
+	var groupBuf C.SignalBorrowedBuffer
+	if len(groupMasterKey) > 0 {
+		groupBuf = borrowed(groupMasterKey)
+		keepAlive(groupMasterKey)
+	}
 	var out C.SignalMutPointerUnidentifiedSenderMessageContent
 	err := checkError(C.signal_unidentified_sender_message_content_new(
 		&out,
 		msg.constPtr(),
 		cert.constPtr(),
-		0,                        // content_hint: DEFAULT
-		C.SignalBorrowedBuffer{}, // group_id: empty for 1:1
+		0, // content_hint: DEFAULT
+		groupBuf,
 	))
 	runtime.KeepAlive(cert) // prevent finalizer from destroying cert during FFI
 	if err != nil {
 		return nil, err
 	}
 	return wrapUSMC(out), nil
+}
+
+// MultiRecipientMessageForSingleRecipient extracts the per-device portion
+// of a multi-recipient sealed-sender payload. When given a single-recipient
+// payload, libsignal returns an error and callers should decrypt the input
+// directly.
+func MultiRecipientMessageForSingleRecipient(encoded []byte) ([]byte, error) {
+	if len(encoded) == 0 {
+		return nil, errors.New("libsignal.MultiRecipientMessageForSingleRecipient: empty input")
+	}
+	var buf C.SignalOwnedBuffer
+	err := checkError(C.signal_sealed_sender_multi_recipient_message_for_single_recipient(
+		&buf,
+		borrowed(encoded),
+	))
+	keepAlive(encoded)
+	if err != nil {
+		return nil, err
+	}
+	return goBytesFromOwnedBuffer(buf), nil
+}
+
+// MultiRecipientEncryptParams holds inputs for sealed-sender v2 fan-out.
+type MultiRecipientEncryptParams struct {
+	Recipients        []*Address
+	RecipientSessions []*SessionRecord
+	ExcludedServiceID []byte // optional; empty for normal group sends
+	Content           *UnidentifiedSenderMessageContent
+	Stores            *StoreHandle
+}
+
+// MultiRecipientEncrypt builds a SealedSenderMultiRecipientMessage wire blob
+// suitable for PUT /v1/messages/multi_recipient.
+func MultiRecipientEncrypt(p MultiRecipientEncryptParams) ([]byte, error) {
+	if len(p.Recipients) == 0 {
+		return nil, errors.New("libsignal.MultiRecipientEncrypt: no recipients")
+	}
+	if len(p.Recipients) != len(p.RecipientSessions) {
+		return nil, errors.New("libsignal.MultiRecipientEncrypt: recipients/sessions length mismatch")
+	}
+	if p.Content == nil {
+		return nil, errors.New("libsignal.MultiRecipientEncrypt: nil content")
+	}
+	if p.Stores == nil {
+		return nil, errors.New("libsignal.MultiRecipientEncrypt: nil store handle")
+	}
+
+	addrPtrs := make([]C.SignalConstPointerProtocolAddress, len(p.Recipients))
+	sessPtrs := make([]C.SignalConstPointerSessionRecord, len(p.RecipientSessions))
+	var pinner runtime.Pinner
+	defer pinner.Unpin()
+	for i, addr := range p.Recipients {
+		pinner.Pin(addr)
+		addrPtrs[i] = addr.constPtr()
+	}
+	for i, sess := range p.RecipientSessions {
+		pinner.Pin(sess)
+		sessPtrs[i] = sess.constPtr()
+	}
+	p.Stores.pinForFFI(&pinner)
+	pinner.Pin(p.Content)
+
+	recipientSlice := C.SignalBorrowedSliceOfConstPointerProtocolAddress{
+		base:   (*C.SignalConstPointerProtocolAddress)(unsafe.Pointer(&addrPtrs[0])),
+		length: C.size_t(len(addrPtrs)),
+	}
+	sessionSlice := C.SignalBorrowedSliceOfConstPointerSessionRecord{
+		base:   (*C.SignalConstPointerSessionRecord)(unsafe.Pointer(&sessPtrs[0])),
+		length: C.size_t(len(sessPtrs)),
+	}
+
+	var buf C.SignalOwnedBuffer
+	err := checkError(C.signal_sealed_sender_multi_recipient_encrypt(
+		&buf,
+		recipientSlice,
+		sessionSlice,
+		borrowed(p.ExcludedServiceID),
+		p.Content.constPtr(),
+		p.Stores.IdentityKeyStoreStruct(),
+	))
+	keepAlive(p.ExcludedServiceID)
+	if err != nil {
+		return nil, err
+	}
+	return goBytesFromOwnedBuffer(buf), nil
 }
 
 // Serialize returns the wire encoding of the USMC. This is the bytes placed

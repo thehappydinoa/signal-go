@@ -127,6 +127,7 @@ type StoreHandle struct {
 	cPreKey   *C.SignalPreKeyStore
 	cSigned   *C.SignalSignedPreKeyStore
 	cKyber    *C.SignalKyberPreKeyStore
+	cSender   *C.SignalSenderKeyStore
 }
 
 // NewStoreHandle registers any store implementation through a
@@ -160,6 +161,7 @@ func (h *StoreHandle) allocCStores() {
 	h.cPreKey = allocPreKeyStoreCopy(&h.preKey)
 	h.cSigned = allocSignedStoreCopy(&h.signed)
 	h.cKyber = allocKyberStoreCopy(&h.kyber)
+	h.cSender = allocSenderStoreCopy(&h.sender)
 }
 
 func allocSessionStoreCopy(src *C.SignalSessionStore) *C.SignalSessionStore {
@@ -180,6 +182,10 @@ func allocSignedStoreCopy(src *C.SignalSignedPreKeyStore) *C.SignalSignedPreKeyS
 
 func allocKyberStoreCopy(src *C.SignalKyberPreKeyStore) *C.SignalKyberPreKeyStore {
 	return (*C.SignalKyberPreKeyStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
+}
+
+func allocSenderStoreCopy(src *C.SignalSenderKeyStore) *C.SignalSenderKeyStore {
+	return (*C.SignalSenderKeyStore)(allocCopy(unsafe.Pointer(src), C.size_t(unsafe.Sizeof(*src))))
 }
 
 func allocCopy(src unsafe.Pointer, size C.size_t) unsafe.Pointer {
@@ -218,7 +224,8 @@ func (h *StoreHandle) freeCStores() {
 	freeIfSet(unsafe.Pointer(h.cPreKey))
 	freeIfSet(unsafe.Pointer(h.cSigned))
 	freeIfSet(unsafe.Pointer(h.cKyber))
-	h.cSession, h.cIdentity, h.cPreKey, h.cSigned, h.cKyber = nil, nil, nil, nil, nil
+	freeIfSet(unsafe.Pointer(h.cSender))
+	h.cSession, h.cIdentity, h.cPreKey, h.cSigned, h.cKyber, h.cSender = nil, nil, nil, nil, nil, nil
 }
 
 func freeIfSet(p unsafe.Pointer) {
@@ -292,4 +299,9 @@ func (h *StoreHandle) SignedPreKeyStoreStruct() C.SignalConstPointerFfiSignedPre
 // KyberPreKeyStoreStruct returns the FFI Kyber-prekey store wired to h's ctx.
 func (h *StoreHandle) KyberPreKeyStoreStruct() C.SignalConstPointerFfiKyberPreKeyStoreStruct {
 	return C.SignalConstPointerFfiKyberPreKeyStoreStruct{raw: h.cKyber}
+}
+
+// SenderKeyStoreStruct returns the FFI sender-key store wired to h's ctx.
+func (h *StoreHandle) SenderKeyStoreStruct() C.SignalConstPointerFfiSenderKeyStoreStruct {
+	return C.SignalConstPointerFfiSenderKeyStoreStruct{raw: h.cSender}
 }

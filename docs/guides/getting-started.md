@@ -212,6 +212,20 @@ if grp.IsAdmin(msg.Sender) {
 Auth credentials are fetched from `GET /v1/certificate/auth/group` and
 cached per UTC day on the client. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md).
 
+### Groups v2 (send)
+
+Reply in a group with `Client.SendGroup` or `bot.Message.Reply`. Each
+member must have a known unidentified access key (from an inbound
+`profileKey`, `FetchProfile`, or `SetRecipientProfileKey`):
+
+```go
+_, err := client.SendGroup(ctx, masterKey, "hello group")
+```
+
+SKDM is distributed to members over 1:1 sessions; the payload is delivered
+via `PUT /v1/messages/multi_recipient`. See
+[ADR 0019](../adr/0019-group-sender-key.md).
+
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
@@ -219,11 +233,13 @@ cached per UTC day on the client. See [ADR 0018](../adr/0018-groups-v2-bootstrap
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): in progress — fetch/decrypt/membership done;
-  group send lands next. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md).
-- **Bot framework** (Phase 6): in progress — DM dispatch, scopes,
-  middleware, and conversation state shipped; group reply lands with
-  Phase 5. See [ADR 0008](../adr/0008-bot-framework.md).
+- **Groups v2** (Phase 5): in progress — fetch/decrypt/send done;
+  membership changes (join/leave/role) remain. See
+  [ADR 0018](../adr/0018-groups-v2-bootstrap.md) and
+  [ADR 0019](../adr/0019-group-sender-key.md).
+- **Bot framework** (Phase 6): in progress — DM + group dispatch, scopes,
+  middleware, conversation state, and group `Reply` shipped. See
+  [ADR 0008](../adr/0008-bot-framework.md).
 
 ## Troubleshooting
 

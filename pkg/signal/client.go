@@ -128,6 +128,10 @@ type Client struct {
 	certMu     sync.Mutex
 	senderCert *libsignal.SenderCertificate
 	certExpiry time.Time
+
+	// groupDistMu guards per-group sender-key distribution UUIDs.
+	groupDistMu sync.Mutex
+	groupDistID map[string]string // hex master key → distribution UUID
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -297,7 +301,8 @@ func (c *Client) processEnvelope(ctx context.Context, data []byte) {
 	}
 
 	var content sspb.Content
-	if err := proto.Unmarshal(contentBytes, &content); err != nil {
+	unpadded := stripContentPadding(contentBytes)
+	if err := proto.Unmarshal(unpadded, &content); err != nil {
 		c.emit(&DecryptionErrorEvent{
 			Sender:       sender,
 			SenderDevice: senderDevice,

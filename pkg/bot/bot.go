@@ -46,6 +46,7 @@ type ErrorHandler func(ctx context.Context, ev signal.Event, err error)
 type Client interface {
 	Events() <-chan signal.Event
 	Send(ctx context.Context, recipient, text string) (signal.Receipt, error)
+	SendGroup(ctx context.Context, masterKey []byte, text string) (signal.Receipt, error)
 	SendReceipt(ctx context.Context, recipient string, kind signal.ReceiptType, timestamps []time.Time) (signal.Receipt, error)
 	SendTyping(ctx context.Context, recipient string, action signal.TypingAction) (signal.Receipt, error)
 	SendReaction(ctx context.Context, recipient, emoji, targetAuthor string, targetTimestamp time.Time, remove bool) (signal.Receipt, error)

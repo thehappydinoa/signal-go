@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"sync"
 	"testing"
@@ -17,15 +18,20 @@ import (
 type fakeClient struct {
 	events chan signal.Event
 
-	mu        sync.Mutex
-	sends     []sentMessage
-	receipts  []sentReceipt
-	typings   []sentTyping
-	reactions []sentReaction
+	mu         sync.Mutex
+	sends      []sentMessage
+	groupSends []sentGroupMessage
+	receipts   []sentReceipt
+	typings    []sentTyping
+	reactions  []sentReaction
 }
 
 type sentMessage struct {
 	to, text string
+}
+
+type sentGroupMessage struct {
+	groupIDHex, text string
 }
 
 type sentReceipt struct {
@@ -56,6 +62,13 @@ func (f *fakeClient) Send(_ context.Context, to, text string) (signal.Receipt, e
 	defer f.mu.Unlock()
 	f.sends = append(f.sends, sentMessage{to: to, text: text})
 	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
+}
+
+func (f *fakeClient) SendGroup(_ context.Context, masterKey []byte, text string) (signal.Receipt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.groupSends = append(f.groupSends, sentGroupMessage{groupIDHex: fmt.Sprintf("%x", masterKey), text: text})
+	return signal.Receipt{Timestamp: time.Now()}, nil
 }
 
 func (f *fakeClient) SendReceipt(_ context.Context, to string, kind signal.ReceiptType, ts []time.Time) (signal.Receipt, error) {
@@ -344,7 +357,7 @@ func TestOnErrorReceivesNonNilHandlerErrors(t *testing.T) {
 	}
 }
 
-func TestReplyInGroupReturnsError(t *testing.T) {
+func TestReplyInGroupUsesSendGroup(t *testing.T) {
 	fc := newFakeClient()
 	b := Wrap(fc)
 	var fired sync.WaitGroup
@@ -357,18 +370,22 @@ func TestReplyInGroupReturnsError(t *testing.T) {
 	})
 
 	cancel, wait := runBot(t, b)
+	groupID := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	ev := msgEv("alice", "hello")
-	ev.GroupID = "deadbeef-group-master-key"
+	ev.GroupID = groupID
 	fc.events <- ev
 	fired.Wait()
 	cancel()
 	_ = wait()
 
-	if !errors.Is(replyErr, ErrReplyNotSupportedInGroup) {
-		t.Errorf("replyErr = %v", replyErr)
+	if replyErr != nil {
+		t.Fatalf("replyErr = %v", replyErr)
+	}
+	if len(fc.groupSends) != 1 || fc.groupSends[0].text != "hi" {
+		t.Errorf("groupSends = %+v", fc.groupSends)
 	}
 	if len(fc.Sends()) != 0 {
-		t.Errorf("group reply should not send")
+		t.Errorf("group reply should not use 1:1 Send")
 	}
 }
 
