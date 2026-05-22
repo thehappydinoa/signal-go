@@ -113,28 +113,17 @@ func (c *Client) FetchGroup(ctx context.Context, masterKey []byte) (*Group, erro
 		return nil, fmt.Errorf("signal.FetchGroup: decrypt: %w", err)
 	}
 
-	members := make([]GroupMember, len(state.Members))
-	memberACIs := make([]string, len(state.Members))
-	for i, m := range state.Members {
-		members[i] = GroupMember{ACI: m.ACI, Role: m.Role}
-		memberACIs[i] = m.ACI
-	}
-
 	masterKeyHex := hex.EncodeToString(masterKey)
+	grp, memberACIs, err := groupFromDecodedState(masterKeyHex, state)
+	if err != nil {
+		return nil, fmt.Errorf("signal.FetchGroup: %w", err)
+	}
 	if gse := resp.GetGroupSendEndorsementsResponse(); len(gse) > 0 {
 		if err := c.storeGroupSendEndorsements(masterKeyHex, secretParams, gse, memberACIs); err != nil {
 			c.log.Warn("group send endorsements unavailable", "group", masterKeyHex, "err", err)
 		}
 	}
-
-	return &Group{
-		ID:          masterKeyHex,
-		Title:       state.Title,
-		Description: state.Description,
-		AvatarURL:   state.AvatarURL,
-		Revision:    state.Revision,
-		Members:     members,
-	}, nil
+	return grp, nil
 }
 
 func (c *Client) groupsV2AuthHeader(
