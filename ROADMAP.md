@@ -26,8 +26,8 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] `internal/ws`: `WebSocketMessage` framed connection wrapper
 - [x] `internal/provisioning`: open provisioning ws, receive `ProvisioningUuid`,
       compose `sgnl://linkdevice?uuid=...&pub_key=...&capabilities=...` URL
-- [x] Demo `cmd/signal-go link` prints the URL (ANSI QR rendering still
-      open as a nice-to-have)
+- [x] Demo `cmd/signal-go link` prints the URL and ANSI QR on TTY
+      ([ADR 0035](./docs/adr/0035-go-qrcode-cli-qr.md))
 - [x] Unit tests for proto roundtrip, URL encoding, ws frame parsing
 - [x] Integration test stub (skipped unless `SIGNAL_GO_E2E=1`)
 

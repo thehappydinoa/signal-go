@@ -91,13 +91,14 @@ You'll get an interactive passphrase prompt. The passphrase is used to
 encrypt your account state (AES-256-GCM, with the key derived via
 Argon2id) — see [the encrypted-store diagram](../diagrams/encrypted-store.md).
 
-The tool then prints a `sgnl://linkdevice?...` URL. Two ways to use it:
+The tool prints an **ANSI QR code** in the terminal (when stdout is a TTY)
+plus the `sgnl://linkdevice?...` URL as fallback. Scan from your phone:
+*Signal → Settings → Linked devices → + (Add device)*.
 
-1. **Open the QR**: paste the URL into your favourite terminal-based QR
-   generator and scan it from your phone's *Signal → Settings → Linked
-   devices → + (Add device)* menu.
-2. **Type it manually**: not currently possible — Signal's mobile app
-   doesn't expose a "paste URL" option. Use option 1.
+- **`signal-go link -no-qr`** — URL only (scripts, narrow terminals, or
+  `NO_COLOR` set).
+- Signal's mobile app does not support pasting the URL manually; you need
+  the QR (on-screen or from another device).
 
 After you approve on the phone, signal-go decrypts the provisioning
 envelope, generates ACI + PNI prekeys, registers via
