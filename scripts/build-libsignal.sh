@@ -57,6 +57,35 @@ fi
 
 echo ">> installing artifacts"
 cp -f "$SRC_LIB" "$LIB_DIR/libsignal_ffi.a"
+
+# BoringSSL assembly objects inside libsignal_ffi.a may lack .note.GNU-stack,
+# which makes GNU ld warn about an executable stack on every Go link. Post-
+# process members missing the section (ROADMAP Phase 7 option 1).
+if command -v ar >/dev/null && command -v objcopy >/dev/null && command -v readelf >/dev/null; then
+  echo ">> patching libsignal_ffi.a for .note.GNU-stack"
+  PATCH_DIR="$(mktemp -d)"
+  (
+    cd "$PATCH_DIR"
+    ar x "$LIB_DIR/libsignal_ffi.a"
+    patched=0
+    for obj in *.o; do
+      [[ -f "$obj" ]] || continue
+      if ! readelf -S "$obj" 2>/dev/null | grep -q '\.note\.GNU-stack'; then
+        objcopy --add-section .note.GNU-stack=/dev/null "$obj" "$obj.patched"
+        mv "$obj.patched" "$obj"
+        patched=$((patched + 1))
+      fi
+    done
+    if ls *.o >/dev/null 2>&1; then
+      ar rcs "$LIB_DIR/libsignal_ffi.a" *.o
+    fi
+    echo ">> patched $patched object(s) missing .note.GNU-stack"
+  )
+  rm -rf "$PATCH_DIR"
+else
+  echo ">> warning: ar/objcopy/readelf not found; skipping GNU-stack patch" >&2
+fi
+
 # The cbindgen-generated header lives in the Swift consumer tree of upstream.
 cp -f "$BUILD_DIR/swift/Sources/SignalFfi/signal_ffi.h" "$INCLUDE_DIR/signal_ffi.h"
 echo "$LIBSIGNAL_VERSION" > "$STAMP"

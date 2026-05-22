@@ -11,6 +11,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/prekeymaint"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
+	provpb "github.com/thehappydinoa/signal-go/internal/proto/gen/provisioningpb"
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
 	"github.com/thehappydinoa/signal-go/internal/web"
 )
@@ -24,6 +25,11 @@ type LinkOptions struct {
 	// Store persists the completed account so [Open] can later resume.
 	// Required.
 	Store account.Store
+
+	// LinkAndSync advertises backup3 during provisioning and, when the
+	// primary sends an ephemeralBackupKey, polls for and validates the
+	// transfer archive after registration completes.
+	LinkAndSync bool
 
 	// UserAgent reported in X-Signal-Agent headers. Defaults to "signal-go".
 	UserAgent string
@@ -61,6 +67,9 @@ type LinkedAccount struct {
 	PNI      string
 	Number   string
 	DeviceID uint32
+	// Sync is populated when [LinkOptions.LinkAndSync] is true and the
+	// primary participates in link-and-sync.
+	Sync *SyncTransferArchiveResult
 }
 
 // Link runs the secondary-device QR-link handshake against chat.signal.org
@@ -70,6 +79,8 @@ type LinkedAccount struct {
 // The user must scan the URL passed to opts.OnURL with their primary
 // device's "Linked devices" menu within the Signal mobile app. ctx
 // cancellation aborts the wait.
+//
+//nolint:gocyclo // linear provisioning protocol; helpers would obscure the sequence.
 func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	if opts.OnURL == nil {
 		return nil, errors.New("signal.Link: LinkOptions.OnURL is required")
@@ -80,9 +91,10 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 
 	// Step 1: QR handshake (provisioning ws + decrypt envelope).
 	sess, err := provisioning.Link(ctx, provisioning.Options{
-		UserAgent: opts.UserAgent,
-		URL:       opts.ProvisioningURL,
-		OnURL:     opts.OnURL,
+		UserAgent:    opts.UserAgent,
+		URL:          opts.ProvisioningURL,
+		OnURL:        opts.OnURL,
+		Capabilities: opts.provisioningCapabilities(),
 	})
 	if err != nil {
 		return nil, err
@@ -162,15 +174,55 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	if err := opts.Store.SaveAccount(acct); err != nil {
 		return nil, fmt.Errorf("signal.Link: persist account: %w", err)
 	}
-	return &LinkedAccount{
+
+	linked := &LinkedAccount{
 		ACI: acct.ACI, PNI: acct.PNI, Number: acct.Number, DeviceID: acct.DeviceID,
-	}, nil
+	}
+	if syncResult, err := maybeSyncTransferArchive(ctx, opts, msg, webc, resp.UUID, resp.DeviceID, password); err != nil {
+		return linked, err
+	} else if syncResult != nil {
+		linked.Sync = syncResult
+	}
+	return linked, nil
+}
+
+func maybeSyncTransferArchive(
+	ctx context.Context,
+	opts LinkOptions,
+	msg *provpb.ProvisionMessage,
+	webc *web.Client,
+	aci string,
+	deviceID uint32,
+	password string,
+) (*SyncTransferArchiveResult, error) {
+	if !opts.LinkAndSync || len(msg.GetEphemeralBackupKey()) != libsignal.BackupKeyLen {
+		return nil, nil
+	}
+	creds := web.Credentials{
+		Username: fmt.Sprintf("%s.%d", aci, deviceID),
+		Password: password,
+	}
+	syncResult, err := SyncTransferArchive(ctx, webc, creds, SyncTransferArchiveOptions{
+		EphemeralBackupKey: msg.GetEphemeralBackupKey(),
+		ACI:                aci,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: sync transfer archive: %w", err)
+	}
+	return syncResult, nil
 }
 
 // skipOneTimePreKeys is a hook for tests to disable the one-time upload
 // without changing the public API. Set by link_test.go.
 func (o LinkOptions) skipOneTimePreKeys() bool {
 	return o.testSkipPreKeyUpload
+}
+
+func (o LinkOptions) provisioningCapabilities() []string {
+	if o.LinkAndSync {
+		return []string{CapabilityBackup3}
+	}
+	return nil
 }
 
 func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int) (account.Identity, error) {

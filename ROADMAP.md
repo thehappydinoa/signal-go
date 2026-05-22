@@ -175,25 +175,23 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
       ([ADR 0027](docs/adr/0027-storage-service-sync.md))
 - [x] CDSI contact discovery ([ADR 0028](docs/adr/0028-cdsi-contact-discovery.md))
 - [x] SQLite-backed store ([ADR 0029](docs/adr/0029-sqlite-backed-store.md))
-- [ ] Backup/restore (linked-device "synchronized start")
-- [ ] **Suppress the `missing .note.GNU-stack section implies executable stack`
+- [x] Backup/restore (linked-device "synchronized start") — receive + validate v1 ([ADR 0030](docs/adr/0030-linked-device-transfer-archive.md)); frame import into store tracked as follow-up
+- [x] **Suppress the `missing .note.GNU-stack section implies executable stack`
       linker warning** on every Go build that links libsignal_ffi.a. The
       warning comes from a BoringSSL assembly object inside libsignal's
       static archive that lacks the `.note.GNU-stack` ELF section, so
       GNU ld assumes it wants an executable stack and warns. The Go-
       produced binary is fine (Go's linker injects PT_GNU_STACK as
       non-exec regardless), it's just noisy. Options:
-      1. Post-process `libsignal_ffi.a` in `scripts/build-libsignal.sh`:
+      1. **Done:** Post-process `libsignal_ffi.a` in `scripts/build-libsignal.sh`:
          extract objects, run `objcopy --add-section .note.GNU-stack=/dev/null`
-         (or a small `as` snippet) on the offending member, repack.
+         on members missing the section, repack.
       2. Patch upstream BoringSSL / submit a PR to `signalapp/boring`
          to add `.note.GNU-stack` to the affected `.S` files (the
          long-term fix; tracked at the libsignal layer).
-      3. **Done (stop-gap shipped)**: `-Wl,--no-warn-execstack` added to
+      3. ~~**Done (stop-gap shipped)**: `-Wl,--no-warn-execstack` added to
          `internal/libsignal/cgo.go` linux `#cgo LDFLAGS`. Hides the
-         warning without fixing the root cause. The long-term fix (upstream
-         BoringSSL `.note.GNU-stack` patch) is tracked at the libsignal
-         layer.
+         warning without fixing the root cause.~~ Superseded by option 1.
 
 ## Phase 8 — Security audit **(planned; required before v0.1.0)**
 
