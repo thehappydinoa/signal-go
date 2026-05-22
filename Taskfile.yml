@@ -79,7 +79,16 @@ tasks:
     desc: Run tests with coverage report
     deps: [libsignal]
     cmds:
-      - go test {{.GOFLAGS}} -race -count=1 -coverprofile=coverage.out ./...
+      - |
+        rm -f coverage.out coverage.tmp
+        echo "mode: atomic" > coverage.out
+        for pkg in $(go list -f '{{`{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}`}}' ./...); do
+          go test {{.GOFLAGS}} -race -count=1 -coverprofile=coverage.tmp -covermode=atomic "$pkg"
+          if [ -f coverage.tmp ]; then
+            tail -n +2 coverage.tmp >> coverage.out
+            rm coverage.tmp
+          fi
+        done
       - go tool cover -func=coverage.out | tail -1
 
   lint:
