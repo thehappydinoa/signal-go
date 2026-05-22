@@ -37,7 +37,8 @@ the friction and do it anyway.
 |---|---|
 | Add a package | README "Architecture" diagram, [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.md), maybe a new ADR |
 | Add a Go module dep | [ADR 0002](./docs/adr/0002-no-third-party-go-deps.md) allowlist table — *required*. PRs adding deps without updating this ADR get rejected. |
-| Change a public API in `pkg/signal` | doc comment on the type/function, [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) if user-visible, CHANGELOG once we have one |
+| Change a public API in `pkg/signal` | doc comment on the type/function, [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) if user-visible, [`CHANGELOG.md`](./CHANGELOG.md) |
+| Cut a release tag | [`CHANGELOG.md`](./CHANGELOG.md), [`docs/guides/releasing.md`](./docs/guides/releasing.md), then **Create release tag** workflow (not a manual `git tag` unless emergency) |
 | Add a new CLI flag | [`cmd/signal-go/main.go`](./cmd/signal-go/main.go) help, [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) example |
 | Touch the on-disk store format | [ADR 0012](./docs/adr/0012-encrypted-store.md) (bump format version byte if wire-incompatible), [`docs/diagrams/encrypted-store.md`](./docs/diagrams/encrypted-store.md) |
 | Touch a network protocol | matching diagram under [`docs/diagrams/`](./docs/diagrams/), the relevant Phase section in [ROADMAP](./ROADMAP.md) |
@@ -104,7 +105,7 @@ three-ring testing strategy.
   is the reference.
 - Touch crypto code → update [`docs/security.md`](./docs/security.md)
   if the threat model shifts, and add to the
-  [Phase 8 audit checklist](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010).
+  [Phase 8 audit checklist](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010).
 
 ## Working with libsignal upstream
 

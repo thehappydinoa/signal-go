@@ -10,7 +10,18 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Create release tag** GitHub Actions workflow
+  (`.github/workflows/create-release-tag.yml`): maintainer `workflow_dispatch`
+  validates SemVer + `CHANGELOG.md`, pushes an annotated `v*` tag, and
+  triggers the release build. Guide: [`docs/guides/releasing.md`](./docs/guides/releasing.md).
+
+### Changed
+
+- Documentation pass: README, diagrams, security anchors, and release
+  docs aligned with current feature set (groups v2, sealed sender, TLS
+  pinning, `bin/signal-go` from `task build`).
 
 ## [0.1.0-rc1] - 2026-05-22
 

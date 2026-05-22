@@ -154,7 +154,7 @@ the canonical statement. Summary:
 
 ## Audit checklist (Phase 8 internal review)
 
-See [ROADMAP §"Phase 8 — Security audit"](../../ROADMAP.md#phase-8--security-audit-planned-required-before-v010).
+See [ROADMAP §"Phase 8 — Security audit"](../../ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010).
 Items currently satisfied:
 
 - [x] cgo memory-safety sweep — `CiphertextMessage` finalizer added,

@@ -89,6 +89,6 @@ fixup.
 
 ## Linked records
 
-- [Phase 4 roadmap — sealed sender](../../ROADMAP.md#phase-4--send-11-in-progress)
+- [Phase 4 roadmap — sealed sender](../../ROADMAP.md#phase-4--send-11-done)
 - [ADR 0010 — Phase 3 receive](./0010-phase-3-receive.md)
 - [Signal blog: sealed sender](https://signal.org/blog/sealed-sender/)

@@ -7,7 +7,7 @@ our Go code.
 
 ```mermaid
 flowchart TB
-    bot[pkg/bot<br/>Phase 6 — planned]
+    bot[pkg/bot<br/>dispatch + middleware]
     sig[pkg/signal<br/>public API:<br/>Link, Open, Client, Events]
 
     subgraph protocol [Protocol layer]

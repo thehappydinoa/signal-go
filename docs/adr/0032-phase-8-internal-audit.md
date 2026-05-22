@@ -98,7 +98,7 @@ work — every change shipped in the PR that lands this ADR:
 ## Consequences
 
 - **Pro**: every internal-review checkbox in [ROADMAP §
-  "Phase 8"](../../ROADMAP.md#phase-8--security-audit-planned-required-before-v010)
+  "Phase 8"](../../ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010)
   except the optional `-race -count=10` matrix and the valgrind/ASAN
   bake is now satisfied. We are ready to tag `v0.1.0-rc1` once the
   external-audit gate decision is made.

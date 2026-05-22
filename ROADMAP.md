@@ -307,8 +307,11 @@ Phase B — broaden:
 
 Phase C — release pipeline (lands with v0.1.0):
 - [x] `.github/workflows/release.yml`: build `signal-go` binaries on
-      tag push; publish to a draft GitHub Release
+  tag push; publish to a draft GitHub Release
       ([ADR 0033](./docs/adr/0033-release-pipeline.md))
+- [x] `.github/workflows/create-release-tag.yml`: maintainer
+      `workflow_dispatch` to create/push `v*` tags (triggers release)
+      — [`docs/guides/releasing.md`](./docs/guides/releasing.md)
 - [x] Native-built binaries for linux/{amd64,arm64} +
       darwin/{amd64,arm64} + windows/amd64 (Windows leg is
       `experimental: true` until promoted)

@@ -530,6 +530,11 @@ See [ADR 0029](../adr/0029-sqlite-backed-store.md).
   [ADR 0022](../adr/0022-phase5-finish.md), and
   [ADR 0025](../adr/0025-inbound-group-updates.md).
 
+## Releases (maintainers)
+
+To ship a new `v*` tag and draft GitHub Release binaries, see
+[Releasing](../guides/releasing.md) (Actions → **Create release tag**).
+
 ## Troubleshooting
 
 - *"the requested URL returned error: 404"* during `task libsignal` —

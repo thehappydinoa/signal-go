@@ -47,9 +47,14 @@ The CLI prompts for a passphrase, prints a `sgnl://linkdevice?...` URL to
 scan from your phone, and persists an AES-256-GCM-encrypted account.
 Full walkthrough: [`docs/guides/getting-started.md`](./docs/guides/getting-started.md).
 
-**Pre-built binaries** — see [GitHub Releases](https://github.com/thehappydinoa/signal-go/releases)
+**Pre-built binaries** — [GitHub Releases](https://github.com/thehappydinoa/signal-go/releases)
 (`v0.1.0-rc1` and later). Pick the archive for your OS/CPU, verify the
 `.sha256` sidecar, and run `signal-go link` the same way.
+
+**Maintainers** — after updating `CHANGELOG.md`, run
+**Actions → Create release tag** to push a `v*` tag; that starts the
+[release workflow](.github/workflows/release.yml) automatically.
+See [`docs/guides/releasing.md`](./docs/guides/releasing.md).
 
 **As a library** — import `github.com/thehappydinoa/signal-go/pkg/signal`
 (and optionally `pkg/bot`). You still need `libsignal_ffi.a` built locally
@@ -141,6 +146,7 @@ Detail and tick-boxes: [`ROADMAP.md`](./ROADMAP.md).
 | Topic | Link |
 |-------|------|
 | Build, link, Windows setup | [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) |
+| Cutting a release (tags + CI) | [`docs/guides/releasing.md`](./docs/guides/releasing.md) |
 | Testing (unit / component / e2e) | [`docs/guides/testing.md`](./docs/guides/testing.md) |
 | Diagrams | [`docs/diagrams/`](./docs/diagrams/) |
 | Security + threat model | [`docs/security.md`](./docs/security.md), [`threat-model.md`](./docs/security/threat-model.md) |

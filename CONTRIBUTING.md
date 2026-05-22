@@ -23,6 +23,18 @@ task lint
 The [pre-push hook](./.githooks/pre-push) runs vet → lint → test when
 `libsignal_ffi.a` is present.
 
+## Releases (maintainers)
+
+See [`docs/guides/releasing.md`](./docs/guides/releasing.md). Summary:
+
+1. Add a `## [x.y.z] - date` section to `CHANGELOG.md`.
+2. Merge to `main`.
+3. Run **Actions → Create release tag** (workflow `create-release-tag.yml`).
+4. When **Release** finishes, publish the draft GitHub Release.
+
+Do not push release tags from a laptop unless you know you are duplicating
+what the workflow already does.
+
 ## Pull requests
 
 - Rebase onto `main`; keep PRs focused (one concept when possible).

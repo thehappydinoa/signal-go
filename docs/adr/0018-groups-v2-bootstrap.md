@@ -56,4 +56,4 @@ hex(`GroupPublicParams`) and password is hex(`AuthCredentialPresentation`).
 - Signal-Android `GroupsV2Api.java`, `GroupsV2AuthorizationString.java`
 - Signal-Server `CertificateController.getGroupAuthenticationCredentials`
 - [`proto/Groups.proto`](../../proto/Groups.proto)
-- [ROADMAP Phase 5](../../ROADMAP.md#phase-5--groups-v2-planned)
+- [ROADMAP Phase 5](../../ROADMAP.md#phase-5--groups-v2-done)

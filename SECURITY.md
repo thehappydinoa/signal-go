@@ -53,7 +53,7 @@ minor branches and their EOL dates.
 In scope: anything in this repository — our Go code, our cgo boundary,
 our wire-protocol implementation, the build pipeline, the on-disk
 storage format. The internal-review checklist that defines "in scope"
-operationally is [ROADMAP § Phase 8](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010).
+operationally is [ROADMAP § Phase 8](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010).
 
 Out of scope (please report directly to upstream):
 
