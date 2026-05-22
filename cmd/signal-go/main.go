@@ -3,6 +3,7 @@
 // Subcommands so far:
 //
 //	signal-go link -store <dir>    Pair as a Signal secondary device.
+//	signal-go version              Print version + VCS info.
 //
 // Phase 3+ will add `recv`, `send`, `groups`, etc.
 package main
@@ -13,9 +14,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -28,6 +32,11 @@ import (
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
+// version is overwritten at link time by the release workflow via
+// `-ldflags="-X main.version=<tag>"`. The default sentinel covers
+// `go run`, `go install`, and ad-hoc local builds.
+var version = "(devel)"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage(os.Stderr)
@@ -36,6 +45,8 @@ func main() {
 	switch os.Args[1] {
 	case "link":
 		os.Exit(runLink(os.Args[2:]))
+	case "version", "-v", "--version":
+		printVersion(os.Stdout)
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
@@ -50,9 +61,31 @@ func usage(w *os.File) {
 
 Usage:
   signal-go link [flags]      Link as a Signal secondary device
+  signal-go version           Print version + build info
 
 Run 'signal-go <subcommand> -h' for subcommand flags.
 `)
+}
+
+// printVersion writes the build-tagged version plus the Go toolchain
+// and (when available) the embedded VCS revision. Release binaries
+// have main.version overridden via -ldflags; dev builds fall back to
+// the `(devel)` sentinel and surface `vcs.revision` from the
+// `runtime/debug.ReadBuildInfo` block that `go build -buildvcs=true`
+// embeds by default.
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "signal-go %s\n", version)
+	fmt.Fprintf(w, "  go:        %s (%s/%s)\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision", "vcs.time", "vcs.modified":
+			fmt.Fprintf(w, "  %-10s %s\n", s.Key+":", s.Value)
+		}
+	}
 }
 
 func runLink(args []string) int {
