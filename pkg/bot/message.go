@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -41,12 +42,9 @@ func (m *Message) GroupID() string { return m.event.GroupID }
 // thread (Groups v2 via [signal.Client.SendGroup]).
 func (m *Message) Reply(ctx context.Context, text string) error {
 	if m.IsGroup() {
-		masterKey, err := hex.DecodeString(m.event.GroupID)
+		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
 		if err != nil {
-			return fmt.Errorf("bot.Reply: invalid group id: %w", err)
-		}
-		if len(masterKey) != 32 {
-			return errors.New("bot.Reply: group id must be 32-byte master key")
+			return err
 		}
 		_, err = m.bot.cli.SendGroup(ctx, masterKey, text)
 		return err
@@ -56,10 +54,15 @@ func (m *Message) Reply(ctx context.Context, text string) error {
 }
 
 // React reacts to this message with the given emoji on the sender's
-// thread. 1:1 only for now (group reactions need Phase 5).
+// thread (1:1) or in the group thread (Groups v2).
 func (m *Message) React(ctx context.Context, emoji string) error {
 	if m.IsGroup() {
-		return ErrReplyNotSupportedInGroup
+		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
+		if err != nil {
+			return err
+		}
+		_, err = m.bot.cli.SendGroupReaction(ctx, masterKey, emoji, m.event.Sender, m.event.Timestamp, false)
+		return err
 	}
 	_, err := m.bot.cli.SendReaction(ctx, m.event.Sender, emoji, m.event.Sender, m.event.Timestamp, false)
 	return err
@@ -70,38 +73,44 @@ func (m *Message) React(ctx context.Context, emoji string) error {
 // reaction.
 func (m *Message) Unreact(ctx context.Context, emoji string) error {
 	if m.IsGroup() {
-		return ErrReplyNotSupportedInGroup
+		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
+		if err != nil {
+			return err
+		}
+		_, err = m.bot.cli.SendGroupReaction(ctx, masterKey, emoji, m.event.Sender, m.event.Timestamp, true)
+		return err
 	}
 	_, err := m.bot.cli.SendReaction(ctx, m.event.Sender, emoji, m.event.Sender, m.event.Timestamp, true)
 	return err
 }
 
 // Typing sends a started/stopped typing indicator to the message's
-// sender. 1:1 only (group typing needs Phase 5).
+// sender (1:1) or group thread (Groups v2).
 func (m *Message) Typing(ctx context.Context, action signal.TypingAction) error {
 	if m.IsGroup() {
-		return ErrReplyNotSupportedInGroup
+		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
+		if err != nil {
+			return err
+		}
+		_, err = m.bot.cli.SendGroupTyping(ctx, masterKey, action)
+		return err
 	}
 	_, err := m.bot.cli.SendTyping(ctx, m.event.Sender, action)
 	return err
 }
 
 // MarkRead sends a READ receipt for this message back to its sender.
-// 1:1 only.
+// In groups the receipt is delivered 1:1 to the message author, not the
+// whole group.
 func (m *Message) MarkRead(ctx context.Context) error {
-	if m.IsGroup() {
-		return ErrReplyNotSupportedInGroup
-	}
 	_, err := m.bot.cli.SendReceipt(ctx, m.event.Sender, signal.ReceiptRead, []time.Time{m.event.Timestamp})
 	return err
 }
 
 // MarkViewed sends a VIEWED receipt for this message (typically for
-// view-once media) back to its sender. 1:1 only.
+// view-once media) back to its sender. In groups the receipt is
+// delivered 1:1 to the message author.
 func (m *Message) MarkViewed(ctx context.Context) error {
-	if m.IsGroup() {
-		return ErrReplyNotSupportedInGroup
-	}
 	_, err := m.bot.cli.SendReceipt(ctx, m.event.Sender, signal.ReceiptViewed, []time.Time{m.event.Timestamp})
 	return err
 }
@@ -118,7 +127,20 @@ func (m *Message) ConvoKey() ConvoKey {
 // Convo returns the [Convo] handle for this message's sender +
 // group, providing per-conversation key/value state. Equivalent to
 // b.Convo().For(m.ConvoKey()).
-func (m *Message) Convo() *Convo { return m.bot.convo.For(m.ConvoKey()) }
+func (m *Message) Convo() *Convo {
+	return m.bot.convo.For(m.ConvoKey())
+}
+
+func decodeGroupMasterKey(groupIDHex string) ([]byte, error) {
+	masterKey, err := hex.DecodeString(groupIDHex)
+	if err != nil {
+		return nil, fmt.Errorf("bot: invalid group id: %w", err)
+	}
+	if len(masterKey) != libsignal.GroupMasterKeyLen {
+		return nil, errors.New("bot: group id must be 32-byte master key")
+	}
+	return masterKey, nil
+}
 
 // Reaction is the per-event handle for reaction handlers registered
 // via [Bot.OnReaction] / [Bot.OnAnyReaction].

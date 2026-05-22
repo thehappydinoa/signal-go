@@ -23,6 +23,8 @@ const (
 	GroupSecretParamsLen = C.SignalGROUP_SECRET_PARAMS_LEN
 	// GroupPublicParamsLen is the serialized GroupPublicParams size.
 	GroupPublicParamsLen = C.SignalGROUP_PUBLIC_PARAMS_LEN
+	// GroupIdentifierLen is the 32-byte group identifier used in TypingMessage.groupId.
+	GroupIdentifierLen = C.SignalGROUP_IDENTIFIER_LEN
 	// UUIDCiphertextLen is the encrypted service id ciphertext size.
 	UUIDCiphertextLen = C.SignalUUID_CIPHERTEXT_LEN
 	// ZKRandomnessLen is the randomness size for zkgroup deterministic ops.
@@ -87,6 +89,27 @@ func GroupSecretParamsFromMasterKey(masterKey []byte) ([GroupSecretParamsLen]byt
 	if err := checkError(C.signal_group_secret_params_derive_from_master_key(
 		cGroupSecretParamsOut(&out),
 		cGroupMasterKeyIn(masterKey),
+	)); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// GroupIdentifierFromMasterKey derives the 32-byte group identifier carried
+// in TypingMessage.groupId from a Groups v2 master key.
+func GroupIdentifierFromMasterKey(masterKey []byte) ([GroupIdentifierLen]byte, error) {
+	var out [GroupIdentifierLen]byte
+	secretParams, err := GroupSecretParamsFromMasterKey(masterKey)
+	if err != nil {
+		return out, err
+	}
+	publicParams, err := GroupSecretParamsPublicParams(secretParams)
+	if err != nil {
+		return out, err
+	}
+	if err := checkError(C.signal_group_public_params_get_group_identifier(
+		cGroupIdentifierOut(&out),
+		cGroupPublicParamsIn(&publicParams),
 	)); err != nil {
 		return out, err
 	}
@@ -253,6 +276,14 @@ func cGroupSecretParamsOut(b *[GroupSecretParamsLen]byte) *[C.SignalGROUP_SECRET
 
 func cGroupPublicParamsOut(b *[GroupPublicParamsLen]byte) *[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar {
 	return (*[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar)(unsafe.Pointer(b))
+}
+
+func cGroupPublicParamsIn(b *[GroupPublicParamsLen]byte) *[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar {
+	return (*[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar)(unsafe.Pointer(b))
+}
+
+func cGroupIdentifierOut(b *[GroupIdentifierLen]byte) *[C.SignalGROUP_IDENTIFIER_LEN]C.uchar {
+	return (*[C.SignalGROUP_IDENTIFIER_LEN]C.uchar)(unsafe.Pointer(b))
 }
 
 func cUUIDCiphertextIn(b []byte) *[C.SignalUUID_CIPHERTEXT_LEN]C.uchar {

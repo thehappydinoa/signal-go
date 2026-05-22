@@ -106,6 +106,74 @@ func TestBuildReactionContentShape(t *testing.T) {
 	}
 }
 
+func TestBuildGroupReactionContentIncludesGroupV2(t *testing.T) {
+	masterKey := make([]byte, 32)
+	for i := range masterKey {
+		masterKey[i] = byte(i)
+	}
+	target := time.Now().Add(-time.Minute).Truncate(time.Millisecond)
+	ts := uint64(time.Now().UnixMilli())
+	const revision uint32 = 7
+
+	b, err := buildGroupReactionContent("👍", "bob-aci", target, false, ts, masterKey, revision)
+	if err != nil {
+		t.Fatalf("buildGroupReactionContent: %v", err)
+	}
+	var c sspb.Content
+	if err := proto.Unmarshal(b, &c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	dm := c.GetDataMessage()
+	if dm == nil || dm.GetReaction() == nil {
+		t.Fatalf("missing reaction DataMessage: %+v", &c)
+	}
+	gv2 := dm.GetGroupV2()
+	if gv2 == nil {
+		t.Fatal("missing GroupV2")
+	}
+	if string(gv2.GetMasterKey()) != string(masterKey) {
+		t.Errorf("MasterKey mismatch")
+	}
+	if gv2.GetRevision() != revision {
+		t.Errorf("Revision = %d, want %d", gv2.GetRevision(), revision)
+	}
+}
+
+func TestBuildGroupTypingContentIncludesGroupID(t *testing.T) {
+	masterKey := make([]byte, 32)
+	for i := range masterKey {
+		masterKey[i] = byte(i + 2)
+	}
+	ts := uint64(time.Now().UnixMilli())
+	b, err := buildGroupTypingContent(TypingStarted, ts, masterKey)
+	if err != nil {
+		t.Fatalf("buildGroupTypingContent: %v", err)
+	}
+	var c sspb.Content
+	if err := proto.Unmarshal(b, &c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tm := c.GetTypingMessage()
+	if tm == nil {
+		t.Fatal("missing TypingMessage")
+	}
+	if len(tm.GetGroupId()) != 32 {
+		t.Fatalf("GroupId length = %d, want 32", len(tm.GetGroupId()))
+	}
+}
+
+func TestSendGroupReactionInputValidation(t *testing.T) {
+	c := &Client{}
+	mk := make([]byte, 32)
+	now := time.Now()
+	if _, err := c.SendGroupReaction(context.Background(), mk[:16], "👍", "bob", now, false); err == nil {
+		t.Error("expected error for short master key")
+	}
+	if _, err := c.SendGroupReaction(context.Background(), mk, "👍", "", now, false); err == nil {
+		t.Error("expected error for empty target author")
+	}
+}
+
 func TestSendReceiptInputValidation(t *testing.T) {
 	c := &Client{}
 	if _, err := c.SendReceipt(context.Background(), "", ReceiptRead, []time.Time{time.Now()}); err == nil {

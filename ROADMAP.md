@@ -113,11 +113,12 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Sender-key distribution; group message encrypt/decrypt
       ([ADR 0019](docs/adr/0019-group-sender-key.md)): inbound SKDM +
       sender-key decrypt, `Client.SendGroup`, `bot.Message.Reply` in groups.
-      Combined UAK multi-recipient delivery; group send endorsements deferred.
 - [x] Group send endorsement tokens ([ADR 0020](docs/adr/0020-group-endorsements-membership.md)):
       cache GSE from fetch; prefer `Group-Send-Token` over combined UAK.
 - [x] Group membership changes — leave, promote/demote ([ADR 0020](docs/adr/0020-group-endorsements-membership.md));
       add-member / invite-link join deferred.
+- [x] Group control messages — reactions + typing via sender-key;
+      read/viewed receipts to message author ([ADR 0021](docs/adr/0021-group-control-messages.md)).
 
 ## Phase 6 — Bot framework **(in progress)**
 
@@ -136,8 +137,8 @@ bots as ergonomic as Telegram or Slack Bolt:
       `.From(aci)` (sender filter)
 - [x] DM helpers on `*Message`: `React` / `Unreact` (1:1 reactions),
       `Typing` (started/stopped), `MarkRead` / `MarkViewed` (READ /
-      VIEWED receipts). Group variants land with Phase 5 — they
-      currently return `ErrReplyNotSupportedInGroup`.
+      VIEWED receipts). Group variants via [ADR 0021](docs/adr/0021-group-control-messages.md)
+      (`SendGroupReaction`, `SendGroupTyping`; receipts 1:1 to author).
 - [x] Group `Reply` via `SendGroup` ([ADR 0019](docs/adr/0019-group-sender-key.md)); `ReplyAttachment` still open
 - [x] Reaction and edit event handlers: `Bot.OnReaction(emoji)`,
       `Bot.OnAnyReaction()`, `Bot.OnEdit()` with the same

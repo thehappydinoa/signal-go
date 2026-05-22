@@ -238,6 +238,20 @@ grp, err := client.PromoteMember(ctx, masterKey, memberACI)
 grp, err := client.DemoteMember(ctx, masterKey, memberACI)
 ```
 
+### Groups v2 (control messages)
+
+React and typing in groups use the same sender-key multi-recipient path as
+text. Read/viewed receipts go 1:1 to the message author (not the whole group):
+
+```go
+_, err := client.SendGroupReaction(ctx, masterKey, "👍", authorACI, msgTime, false)
+_, err := client.SendGroupTyping(ctx, masterKey, signal.TypingStarted)
+_, err := client.SendReceipt(ctx, authorACI, signal.ReceiptRead, []time.Time{msgTime})
+```
+
+Bot helpers (`m.React`, `m.Typing`, `m.MarkRead`, …) branch automatically
+when `m.IsGroup()`. See [ADR 0021](../adr/0021-group-control-messages.md).
+
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
@@ -245,13 +259,12 @@ grp, err := client.DemoteMember(ctx, masterKey, memberACI)
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): fetch/decrypt/send/endorsements/membership done;
-  add-member and invite-link join remain. See
-  [ADR 0018](../adr/0018-groups-v2-bootstrap.md),
-  [ADR 0019](../adr/0019-group-sender-key.md), and
-  [ADR 0020](../adr/0020-group-endorsements-membership.md).
+- **Groups v2** (Phase 5): fetch/decrypt/send/endorsements/membership/control
+  messages done; add-member and invite-link join remain. See
+  [ADR 0018](../adr/0018-groups-v2-bootstrap.md) through
+  [ADR 0021](../adr/0021-group-control-messages.md).
 - **Bot framework** (Phase 6): in progress — DM + group dispatch, scopes,
-  middleware, conversation state, and group `Reply` shipped. See
+  middleware, conversation state, group helpers shipped. See
   [ADR 0008](../adr/0008-bot-framework.md).
 
 ## Troubleshooting

@@ -157,24 +157,9 @@ func buildGroupUpdateContent(masterKey []byte, revision uint32, groupChange []by
 
 // sendGroupContent delivers pre-built group Content bytes via multi-recipient.
 func (c *Client) sendGroupContent(ctx context.Context, masterKey []byte, grp *Group, contentBytes []byte, ts uint64) (Receipt, error) {
-	distID, err := c.groupDistributionID(hex.EncodeToString(masterKey))
-	if err != nil {
-		return Receipt{}, err
-	}
-	local, err := libsignal.NewAddress(c.acct.ACI, c.acct.DeviceID)
-	if err != nil {
-		return Receipt{}, err
-	}
-	h := libsignal.NewStoreHandle(c.stores)
-	defer h.Release()
-
-	creds := c.credentials()
-	payload, auth, err := c.buildGroupMultiRecipientPayload(ctx, creds, grp, masterKey, distID, local, h, padContent(contentBytes))
-	if err != nil {
-		return Receipt{}, err
-	}
-	if err := c.webc.SendMultiRecipientMessage(ctx, auth, payload, ts, false, true); err != nil {
-		return Receipt{}, err
-	}
-	return Receipt{Timestamp: time.UnixMilli(int64(ts)), RecipientACI: grp.ID}, nil
+	return c.deliverGroupPayload(ctx, masterKey, grp, contentBytes, ts, groupDeliveryOpts{
+		online:         false,
+		urgent:         true,
+		distributeSKDM: false,
+	})
 }

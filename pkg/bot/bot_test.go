@@ -18,12 +18,14 @@ import (
 type fakeClient struct {
 	events chan signal.Event
 
-	mu         sync.Mutex
-	sends      []sentMessage
-	groupSends []sentGroupMessage
-	receipts   []sentReceipt
-	typings    []sentTyping
-	reactions  []sentReaction
+	mu             sync.Mutex
+	sends          []sentMessage
+	groupSends     []sentGroupMessage
+	groupReactions []sentGroupReaction
+	groupTypings   []sentGroupTyping
+	receipts       []sentReceipt
+	typings        []sentTyping
+	reactions      []sentReaction
 }
 
 type sentMessage struct {
@@ -32,6 +34,17 @@ type sentMessage struct {
 
 type sentGroupMessage struct {
 	groupIDHex, text string
+}
+
+type sentGroupReaction struct {
+	groupIDHex, emoji, targetAuthor string
+	targetTS                        time.Time
+	remove                          bool
+}
+
+type sentGroupTyping struct {
+	groupIDHex string
+	action     signal.TypingAction
 }
 
 type sentReceipt struct {
@@ -68,6 +81,26 @@ func (f *fakeClient) SendGroup(_ context.Context, masterKey []byte, text string)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.groupSends = append(f.groupSends, sentGroupMessage{groupIDHex: fmt.Sprintf("%x", masterKey), text: text})
+	return signal.Receipt{Timestamp: time.Now()}, nil
+}
+
+func (f *fakeClient) SendGroupReaction(_ context.Context, masterKey []byte, emoji, targetAuthor string, targetTS time.Time, remove bool) (signal.Receipt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.groupReactions = append(f.groupReactions, sentGroupReaction{
+		groupIDHex:   fmt.Sprintf("%x", masterKey),
+		emoji:        emoji,
+		targetAuthor: targetAuthor,
+		targetTS:     targetTS,
+		remove:       remove,
+	})
+	return signal.Receipt{Timestamp: time.Now()}, nil
+}
+
+func (f *fakeClient) SendGroupTyping(_ context.Context, masterKey []byte, action signal.TypingAction) (signal.Receipt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.groupTypings = append(f.groupTypings, sentGroupTyping{groupIDHex: fmt.Sprintf("%x", masterKey), action: action})
 	return signal.Receipt{Timestamp: time.Now()}, nil
 }
 
@@ -124,6 +157,22 @@ func (f *fakeClient) Reactions() []sentReaction {
 	defer f.mu.Unlock()
 	out := make([]sentReaction, len(f.reactions))
 	copy(out, f.reactions)
+	return out
+}
+
+func (f *fakeClient) GroupReactions() []sentGroupReaction {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]sentGroupReaction, len(f.groupReactions))
+	copy(out, f.groupReactions)
+	return out
+}
+
+func (f *fakeClient) GroupTypings() []sentGroupTyping {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]sentGroupTyping, len(f.groupTypings))
+	copy(out, f.groupTypings)
 	return out
 }
 
@@ -413,12 +462,12 @@ func TestOpenRequiresStores(t *testing.T) {
 	}
 }
 
-// groupMsgEv is like msgEv but includes a group ID.
-func groupMsgEv(sender, groupID, body string) *signal.MessageEvent {
+// groupMsgEv is like msgEv but includes a group ID (sender/body fixed for tests).
+func groupMsgEv(groupID string) *signal.MessageEvent {
 	return &signal.MessageEvent{
-		Sender:    sender,
+		Sender:    "alice",
 		GroupID:   groupID,
-		Body:      body,
+		Body:      "hi",
 		Timestamp: time.Now(),
 	}
 }
@@ -433,7 +482,7 @@ func TestDMScopeFiltersGroupMessages(t *testing.T) {
 		return nil
 	})
 	cancel, wait := runBot(t, b)
-	fc.events <- groupMsgEv("alice", "group-id-abc", "hi")
+	fc.events <- groupMsgEv("group-id-abc")
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 	_ = wait()
@@ -479,7 +528,7 @@ func TestGroupScopeAllowsGroupMessages(t *testing.T) {
 		return nil
 	})
 	cancel, wait := runBot(t, b)
-	fc.events <- groupMsgEv("alice", "group-id-abc", "hi")
+	fc.events <- groupMsgEv("group-id-abc")
 	wg.Wait()
 	cancel()
 	_ = wait()
@@ -775,27 +824,75 @@ func TestMessageReactSendsReaction(t *testing.T) {
 	}
 }
 
-func TestMessageReactInGroupReturnsError(t *testing.T) {
+func TestMessageReactInGroupUsesSendGroupReaction(t *testing.T) {
 	fc := newFakeClient()
 	b := Wrap(fc)
 	var done sync.WaitGroup
 	done.Add(1)
 	var reactErr error
+	groupID := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
 		defer done.Done()
 		reactErr = m.React(ctx, "👍")
 		return nil
 	})
 	cancel, wait := runBot(t, b)
-	fc.events <- groupMsgEv("alice", "g1", "hi")
+	ev := groupMsgEv(groupID)
+	fc.events <- ev
 	done.Wait()
 	cancel()
 	_ = wait()
-	if !errors.Is(reactErr, ErrReplyNotSupportedInGroup) {
-		t.Errorf("reactErr = %v", reactErr)
+	if reactErr != nil {
+		t.Fatalf("reactErr = %v", reactErr)
+	}
+	got := fc.GroupReactions()
+	if len(got) != 1 || got[0].emoji != "👍" || got[0].targetAuthor != "alice" || got[0].remove {
+		t.Errorf("groupReactions = %+v", got)
 	}
 	if len(fc.Reactions()) != 0 {
-		t.Error("group react should not send")
+		t.Error("group react should not use 1:1 SendReaction")
+	}
+}
+
+func TestMessageTypingInGroupUsesSendGroupTyping(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var done sync.WaitGroup
+	done.Add(1)
+	groupID := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		return m.Typing(ctx, signal.TypingStarted)
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- groupMsgEv(groupID)
+	done.Wait()
+	cancel()
+	_ = wait()
+	got := fc.GroupTypings()
+	if len(got) != 1 || got[0].action != signal.TypingStarted {
+		t.Errorf("groupTypings = %+v", got)
+	}
+}
+
+func TestMessageMarkReadInGroupSendsReceiptToAuthor(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var done sync.WaitGroup
+	done.Add(1)
+	groupID := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		return m.MarkRead(ctx)
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- groupMsgEv(groupID)
+	done.Wait()
+	cancel()
+	_ = wait()
+	got := fc.Receipts()
+	if len(got) != 1 || got[0].kind != signal.ReceiptRead || got[0].to != "alice" {
+		t.Errorf("receipts = %+v", got)
 	}
 }
 

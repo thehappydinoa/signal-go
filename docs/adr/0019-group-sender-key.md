@@ -42,9 +42,7 @@ sessions.
 4. **`bot.Message.Reply`** in groups decodes `GroupID` (hex master key) and
    calls `SendGroup`.
 
-5. **Deferred:** group send endorsement tokens (preferred server auth for
-   multi-recipient), persistent sender-key / distribution-ID storage in fsstore,
-   group reactions/typing/receipts.
+5. **Deferred:** persistent sender-key / distribution-ID storage in fsstore.
 
 ## Consequences
 
