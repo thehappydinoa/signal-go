@@ -35,8 +35,8 @@ Signal's storage service exposes:
      `joinFromInviteLink`) or pending request (`AddMemberPendingAdminApproval`)
      using the linked account's profile key + expiring credential presentation.
 
-4. **Deferred:** group log sync (`GET /v2/groups/logs/{version}`) and inbound
-   P2P `groupChange` application remain open.
+4. **Deferred:** inbound P2P `groupChange` application in the receive pipeline.
+   Group log sync shipped in [ADR 0024](./0024-group-log-sync.md).
 
 ## Consequences
 

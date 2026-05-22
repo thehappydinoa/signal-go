@@ -101,7 +101,7 @@ the "Link this device?" prompt; we won't yet complete the link).
       `SendReaction`). Inbound receipts continue to surface as
       `*ReceiptEvent` from the existing receive pipeline.
 
-## Phase 5 — Groups v2 **(done except log sync)**
+## Phase 5 — Groups v2 **(done)**
 
 - [x] zkgroup credential cache (server params + auth credentials)
 - [x] Group master key handling, GroupSecretParams
@@ -123,7 +123,8 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Profile-key presentation member decode; persistent group distribution UUIDs
       ([ADR 0022](docs/adr/0022-phase5-finish.md)).
 - [x] Persistent group send endorsement cache ([ADR 0023](docs/adr/0023-gse-persist-invite-join.md)).
-- [ ] Group log sync (`GET /v2/groups/logs/{version}`) — deferred ([ADR 0023](docs/adr/0023-gse-persist-invite-join.md)).
+- [x] Group log sync (`GET /v2/groups/logs/{version}`) — snapshot-based
+      ([ADR 0024](docs/adr/0024-group-log-sync.md)).
 
 ## Phase 6 — Bot framework **(in progress)**
 

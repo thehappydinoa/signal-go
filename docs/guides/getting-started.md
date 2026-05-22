@@ -257,6 +257,16 @@ grp, err := client.JoinGroupViaInviteLink(ctx, "https://signal.group/#...")
 When the link requires admin approval, [JoinGroupViaInviteLink] adds the local
 user to the pending list instead of full membership.
 
+Catch up from a known revision without a full refetch:
+
+```go
+grp, err := client.SyncGroup(ctx, masterKey, knownRevision)
+page, err := client.FetchGroupLogs(ctx, masterKey, signal.GroupLogsFetchOptions{
+    FromRevision: knownRevision,
+    IncludeLastState: true,
+})
+```
+
 ### Groups v2 (control messages)
 
 React and typing in groups use the same sender-key multi-recipient path as
@@ -291,9 +301,8 @@ See [ADR 0021](../adr/0021-group-control-messages.md) and
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): core group features done; group log sync remains.
-  See [ADR 0018](../adr/0018-groups-v2-bootstrap.md) through
-  [ADR 0023](../adr/0023-gse-persist-invite-join.md).
+- **Groups v2** (Phase 5): done. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md)
+  through [ADR 0024](../adr/0024-group-log-sync.md).
 - **Bot framework** (Phase 6): wizard sugar + group helpers shipped. See
   [ADR 0008](../adr/0008-bot-framework.md) and [ADR 0022](../adr/0022-phase5-finish.md).
 
