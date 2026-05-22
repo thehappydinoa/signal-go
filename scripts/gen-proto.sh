@@ -25,6 +25,7 @@ declare -A PACKAGES=(
   [StorageService.proto]=storagepb
   [StickerResources.proto]=stickerpb
   [DeviceName.proto]=devicenamepb
+  [Backup.proto]=backuppbg
 )
 
 # Build the protoc --go_opt=M<filename>=<importpath>;<pkg> argument set so each

@@ -60,16 +60,23 @@ enable link-and-sync when calling [`signal.Link`](../../pkg/signal/link.go)
 from library code:
 
 ```go
+db, _ := sqlstore.OpenWithPassphrase("./.signal-data", passphrase)
 linked, err := signal.Link(ctx, signal.LinkOptions{
-    OnURL:      printURL,
-    Store:      store,
-    LinkAndSync: true, // advertises backup3; polls transfer archive after link
+    OnURL:             printURL,
+    Store:             db,
+    LinkAndSync:       true,
+    SignalStores:      db.SignalStores(),
+    BackupImportStore: db, // imports contact identity keys + group master keys
 })
-if linked.Sync != nil && linked.Sync.Validated {
-    // v1: archive passed libsignal validation; store import is not yet implemented.
-    _ = linked.Sync.ArchiveBytes
+if linked.Sync != nil && linked.Sync.Imported {
+    // Contacts/groups are persisted; profile keys load on signal.Open.
+    _ = linked.Sync.ImportStats
 }
 ```
+
+Import covers contact identity keys, profile keys, and group master keys.
+Full chat history (`ChatItem` frames) is not imported yet — see
+[ADR 0031](../adr/0031-transfer-archive-frame-import.md).
 
 The primary may respond with `CONTINUE_WITHOUT_UPLOAD` (link proceeds
 without history) or `RELINK_REQUESTED` (start linking again).

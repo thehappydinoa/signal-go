@@ -101,6 +101,10 @@ type OpenOptions struct {
 	// device requests a storage-manifest fetch-latest sync.
 	AutoSyncStorage bool
 
+	// BackupImportStore loads contact/group entries imported during
+	// link-and-sync into the client's profile-key and list caches.
+	BackupImportStore store.BackupImportStore
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -261,6 +265,7 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		return nil, fmt.Errorf("signal.Open: %w", err)
 	}
 	c.conn = conn
+	c.loadImportedBackupData(opts.BackupImportStore)
 	return c, nil
 }
 
