@@ -54,7 +54,7 @@ jobs:
       # Build (or restore-from-cache) just like the main CI does.
       - id: version
         run: |
-          v=$(grep -oP 'LIBSIGNAL_VERSION="\$\{LIBSIGNAL_VERSION:-\K[^"}]+' scripts/build-libsignal.sh)
+          v=$(sed -n 's/^LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-\([^}]*\)}".*/\1/p' scripts/build-libsignal.sh)
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - id: cache
