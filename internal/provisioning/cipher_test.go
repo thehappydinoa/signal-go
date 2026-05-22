@@ -195,7 +195,7 @@ func TestPKCS7UnpadRejectsBadPadding(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := pkcs7Unpad(tc.in, aes.BlockSize); err == nil {
+			if _, err := pkcs7Unpad(tc.in); err == nil {
 				t.Errorf("expected error")
 			}
 		})
@@ -215,7 +215,7 @@ func TestPKCS7RoundTrip(t *testing.T) {
 		if len(padded)%aes.BlockSize != 0 {
 			t.Errorf("not block-aligned: %d", len(padded))
 		}
-		out, err := pkcs7Unpad(padded, aes.BlockSize)
+		out, err := pkcs7Unpad(padded)
 		if err != nil {
 			t.Errorf("pkcs7Unpad: %v", err)
 			continue

@@ -64,6 +64,6 @@ func FuzzPKCS7Unpad(f *testing.F) {
 	f.Add(make([]byte, 32))
 	f.Add([]byte{0x42, 0x00})
 	f.Fuzz(func(t *testing.T, data []byte) {
-		_, _ = pkcs7Unpad(data, 16)
+		_, _ = pkcs7Unpad(data)
 	})
 }

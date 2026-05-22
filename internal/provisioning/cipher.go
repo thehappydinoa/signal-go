@@ -126,17 +126,22 @@ func aesCBCDecrypt(key, iv, ciphertext []byte) ([]byte, error) {
 	}
 	plaintext := make([]byte, len(ciphertext))
 	cipher.NewCBCDecrypter(block, iv).CryptBlocks(plaintext, ciphertext)
-	return pkcs7Unpad(plaintext, aes.BlockSize)
+	return pkcs7Unpad(plaintext)
 }
 
-// pkcs7Unpad removes RFC 5652 §6.3 padding. It rejects any malformed padding
-// (zero pad byte, pad byte > block size, mismatching tail bytes). The check
-// is constant-time over the maximum possible pad length to avoid leaking
-// padding info via timing.
-func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
+// pkcs7Unpad removes RFC 5652 §6.3 padding for the AES block size. It
+// rejects any malformed padding (zero pad byte, pad byte > 16,
+// mismatching tail bytes). The check is constant-time over the maximum
+// possible pad length to avoid leaking padding info via timing.
+//
+// Block size is fixed to [aes.BlockSize] because the provisioning cipher
+// is the only consumer; if a second consumer ever wants a different
+// block size, lift this into an explicit parameter again.
+func pkcs7Unpad(data []byte) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, errors.New("pkcs7: empty plaintext")
 	}
+	const blockSize = aes.BlockSize
 	padLen := int(data[len(data)-1])
 	if padLen == 0 || padLen > blockSize || padLen > len(data) {
 		return nil, errors.New("pkcs7: invalid padding")

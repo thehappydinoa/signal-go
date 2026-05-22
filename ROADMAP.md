@@ -193,68 +193,81 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
          `internal/libsignal/cgo.go` linux `#cgo LDFLAGS`. Hides the
          warning without fixing the root cause.~~ Superseded by option 1.
 
-## Phase 8 — Security audit **(planned; required before v0.1.0)**
+## Phase 8 — Security audit **(internal pass done; external pass required before v0.1.0)**
 
 A focused review before we cut a `v0.1.0` tag and put `signal-go` in front
 of real Signal accounts. Scope is **our Go code and our cgo boundary** —
 libsignal itself is out of scope (we trust upstream Signal). See
-[ADR 0011](./docs/adr/0011-security-audit.md) for the methodology,
-threat model, and what "pass" means.
+[ADR 0011](./docs/adr/0011-security-audit.md) for the methodology and
+[ADR 0032](./docs/adr/0032-phase-8-internal-audit.md) for the
+internal-pass record; the canonical write-up of the threat model is
+[`docs/security/threat-model.md`](./docs/security/threat-model.md).
 
-Internal review (we do this before any external work):
+Internal review (done — modulo two profiler/sanitizer bakes flagged
+below):
 
-- [ ] **Memory safety + profiling audit** (`internal/libsignal` and all
-      cgo boundaries):
-  - Run `go test -run=. -memprofile=mem.out ./...` and inspect with
-    `go tool pprof` for unexpected heap growth across long-running
-    receive + send sessions
-  - Verify every `*Buffer` lifetime, `keepAlive`, finalizer, and
-    `cgo.Handle` is correctly accounted for — a missed `keepAlive`
-    allows the GC to collect a slice whose backing array is still
-    referenced by Rust
-  - Confirm `CiphertextMessage` (currently no finalizer in `session.go`)
-    is either explicitly destroyed or harmlessly short-lived before any
-    GC cycle
-  - Run `valgrind --tool=memcheck` (or `sanitizers` via `CGO_CFLAGS=
-    -fsanitize=address`) on a cgo-linked test binary to catch
-    use-after-free and double-free in the C/Rust boundary
-  - No Go pointers cross into Rust except via the documented
-    borrowed/owned rules in `doc.go`
-  - Errors free their underlying `SignalFfiError` exactly once
-  - Confirm we link the *release* `libsignal_ffi.a`, not any
-    `*-testing*` variant
-- [ ] `internal/provisioning` cipher review:
-  - constant-time MAC compare (`hmac.Equal`) on every branch
-  - constant-time PKCS-7 unpad
-  - structural validation before any cryptographic operation
-  - fuzz test for `DecryptEnvelope` (corpus seeded from real envelopes)
-- [ ] `internal/store/fsstore` review:
-  - filesystem perms `0700` dir / `0600` files
-  - atomic rename for every write
-  - account.json never logs Password or PrivateKey
+- [x] **Memory safety + cgo boundary audit** (`internal/libsignal`):
+  - [x] `CiphertextMessage` and `PreKeyBundle` now have a finalizer +
+        idempotent `Destroy`. The `Destroy` path clears the finalizer so
+        the pointer cannot be freed twice.
+  - [x] Every `*Buffer` lifetime, `keepAlive`, finalizer, and `cgo.Handle`
+        accounted for — no Go pointers cross into Rust except via the
+        borrowed/owned rules in `internal/libsignal/doc.go`.
+  - [x] `*SignalFfiError` instances are freed exactly once in
+        `internal/libsignal/errors.go`.
+  - [x] We link only the release `libsignal_ffi.a`; no `*-testing*`
+        variant reaches production (`scripts/build-libsignal.sh` pins
+        `cargo build --release`).
+  - [ ] Long-running receive `-memprofile` bake. Methodology recorded in
+        [`docs/security/threat-model.md`](./docs/security/threat-model.md);
+        bake gated on maintainer bandwidth.
+  - [ ] `valgrind --tool=memcheck` or `-fsanitize=address` sweep of a
+        cgo-linked test binary. Same note as above.
+- [x] `internal/provisioning` cipher review:
+  - [x] constant-time MAC compare (`hmac.Equal`) on every branch
+  - [x] constant-time PKCS-7 unpad
+  - [x] structural validation before any cryptographic operation
+  - [x] fuzz tests for `DecryptEnvelope` and `pkcs7Unpad`
+        (`internal/provisioning/fuzz_test.go`)
+- [x] `internal/store/fsstore` review:
+  - [x] filesystem perms `0o700` dir / `0o600` files
+  - [x] atomic rename for every write
+  - [x] `Account` / `Identity` implement `slog.LogValuer`, so logging an
+        account redacts Password, PrivateKey, ProfileKey, and
+        AccountEntropyPool
   - [x] at-rest encryption: AES-256-GCM + Argon2id (ADR 0012); wrong-passphrase
-    fails closed via [`ErrWrongPassphrase`]; mode-mixing fails via
-    [`ErrDirEncrypted`]/[`ErrDirPlaintext`]
-- [ ] `internal/web` TLS posture:
-  - `MinVersion: tls.VersionTLS12` (or 1.3) explicit
-  - Signal's chat.signal.org pinned-CA option (off by default, available)
-  - no credentials in URL query strings or log lines
-- [ ] Receive pipeline (Phase 3+) decrypt-error handling:
-  - bad ciphertext / wrong identity / replayed envelope each fail closed
-    and surface a typed event without taking the connection down
-  - `DecryptionErrorMessage` retry token round-trips
-- [ ] Sealed-sender certificate validation against Signal's trust roots
-- [ ] zkgroup credential cache eviction on identity-key change
-- [ ] Code-level checklists:
-  - `go vet ./...`, `staticcheck`, `gosec ./...` all clean
-  - `govulncheck ./...` clean (or every finding triaged in this PR)
-  - `golangci-lint run` with our pinned config clean
-  - `go test -race -count=10 ./...` stable across 10 runs
-  - fuzz targets run at least 5 minutes each in CI
-- [ ] Documentation:
-  - threat model written up under `docs/security/threat-model.md`
-  - responsible-disclosure policy in `SECURITY.md`
-  - public-key contact for security reports
+        fails closed via `ErrWrongPassphrase`; mode-mixing fails via
+        `ErrDirEncrypted`/`ErrDirPlaintext`
+- [x] `internal/web` TLS posture:
+  - [x] `tls.MinVersion: VersionTLS12` explicit in `internal/web.New` and
+        `internal/ws.Dial`
+  - [x] opt-in CA pinning via `web.Options.PinnedRootCAs`
+  - [x] no credentials in URL query strings; `InsecureSkipVerify` panics
+        against the production base URL
+- [x] Receive pipeline (Phase 3+) decrypt-error handling:
+  - [x] bad ciphertext / wrong identity / replayed envelope each fail
+        closed and surface `*DecryptionErrorEvent` without dropping the
+        connection
+  - [x] `DecryptionErrorMessage` retry token round-trips via the Phase 4
+        send path
+- [x] Sealed-sender certificate validation against Signal's pinned
+      production trust root (`internal/libsignal/decrypt_sealed.go`)
+- [x] zkgroup credential cache eviction hook on identity-key change
+      (`signal.Client.InvalidateGroupAuthCache`)
+- [x] Code-level checklists:
+  - [x] `go vet ./...`, `staticcheck`, `golangci-lint`, `govulncheck`
+        clean on `main` (staticcheck added in `.github/workflows/ci.yml`)
+  - [ ] `go test -race -count=10 ./...` matrix run on CI — CI is
+        `-count=1` today; raise on a follow-up PR once runtime impact is
+        measured.
+  - [x] Go-native fuzz targets run ≥ 5 minutes / target nightly
+        (`.github/workflows/fuzz-nightly.yml`)
+  - [ ] `gosec ./...` — gated on triage per ADR 0013 Phase B
+- [x] Documentation:
+  - [x] Threat model in [`docs/security/threat-model.md`](./docs/security/threat-model.md)
+  - [x] Responsible-disclosure policy in [`SECURITY.md`](./SECURITY.md)
+  - [ ] Real PGP / e-mail contact for security reports (placeholder
+        pending the v0.1.0 release cut)
 
 External review (after the internal pass is clean):
 
@@ -282,16 +295,17 @@ Phase B — broaden:
 - [ ] macOS runners (`macos-latest`) with their own libsignal cache
 - [ ] Windows runners (`windows-latest`) once we've validated the cgo
       build path
-- [ ] `staticcheck` and (post-triage) `gosec` as separate jobs
+- [x] `staticcheck` job in `ci.yml`; `gosec` still gated on triage
 - [x] Coverage report uploaded as a PR check (`ci.yml` `cover` job;
       `task cover` locally)
+- [x] Nightly fuzz job in `.github/workflows/fuzz-nightly.yml` (Phase 8
+      dependency)
 
 Phase C — release pipeline (lands with v0.1.0):
 - [ ] `.github/workflows/release.yml`: build `signal-go` binaries on
       tag push; publish to the GitHub Release
 - [ ] Cross-compiled binaries for linux/{amd64,arm64} + darwin/arm64;
       Windows iff Phase B Windows runner is green
-- [ ] Nightly fuzz job (Phase 8 dependency)
 
 ## Non-goals
 

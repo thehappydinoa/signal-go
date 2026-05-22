@@ -1,8 +1,9 @@
 # Security
 
 Short version of [ADR 0011](./adr/0011-security-audit.md) and
-[ADR 0012](./adr/0012-encrypted-store.md). If you're reporting a
-vulnerability, jump to [Reporting](#reporting).
+[ADR 0012](./adr/0012-encrypted-store.md). For the full Phase-8
+threat model see [`docs/security/threat-model.md`](./security/threat-model.md).
+If you're reporting a vulnerability, jump to [Reporting](#reporting).
 
 ## Threat model
 
@@ -68,19 +69,28 @@ security properties we care about. See [ADR 0009](./adr/0009-licensing.md).
 
 ## Audit status
 
-Pre-alpha. We have **not yet** had an external audit. The Phase 8
-checklist in the [roadmap](../ROADMAP.md#phase-8--security-audit-planned-required-before-v010)
-is what we'll satisfy before cutting `v0.1.0`.
+Pre-alpha. We have **not yet** had an external audit. The Phase-8
+internal-review checklist in the
+[roadmap](../ROADMAP.md#phase-8--security-audit-planned-required-before-v010)
+is what we satisfy before cutting `v0.1.0`. The internal pass is
+documented in [ADR 0032](./adr/0032-phase-8-internal-audit.md);
+[`docs/security/threat-model.md`](./security/threat-model.md) is the
+canonical write-up.
 
 ## Reporting
 
-Please **do not** open GitHub issues for security problems.
+Please **do not** open GitHub issues for security problems. The
+canonical disclosure policy lives at [`SECURITY.md`](../SECURITY.md);
+the short version:
 
-- E-mail: security@thehappydinoa.example (placeholder — update before public release)
-- PGP fingerprint: (placeholder — paste your key fingerprint here)
+1. Preferred: open a private advisory via GitHub Private Vulnerability
+   Reporting.
+2. Alternate: e-mail `security@thehappydinoa.example` *(placeholder —
+   update before tagging v0.1.0)*. PGP public key fingerprint and
+   key-server URL also placeholders pending the v0.1.0 release.
 
-We aim to acknowledge within 72 hours and triage within a week. Once a
-fix is ready, we'll coordinate disclosure with you.
+We acknowledge within 72 hours and triage within a week. Once a fix is
+ready, we coordinate disclosure with you (default 90 days from triage).
 
 If you would prefer Signal as the contact channel, mention it in your
 email and we'll switch.
