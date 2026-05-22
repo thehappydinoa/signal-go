@@ -33,10 +33,7 @@ func (c *Client) LeaveGroup(ctx context.Context, masterKey []byte) error {
 		return err
 	}
 	masterKeyHex := hex.EncodeToString(masterKey)
-	c.groupEndorseMu.Lock()
-	delete(c.groupEndorsements, masterKeyHex)
-	delete(c.groupSecretParams, masterKeyHex)
-	c.groupEndorseMu.Unlock()
+	c.deleteGroupSendEndorsements(masterKeyHex)
 	c.groupDistMu.Lock()
 	delete(c.groupDistID, masterKeyHex)
 	c.groupDistMu.Unlock()
@@ -200,6 +197,38 @@ func (c *Client) patchGroup(
 		return nil, fmt.Errorf("signal: patch group: %w", err)
 	}
 
+	var resp groupspb.GroupChangeResponse
+	if err := proto.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("signal: decode patch response: %w", err)
+	}
+	if resp.GetGroupChange() == nil {
+		return nil, errors.New("signal: patch returned empty group change")
+	}
+	return &resp, nil
+}
+
+func (c *Client) patchGroupWithInvite(
+	ctx context.Context,
+	secretParams [libsignal.GroupSecretParamsLen]byte,
+	inviteLinkPassword []byte,
+	actions []byte,
+) (*groupspb.GroupChangeResponse, error) {
+	if c.storageWebc == nil {
+		return nil, errors.New("signal: Client was opened without groups storage")
+	}
+	publicParams, err := libsignal.GroupSecretParamsPublicParams(secretParams)
+	if err != nil {
+		return nil, err
+	}
+	authHeader, err := c.groupsV2AuthHeader(ctx, secretParams, publicParams)
+	if err != nil {
+		return nil, err
+	}
+	passB64 := group.InviteLinkPasswordBase64(inviteLinkPassword)
+	raw, err := c.storageWebc.PatchGroupWithInvite(ctx, authHeader, passB64, actions)
+	if err != nil {
+		return nil, fmt.Errorf("signal: patch group with invite: %w", err)
+	}
 	var resp groupspb.GroupChangeResponse
 	if err := proto.Unmarshal(raw, &resp); err != nil {
 		return nil, fmt.Errorf("signal: decode patch response: %w", err)

@@ -37,8 +37,9 @@ membership changes.
    - After role change, a group update `DataMessage` notifies peers (revision +
      optional serialized `GroupChange`)
 
-5. **Deferred:** invite-link join, group log sync (`GET /v2/groups/logs/{version}`),
-   persistent endorsement cache in fsstore.
+5. **Deferred:** group log sync (`GET /v2/groups/logs/{version}`) and inbound
+   P2P group-change application. Persistent GSE cache and invite-link join
+   shipped in [ADR 0023](./0023-gse-persist-invite-join.md).
 
 ## Consequences
 
