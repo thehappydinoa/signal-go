@@ -1,5 +1,7 @@
 version: '3'
 
+dotenv: ['.env']
+
 vars:
   LIBSIGNAL_VERSION: v0.94.1
   GOFLAGS: -trimpath
