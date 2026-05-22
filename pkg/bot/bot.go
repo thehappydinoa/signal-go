@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/store"
@@ -39,6 +40,9 @@ type ErrorHandler func(ctx context.Context, ev signal.Event, err error)
 type Client interface {
 	Events() <-chan signal.Event
 	Send(ctx context.Context, recipient, text string) (signal.Receipt, error)
+	SendReceipt(ctx context.Context, recipient string, kind signal.ReceiptType, timestamps []time.Time) (signal.Receipt, error)
+	SendTyping(ctx context.Context, recipient string, action signal.TypingAction) (signal.Receipt, error)
+	SendReaction(ctx context.Context, recipient, emoji, targetAuthor string, targetTimestamp time.Time, remove bool) (signal.Receipt, error)
 	Close() error
 }
 
@@ -59,10 +63,12 @@ type Bot struct {
 	cli Client
 	log *slog.Logger
 
-	mu           sync.RWMutex
-	middleware   []MiddlewareFunc
-	textHandlers []textHandler
-	closed       bool
+	mu               sync.RWMutex
+	middleware       []MiddlewareFunc
+	textHandlers     []textHandler
+	reactionHandlers []reactionHandler
+	editHandlers     []editHandler
+	closed           bool
 
 	onError ErrorHandler
 }
@@ -159,17 +165,25 @@ func (b *Bot) Run(ctx context.Context) error {
 // the account, etc.).
 func (b *Bot) Underlying() Client { return b.cli }
 
-// dispatch routes one event through the registered handlers.
-// Currently we only dispatch [*signal.MessageEvent]; other event
-// types are silently ignored at this layer — bots that want them can
-// reach down via [Bot.Client] and consume the raw Events channel.
+// dispatch routes one event through the registered handlers. Bot
+// dispatches [*signal.MessageEvent], [*signal.ReactionEvent], and
+// [*signal.EditMessageEvent]; other event types are silently ignored
+// at this layer — bots that want them can reach down via
+// [Bot.Underlying] and consume the raw Events channel.
 func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
-	msgEv, ok := ev.(*signal.MessageEvent)
-	if !ok {
-		return
+	switch e := ev.(type) {
+	case *signal.MessageEvent:
+		b.dispatchMessage(ctx, e)
+	case *signal.ReactionEvent:
+		b.dispatchReaction(ctx, e)
+	case *signal.EditMessageEvent:
+		b.dispatchEdit(ctx, e)
 	}
+}
+
+func (b *Bot) dispatchMessage(ctx context.Context, ev *signal.MessageEvent) {
 	m := &Message{
-		event: msgEv,
+		event: ev,
 		bot:   b,
 	}
 	b.mu.RLock()
@@ -179,7 +193,7 @@ func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 	b.mu.RUnlock()
 
 	for _, h := range handlers {
-		matches, matched := h.matcher.match(msgEv, m)
+		matches, matched := h.matcher.match(ev, m)
 		if !matched {
 			continue
 		}
@@ -190,13 +204,61 @@ func (b *Bot) dispatch(ctx context.Context, ev signal.Event) {
 			continue
 		}
 		if err != nil {
-			if onErr != nil {
-				onErr(ctx, ev, err)
-			} else {
-				b.log.Warn("bot handler error", "err", err)
-			}
+			b.handleErr(ctx, ev, err, onErr)
 		}
 		return
+	}
+}
+
+func (b *Bot) dispatchReaction(ctx context.Context, ev *signal.ReactionEvent) {
+	r := &Reaction{event: ev, bot: b}
+	b.mu.RLock()
+	handlers := append([]reactionHandler(nil), b.reactionHandlers...)
+	onErr := b.onError
+	b.mu.RUnlock()
+
+	for _, h := range handlers {
+		if !h.matcher.match(ev) {
+			continue
+		}
+		err := h.run(ctx, r)
+		if errors.Is(err, ErrPass) {
+			continue
+		}
+		if err != nil {
+			b.handleErr(ctx, ev, err, onErr)
+		}
+		return
+	}
+}
+
+func (b *Bot) dispatchEdit(ctx context.Context, ev *signal.EditMessageEvent) {
+	e := &Edit{event: ev, bot: b}
+	b.mu.RLock()
+	handlers := append([]editHandler(nil), b.editHandlers...)
+	onErr := b.onError
+	b.mu.RUnlock()
+
+	for _, h := range handlers {
+		if !h.matcher.match(ev) {
+			continue
+		}
+		err := h.run(ctx, e)
+		if errors.Is(err, ErrPass) {
+			continue
+		}
+		if err != nil {
+			b.handleErr(ctx, ev, err, onErr)
+		}
+		return
+	}
+}
+
+func (b *Bot) handleErr(ctx context.Context, ev signal.Event, err error, onErr ErrorHandler) {
+	if onErr != nil {
+		onErr(ctx, ev, err)
+	} else {
+		b.log.Warn("bot handler error", "err", err)
 	}
 }
 
@@ -292,4 +354,145 @@ type textHandler struct {
 	matcher    matcher
 	run        HandlerFunc
 	middleware []MiddlewareFunc
+}
+
+// ReactionHandlerFunc is invoked for each inbound reaction that
+// matches a registered [Bot.OnReaction] / [Bot.OnAnyReaction] handler.
+type ReactionHandlerFunc func(ctx context.Context, r *Reaction) error
+
+// EditHandlerFunc is invoked for each inbound edit that matches a
+// registered [Bot.OnEdit] handler.
+type EditHandlerFunc func(ctx context.Context, e *Edit) error
+
+type reactionMatcher struct {
+	emoji     string // empty = match any emoji
+	includeRm bool   // include "remove" reactions even when emoji is set
+	dmOnly    bool
+	groupOnly bool
+	fromACI   string
+}
+
+func (m reactionMatcher) match(ev *signal.ReactionEvent) bool {
+	if m.dmOnly && ev.GroupID != "" {
+		return false
+	}
+	if m.groupOnly && ev.GroupID == "" {
+		return false
+	}
+	if m.fromACI != "" && ev.Sender != m.fromACI {
+		return false
+	}
+	if !m.includeRm && ev.Remove {
+		return false
+	}
+	if m.emoji != "" && ev.Emoji != m.emoji {
+		return false
+	}
+	return true
+}
+
+type reactionHandler struct {
+	matcher reactionMatcher
+	run     ReactionHandlerFunc
+}
+
+type editMatcher struct {
+	dmOnly    bool
+	groupOnly bool
+	fromACI   string
+}
+
+func (m editMatcher) match(ev *signal.EditMessageEvent) bool {
+	if m.dmOnly && ev.GroupID != "" {
+		return false
+	}
+	if m.groupOnly && ev.GroupID == "" {
+		return false
+	}
+	if m.fromACI != "" && ev.Sender != m.fromACI {
+		return false
+	}
+	return true
+}
+
+type editHandler struct {
+	matcher editMatcher
+	run     EditHandlerFunc
+}
+
+// ReactionMatch is the public matcher returned by [Bot.OnReaction] and
+// [Bot.OnAnyReaction]. Narrow scope with DM/Group/From; finalize with Do.
+type ReactionMatch struct {
+	bot *Bot
+	m   reactionMatcher
+}
+
+// DM narrows the match to direct (non-group) reactions.
+func (h ReactionMatch) DM() ReactionMatch { h.m.dmOnly = true; return h }
+
+// Group narrows the match to group-thread reactions.
+func (h ReactionMatch) Group() ReactionMatch { h.m.groupOnly = true; return h }
+
+// From narrows the match to reactions whose sender ACI equals aci.
+func (h ReactionMatch) From(aci string) ReactionMatch { h.m.fromACI = aci; return h }
+
+// IncludeRemovals reverses the default behavior of skipping "remove"
+// reactions: with this set, a removal of the matching emoji (or any
+// emoji, for OnAnyReaction) also fires the handler. The handler can
+// distinguish via [Reaction.IsRemoval].
+func (h ReactionMatch) IncludeRemovals() ReactionMatch { h.m.includeRm = true; return h }
+
+// Do registers handler for the current matcher.
+func (h ReactionMatch) Do(handler ReactionHandlerFunc) {
+	h.bot.mu.Lock()
+	defer h.bot.mu.Unlock()
+	h.bot.reactionHandlers = append(h.bot.reactionHandlers, reactionHandler{
+		matcher: h.m,
+		run:     handler,
+	})
+}
+
+// EditMatch is the public matcher returned by [Bot.OnEdit].
+type EditMatch struct {
+	bot *Bot
+	m   editMatcher
+}
+
+// DM narrows the match to direct (non-group) edits.
+func (h EditMatch) DM() EditMatch { h.m.dmOnly = true; return h }
+
+// Group narrows the match to group-thread edits.
+func (h EditMatch) Group() EditMatch { h.m.groupOnly = true; return h }
+
+// From narrows the match to edits whose sender ACI equals aci.
+func (h EditMatch) From(aci string) EditMatch { h.m.fromACI = aci; return h }
+
+// Do registers handler for the current matcher.
+func (h EditMatch) Do(handler EditHandlerFunc) {
+	h.bot.mu.Lock()
+	defer h.bot.mu.Unlock()
+	h.bot.editHandlers = append(h.bot.editHandlers, editHandler{
+		matcher: h.m,
+		run:     handler,
+	})
+}
+
+// OnReaction registers a handler for reactions whose emoji matches the
+// argument exactly. Removals (Reaction.Remove == true) are skipped by
+// default; chain [ReactionMatch.IncludeRemovals] to receive them.
+func (b *Bot) OnReaction(emoji string) ReactionMatch {
+	return ReactionMatch{bot: b, m: reactionMatcher{emoji: emoji}}
+}
+
+// OnAnyReaction registers a handler for any inbound reaction
+// (regardless of emoji). Removals are skipped by default — chain
+// [ReactionMatch.IncludeRemovals] to receive them.
+func (b *Bot) OnAnyReaction() ReactionMatch {
+	return ReactionMatch{bot: b}
+}
+
+// OnEdit registers a handler for inbound message edits. Use
+// chained scope helpers (DM/Group/From) to narrow.
+func (b *Bot) OnEdit() EditMatch {
+	return EditMatch{bot: b}
 }
