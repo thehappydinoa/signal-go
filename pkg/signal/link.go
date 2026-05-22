@@ -31,7 +31,13 @@ type LinkOptions struct {
 	// transfer archive after registration completes.
 	LinkAndSync bool
 
-	// UserAgent reported in X-Signal-Agent headers. Defaults to "signal-go".
+	// ClientProfile selects a realistic User-Agent preset when UserAgent is
+	// empty. Default: [UserAgentSignalGo].
+	ClientProfile UserAgentProfile
+	// UserAgentOptions overrides app/OS version strings in ClientProfile.
+	UserAgentOptions UserAgentOptions
+	// UserAgent is sent in User-Agent and X-Signal-Agent headers. When empty,
+	// formatted from ClientProfile.
 	UserAgent string
 
 	// DeviceName is shown in the user's "Linked devices" list. If empty,
@@ -90,8 +96,9 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	}
 
 	// Step 1: QR handshake (provisioning ws + decrypt envelope).
+	ua := resolveUserAgent(opts.ClientProfile, opts.UserAgent, opts.UserAgentOptions)
 	sess, err := provisioning.Link(ctx, provisioning.Options{
-		UserAgent:    opts.UserAgent,
+		UserAgent:    ua,
 		URL:          opts.ProvisioningURL,
 		OnURL:        opts.OnURL,
 		Capabilities: opts.provisioningCapabilities(),
@@ -123,7 +130,7 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	}
 
 	// Step 4: assemble + send the link request.
-	webc := web.New(opts.APIBaseURL, opts.UserAgent)
+	webc := web.New(opts.APIBaseURL, ua)
 	req := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
 	resp, err := webc.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
 	if err != nil {

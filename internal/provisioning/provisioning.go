@@ -13,6 +13,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	provpb "github.com/thehappydinoa/signal-go/internal/proto/gen/provisioningpb"
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
+	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	"github.com/thehappydinoa/signal-go/internal/ws"
 )
 
@@ -73,7 +74,7 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 		opts.URL = DefaultProvisioningURL
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = "signal-go"
+		opts.UserAgent = useragent.Resolve(useragent.SignalGo, "", useragent.Options{})
 	}
 	if opts.Capabilities == nil {
 		opts.Capabilities = defaultCapabilities

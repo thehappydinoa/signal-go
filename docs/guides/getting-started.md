@@ -74,6 +74,24 @@ if linked.Sync != nil && linked.Sync.Validated {
 The primary may respond with `CONTINUE_WITHOUT_UPLOAD` (link proceeds
 without history) or `RELINK_REQUESTED` (start linking again).
 
+### Client User-Agent presets
+
+By default the CLI sends `signal-go` in `User-Agent` and `X-Signal-Agent`.
+For linked-device flows you can mimic upstream clients:
+
+```sh
+# Linux desktop linked device (recommended on servers/VMs)
+./bin/signal-go link -store ./.signal-data -client desktop-linux
+
+# Other presets: android, ios, desktop-macos, desktop-windows
+./bin/signal-go link -client android -store ./.signal-data
+```
+
+Library callers set [`signal.LinkOptions.ClientProfile`](../../pkg/signal/link.go)
+(or [`signal.OpenOptions.ClientProfile`](../../pkg/signal/client.go)) to
+`signal.UserAgentDesktopLinux`, `signal.UserAgentAndroid`, etc. Pass a
+non-empty `UserAgent` string to override the preset entirely.
+
 ## Receive messages (library API)
 
 After linking, use `signal.Open` to load the account and start

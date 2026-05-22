@@ -23,8 +23,12 @@ type Options struct {
 
 	ChatURL    string
 	APIBaseURL string
-	UserAgent  string
-	Logger     *slog.Logger
+	// ClientProfile selects a realistic User-Agent preset when UserAgent is
+	// empty. Default: [signal.UserAgentSignalGo].
+	ClientProfile    signal.UserAgentProfile
+	UserAgentOptions signal.UserAgentOptions
+	UserAgent        string
+	Logger           *slog.Logger
 
 	// ConvoStore persists per-conversation state surfaced via
 	// [Bot.Convo] and [Message.Convo]. Defaults to an in-memory
@@ -113,6 +117,8 @@ func Open(ctx context.Context, opts Options) (*Bot, error) {
 		SignalStores:         opts.SignalStores,
 		ChatURL:              opts.ChatURL,
 		APIBaseURL:           opts.APIBaseURL,
+		ClientProfile:        opts.ClientProfile,
+		UserAgentOptions:     opts.UserAgentOptions,
 		UserAgent:            opts.UserAgent,
 		Logger:               log,
 		AutoSyncGroupUpdates: opts.AutoSyncGroupUpdates,

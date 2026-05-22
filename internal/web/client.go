@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 )
 
 // DefaultBaseURL is Signal's production REST endpoint.
@@ -34,7 +36,7 @@ func New(baseURL, userAgent string) *Client {
 		baseURL = DefaultBaseURL
 	}
 	if userAgent == "" {
-		userAgent = "signal-go"
+		userAgent = useragent.Resolve(useragent.SignalGo, "", useragent.Options{})
 	}
 	return &Client{
 		BaseURL:    baseURL,

@@ -61,7 +61,13 @@ type OpenOptions struct {
 	// GroupsStorageURL overrides the Groups v2 storage REST endpoint.
 	// Default: [web.DefaultGroupsStorageURL].
 	GroupsStorageURL string
-	// UserAgent is sent in X-Signal-Agent headers. Default: "signal-go".
+	// ClientProfile selects a realistic User-Agent preset when UserAgent is
+	// empty. Default: [UserAgentSignalGo].
+	ClientProfile UserAgentProfile
+	// UserAgentOptions overrides app/OS version strings in ClientProfile.
+	UserAgentOptions UserAgentOptions
+	// UserAgent is sent in User-Agent and X-Signal-Agent headers. When empty,
+	// formatted from ClientProfile.
 	UserAgent string
 	// Logger for structured diagnostics. Default: slog.Default().
 	Logger *slog.Logger
@@ -199,15 +205,16 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 
 	events := make(chan Event, opts.eventBufferSize())
 	log := opts.logger()
+	ua := resolveUserAgent(opts.ClientProfile, opts.UserAgent, opts.UserAgentOptions)
 
 	// One shared web client: prekey maintenance (receive side) and Send
 	// (this PR) both use it.
-	webc := web.New(opts.APIBaseURL, opts.UserAgent)
+	webc := web.New(opts.APIBaseURL, ua)
 	storageURL := opts.GroupsStorageURL
 	if storageURL == "" {
 		storageURL = web.DefaultGroupsStorageURL
 	}
-	storageWebc := web.New(storageURL, opts.UserAgent)
+	storageWebc := web.New(storageURL, ua)
 
 	dec := opts.Decryptor
 	if dec == nil {
@@ -246,7 +253,7 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		Password:  acct.Password,
 		Handler:   c.handleInbound,
 		URL:       opts.ChatURL,
-		UserAgent: opts.UserAgent,
+		UserAgent: ua,
 		Logger:    log,
 		DialFunc:  opts.DialFunc,
 	})
