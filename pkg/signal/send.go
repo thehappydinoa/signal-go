@@ -28,20 +28,120 @@ import (
 // devices), Send transparently refreshes the affected sessions and retries
 // once. If the retry also fails the error is returned to the caller.
 func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, error) {
-	if c.webc == nil || c.stores == nil {
-		return Receipt{}, errors.New("signal.Send: Client was opened without send-side dependencies")
-	}
 	if recipientACI == "" {
 		return Receipt{}, errors.New("signal.Send: empty recipient")
 	}
 	if text == "" {
 		return Receipt{}, errors.New("signal.Send: empty body")
 	}
-
-	ts := time.Now().UnixMilli()
-	contentBytes, err := buildDataMessageContent(text, uint64(ts))
+	ts := uint64(time.Now().UnixMilli())
+	contentBytes, err := buildDataMessageContent(text, ts)
 	if err != nil {
 		return Receipt{}, err
+	}
+	return c.sendContent(ctx, recipientACI, contentBytes, ts, deliveryOpts{Urgent: true})
+}
+
+// SendReceipt sends a receipt (delivery, read, or viewed) for one or
+// more previously-received messages identified by their sender-side
+// timestamps.
+//
+// Receipts are sent via the same PUT /v1/messages/{recipientACI} pipe as
+// regular content, but with online=false, urgent=false, silent=true so
+// the recipient doesn't get a fresh notification.
+func (c *Client) SendReceipt(ctx context.Context, recipientACI string, kind ReceiptType, timestamps []time.Time) (Receipt, error) {
+	if recipientACI == "" {
+		return Receipt{}, errors.New("signal.SendReceipt: empty recipient")
+	}
+	if len(timestamps) == 0 {
+		return Receipt{}, errors.New("signal.SendReceipt: no timestamps")
+	}
+	ts := uint64(time.Now().UnixMilli())
+	contentBytes, err := buildReceiptContent(kind, timestamps)
+	if err != nil {
+		return Receipt{}, err
+	}
+	return c.sendContent(ctx, recipientACI, contentBytes, ts, deliveryOpts{Urgent: false, Silent: true})
+}
+
+// SendTyping sends a typing indicator (started or stopped). 1:1 only;
+// group typing requires a group identifier and the Phase 5 send path.
+//
+// Typing indicators are urgent=false, online=true (don't store offline),
+// silent=true.
+func (c *Client) SendTyping(ctx context.Context, recipientACI string, action TypingAction) (Receipt, error) {
+	if recipientACI == "" {
+		return Receipt{}, errors.New("signal.SendTyping: empty recipient")
+	}
+	ts := uint64(time.Now().UnixMilli())
+	contentBytes, err := buildTypingContent(action, ts, nil)
+	if err != nil {
+		return Receipt{}, err
+	}
+	return c.sendContent(ctx, recipientACI, contentBytes, ts, deliveryOpts{Urgent: false, Online: true, Silent: true})
+}
+
+// SendReaction sends a reaction (or removes one) to a previously-received
+// message. The target is identified by (targetAuthorACI, targetTimestamp).
+//
+// Pass remove=true to clear a prior reaction; the emoji string in that
+// case may be empty.
+func (c *Client) SendReaction(
+	ctx context.Context,
+	recipientACI string,
+	emoji string,
+	targetAuthorACI string,
+	targetTimestamp time.Time,
+	remove bool,
+) (Receipt, error) {
+	if recipientACI == "" {
+		return Receipt{}, errors.New("signal.SendReaction: empty recipient")
+	}
+	if targetAuthorACI == "" {
+		return Receipt{}, errors.New("signal.SendReaction: empty target author")
+	}
+	if targetTimestamp.IsZero() {
+		return Receipt{}, errors.New("signal.SendReaction: zero target timestamp")
+	}
+	if !remove && emoji == "" {
+		return Receipt{}, errors.New("signal.SendReaction: emoji required when not removing")
+	}
+	ts := uint64(time.Now().UnixMilli())
+	contentBytes, err := buildReactionContent(emoji, targetAuthorACI, targetTimestamp, remove, ts)
+	if err != nil {
+		return Receipt{}, err
+	}
+	return c.sendContent(ctx, recipientACI, contentBytes, ts, deliveryOpts{Urgent: true})
+}
+
+// deliveryOpts controls SendMessageRequest top-level flags and per-
+// envelope flags that depend on the message kind (content vs receipt
+// vs typing vs reaction).
+type deliveryOpts struct {
+	// Urgent prompts the recipient device to wake. True for content/
+	// reactions; false for receipts/typing.
+	Urgent bool
+	// Online tells the server "drop if recipient offline". True for
+	// typing indicators (no point storing them).
+	Online bool
+	// Silent suppresses recipient-side notifications for this envelope.
+	// True for receipts/typing.
+	Silent bool
+}
+
+// sendContent is the shared payload-delivery pipeline used by Send,
+// SendReceipt, SendTyping, and SendReaction. It handles device
+// discovery, session establishment, sealed-sender selection,
+// 409/410 retry, and basic-auth fallback.
+func (c *Client) sendContent(
+	ctx context.Context,
+	recipientACI string,
+	contentBytes []byte,
+	ts uint64,
+	opts deliveryOpts,
+) (Receipt, error) {
+	if c.webc == nil || c.stores == nil {
+		return Receipt{}, errors.New("signal.Send: Client was opened without send-side dependencies")
 	}
 	padded := padContent(contentBytes)
 	creds := c.credentials()
@@ -51,20 +151,17 @@ func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, 
 		return Receipt{}, err
 	}
 
-	// Use sealed sender when the recipient's UAK is known; fall back to
-	// basic auth otherwise. Sealed sender requires a valid sender cert from
-	// the server in addition to the UAK.
 	c.mu.Lock()
 	uak := c.knownUAKs[recipientACI]
 	c.mu.Unlock()
 
 	if len(uak) > 0 {
 		if cert, certErr := c.cachedSenderCert(ctx, creds); certErr == nil {
-			return c.deliverSealed(ctx, creds, recipientACI, addrs, padded, uint64(ts), cert, uak)
+			return c.deliverSealed(ctx, creds, recipientACI, addrs, padded, ts, opts, cert, uak)
 		}
 		c.log.Debug("sender cert unavailable; falling back to basic auth", "recipient", recipientACI)
 	}
-	return c.deliverBasicAuth(ctx, creds, recipientACI, addrs, padded, uint64(ts))
+	return c.deliverBasicAuth(ctx, creds, recipientACI, addrs, padded, ts, opts)
 }
 
 // deliverBasicAuth sends using HTTP Basic auth. The server sees the sender's ACI.
@@ -75,8 +172,9 @@ func (c *Client) deliverBasicAuth(
 	addrs []store.Address,
 	padded []byte,
 	ts uint64,
+	opts deliveryOpts,
 ) (Receipt, error) {
-	req, err := c.buildSendRequest(ts, addrs, padded)
+	req, err := c.buildSendRequest(ts, addrs, padded, opts)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -85,7 +183,7 @@ func (c *Client) deliverBasicAuth(
 		if err != nil {
 			return Receipt{}, err
 		}
-		req, err = c.buildSendRequest(ts, addrs, padded)
+		req, err = c.buildSendRequest(ts, addrs, padded, opts)
 		if err != nil {
 			return Receipt{}, err
 		}
@@ -105,10 +203,11 @@ func (c *Client) deliverSealed(
 	addrs []store.Address,
 	padded []byte,
 	ts uint64,
+	opts deliveryOpts,
 	cert *libsignal.SenderCertificate,
 	uak []byte,
 ) (Receipt, error) {
-	req, err := c.buildSealedSendRequest(ts, addrs, padded, cert)
+	req, err := c.buildSealedSendRequest(ts, addrs, padded, cert, opts)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -117,7 +216,7 @@ func (c *Client) deliverSealed(
 		if err != nil {
 			return Receipt{}, err
 		}
-		req, err = c.buildSealedSendRequest(ts, addrs, padded, cert)
+		req, err = c.buildSealedSendRequest(ts, addrs, padded, cert, opts)
 		if err != nil {
 			return Receipt{}, err
 		}
@@ -371,7 +470,7 @@ func (c *Client) sealedEncryptForDevice(addr store.Address, padded []byte, cert 
 
 // buildSealedSendRequest assembles a [web.SendMessageRequest] using sealed-
 // sender USMC envelopes (type 6 = UNIDENTIFIED_SENDER).
-func (c *Client) buildSealedSendRequest(ts uint64, addrs []store.Address, padded []byte, cert *libsignal.SenderCertificate) (web.SendMessageRequest, error) {
+func (c *Client) buildSealedSendRequest(ts uint64, addrs []store.Address, padded []byte, cert *libsignal.SenderCertificate, opts deliveryOpts) (web.SendMessageRequest, error) {
 	msgs := make([]web.MessageEnvelope, 0, len(addrs))
 	for _, addr := range addrs {
 		usmcBytes, regID, err := c.sealedEncryptForDevice(addr, padded, cert)
@@ -383,18 +482,20 @@ func (c *Client) buildSealedSendRequest(ts uint64, addrs []store.Address, padded
 			DestinationDeviceID:       addr.DeviceID,
 			DestinationRegistrationID: regID,
 			Content:                   base64.StdEncoding.EncodeToString(usmcBytes),
+			Silent:                    opts.Silent,
 		})
 	}
 	return web.SendMessageRequest{
 		Timestamp: ts,
-		Urgent:    true,
+		Urgent:    opts.Urgent,
+		Online:    opts.Online,
 		Messages:  msgs,
 	}, nil
 }
 
 // buildSendRequest encrypts padded content for every address and
 // assembles the [web.SendMessageRequest].
-func (c *Client) buildSendRequest(ts uint64, addrs []store.Address, padded []byte) (web.SendMessageRequest, error) {
+func (c *Client) buildSendRequest(ts uint64, addrs []store.Address, padded []byte, opts deliveryOpts) (web.SendMessageRequest, error) {
 	msgs := make([]web.MessageEnvelope, 0, len(addrs))
 	for _, addr := range addrs {
 		envBytes, msgType, destRegID, err := c.encryptForDevice(addr, padded)
@@ -406,11 +507,13 @@ func (c *Client) buildSendRequest(ts uint64, addrs []store.Address, padded []byt
 			DestinationDeviceID:       addr.DeviceID,
 			DestinationRegistrationID: destRegID,
 			Content:                   base64.StdEncoding.EncodeToString(envBytes),
+			Silent:                    opts.Silent,
 		})
 	}
 	return web.SendMessageRequest{
 		Timestamp: ts,
-		Urgent:    true,
+		Urgent:    opts.Urgent,
+		Online:    opts.Online,
 		Messages:  msgs,
 	}, nil
 }
@@ -498,6 +601,86 @@ func buildDataMessageContent(text string, tsMillis uint64) ([]byte, error) {
 				Timestamp: &timestamp,
 			},
 		},
+	}
+	return proto.Marshal(content)
+}
+
+// buildReceiptContent wraps the receipt kind + acknowledged-message
+// timestamps in a signalservice.Content containing a ReceiptMessage.
+func buildReceiptContent(kind ReceiptType, timestamps []time.Time) ([]byte, error) {
+	var rt sspb.ReceiptMessage_Type
+	switch kind {
+	case ReceiptDelivery:
+		rt = sspb.ReceiptMessage_DELIVERY
+	case ReceiptRead:
+		rt = sspb.ReceiptMessage_READ
+	case ReceiptViewed:
+		rt = sspb.ReceiptMessage_VIEWED
+	default:
+		return nil, fmt.Errorf("signal.SendReceipt: unknown receipt type %d", int(kind))
+	}
+	tsMillis := make([]uint64, len(timestamps))
+	for i, t := range timestamps {
+		if t.IsZero() {
+			return nil, fmt.Errorf("signal.SendReceipt: zero timestamp at index %d", i)
+		}
+		tsMillis[i] = uint64(t.UnixMilli())
+	}
+	rm := &sspb.ReceiptMessage{
+		Type:      &rt,
+		Timestamp: tsMillis,
+	}
+	content := &sspb.Content{
+		Content: &sspb.Content_ReceiptMessage{ReceiptMessage: rm},
+	}
+	return proto.Marshal(content)
+}
+
+// buildTypingContent wraps a TypingMessage in Content. groupID is
+// reserved for the Phase 5 group-typing path; pass nil for 1:1.
+func buildTypingContent(action TypingAction, tsMillis uint64, groupID []byte) ([]byte, error) {
+	var ta sspb.TypingMessage_Action
+	switch action {
+	case TypingStarted:
+		ta = sspb.TypingMessage_STARTED
+	case TypingStopped:
+		ta = sspb.TypingMessage_STOPPED
+	default:
+		return nil, fmt.Errorf("signal.SendTyping: unknown typing action %d", int(action))
+	}
+	timestamp := tsMillis
+	tm := &sspb.TypingMessage{
+		Action:    &ta,
+		Timestamp: &timestamp,
+		GroupId:   groupID,
+	}
+	content := &sspb.Content{
+		Content: &sspb.Content_TypingMessage{TypingMessage: tm},
+	}
+	return proto.Marshal(content)
+}
+
+// buildReactionContent wraps a Reaction inside a DataMessage envelope
+// (Signal carries reactions inside DataMessage, not as a top-level
+// Content variant).
+func buildReactionContent(emoji, targetAuthorACI string, targetTS time.Time, remove bool, tsMillis uint64) ([]byte, error) {
+	emo := emoji
+	target := targetAuthorACI
+	rem := remove
+	targetTSMillis := uint64(targetTS.UnixMilli())
+	timestamp := tsMillis
+	r := &sspb.DataMessage_Reaction{
+		Emoji:               &emo,
+		Remove:              &rem,
+		TargetAuthorAci:     &target,
+		TargetSentTimestamp: &targetTSMillis,
+	}
+	dm := &sspb.DataMessage{
+		Timestamp: &timestamp,
+		Reaction:  r,
+	}
+	content := &sspb.Content{
+		Content: &sspb.Content_DataMessage{DataMessage: dm},
 	}
 	return proto.Marshal(content)
 }
