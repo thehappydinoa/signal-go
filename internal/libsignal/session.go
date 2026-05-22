@@ -65,17 +65,26 @@ func (b *PreKeyBundle) constPtr() C.SignalConstPointerPreKeyBundle {
 
 func wrapPreKeyBundle(raw C.SignalMutPointerPreKeyBundle) *PreKeyBundle {
 	b := &PreKeyBundle{raw: raw}
-	// Bundles are short-lived; caller destroys explicitly or we finalize.
+	runtime.SetFinalizer(b, func(b *PreKeyBundle) {
+		if b.raw.raw == nil {
+			return
+		}
+		_ = checkError(C.signal_pre_key_bundle_destroy(b.raw))
+		b.raw.raw = nil
+	})
 	return b
 }
 
-// Destroy frees the bundle. Idempotent via nil guard in finalizer pattern.
+// Destroy frees the bundle. Idempotent: subsequent calls are no-ops.
+// Callers should still rely on the finalizer for short-lived bundles;
+// Destroy exists so long-lived bundles can free promptly.
 func (b *PreKeyBundle) Destroy() {
 	if b == nil || b.raw.raw == nil {
 		return
 	}
 	_ = checkError(C.signal_pre_key_bundle_destroy(b.raw))
 	b.raw.raw = nil
+	runtime.SetFinalizer(b, nil)
 }
 
 // ProcessPreKeyBundle establishes a session with the bundle's owner.
@@ -133,6 +142,12 @@ func EncryptMessage(
 }
 
 // CiphertextMessage is an encrypted outbound/inbound payload wrapper.
+//
+// The Rust allocation is freed by a [runtime.SetFinalizer]; callers may
+// also free explicitly via [CiphertextMessage.Destroy] when the lifetime
+// is well-defined (e.g. a single send call). Once Destroy has run, further
+// method calls are no-ops returning an error rather than dereferencing a
+// freed pointer.
 type CiphertextMessage struct {
 	raw C.SignalMutPointerCiphertextMessage
 }
@@ -143,6 +158,9 @@ func (m *CiphertextMessage) constPtr() C.SignalConstPointerCiphertextMessage {
 
 // Type returns whisper/prekey/plaintext/sender-key.
 func (m *CiphertextMessage) Type() (CiphertextMessageType, error) {
+	if m == nil || m.raw.raw == nil {
+		return 0, errors.New("libsignal.CiphertextMessage.Type: nil or destroyed")
+	}
 	var t C.uint8_t
 	if err := checkError(C.signal_ciphertext_message_type(&t, m.constPtr())); err != nil {
 		return 0, err
@@ -152,6 +170,9 @@ func (m *CiphertextMessage) Type() (CiphertextMessageType, error) {
 
 // Serialize returns the wire encoding.
 func (m *CiphertextMessage) Serialize() ([]byte, error) {
+	if m == nil || m.raw.raw == nil {
+		return nil, errors.New("libsignal.CiphertextMessage.Serialize: nil or destroyed")
+	}
 	var buf C.SignalOwnedBuffer
 	if err := checkError(C.signal_ciphertext_message_serialize(&buf, m.constPtr())); err != nil {
 		return nil, err
@@ -159,8 +180,28 @@ func (m *CiphertextMessage) Serialize() ([]byte, error) {
 	return goBytesFromOwnedBuffer(buf), nil
 }
 
+// Destroy frees the underlying Rust allocation. Subsequent method calls
+// return an error rather than touching freed memory. Safe to call multiple
+// times.
+func (m *CiphertextMessage) Destroy() {
+	if m == nil || m.raw.raw == nil {
+		return
+	}
+	_ = checkError(C.signal_ciphertext_message_destroy(m.raw))
+	m.raw.raw = nil
+	runtime.SetFinalizer(m, nil)
+}
+
 func wrapCiphertextMessage(raw C.SignalMutPointerCiphertextMessage) *CiphertextMessage {
-	return &CiphertextMessage{raw: raw}
+	m := &CiphertextMessage{raw: raw}
+	runtime.SetFinalizer(m, func(m *CiphertextMessage) {
+		if m.raw.raw == nil {
+			return
+		}
+		_ = checkError(C.signal_ciphertext_message_destroy(m.raw))
+		m.raw.raw = nil
+	})
+	return m
 }
 
 // NewSignedPreKeyRecordBlob builds a SignedPreKeyRecord serialization for storage.

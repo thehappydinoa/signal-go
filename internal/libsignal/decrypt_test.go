@@ -168,4 +168,15 @@ func TestDecryptRoundTripPreKeyThenWhisper(t *testing.T) {
 	if string(got) != string(ptext) {
 		t.Fatalf("plaintext %q want %q", got, ptext)
 	}
+
+	// Phase-8 audit: CiphertextMessage.Destroy is idempotent and disables
+	// further use rather than dereferencing a freed pointer.
+	ct.Destroy()
+	ct.Destroy()
+	if _, err := ct.Serialize(); err == nil {
+		t.Fatal("Serialize after Destroy: want error, got nil")
+	}
+	if _, err := ct.Type(); err == nil {
+		t.Fatal("Type after Destroy: want error, got nil")
+	}
 }
