@@ -102,13 +102,37 @@ Go toolchain, and the `vcs.{revision,time,modified}` block that
 
 ### Provenance
 
-Every archive built from a real tag push is signed by Sigstore via
-[`actions/attest-build-provenance@v3`](https://github.com/actions/attest-build-provenance).
+Every archive built from a real tag push *can be* signed by Sigstore
+via [`actions/attest-build-provenance@v3`](https://github.com/actions/attest-build-provenance).
 The attestation lands on the GitHub Release run and is verifiable with
 `gh attestation verify <archive> --repo thehappydinoa/signal-go`. Dry-
 runs (`workflow_dispatch`) skip the attest step — Sigstore declines to
 attest non-tag refs anyway, and a dry-run shouldn't pollute the public
 transparency log.
+
+**Why "can be" rather than "is".** GitHub's Artifact Attestations
+feature [is not available for user-owned private repositories](https://docs.github.com/rest/repos/attestations#create-an-attestation):
+the API returns
+
+```
+Failed to persist attestation: Feature not available for
+user-owned private repositories. To enable this feature,
+please make this repository public.
+```
+
+`signal-go` is currently a user-owned private repo, so the attest
+step is gated behind an opt-in repo variable:
+`vars.ENABLE_BUILD_PROVENANCE == 'true'`. To enable:
+
+1. Make the repo public (or move it to an org plan that supports
+   attestations).
+2. Set the repo variable `ENABLE_BUILD_PROVENANCE` to `true` under
+   *Settings → Secrets and variables → Actions → Variables*.
+
+`continue-on-error: true` is belt-and-suspenders: even if the feature
+is enabled but a transient Sigstore issue surfaces, the rest of the
+release pipeline still produces archives + checksums on the draft
+release.
 
 ### Build-script changes
 
