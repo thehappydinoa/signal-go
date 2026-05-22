@@ -88,6 +88,9 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 		Body:            dm.GetBody(),
 		GroupID:         groupID,
 	}
+	for _, ap := range dm.GetAttachments() {
+		ev.Attachments = append(ev.Attachments, attachmentFromPointer(ap))
+	}
 	if dm.GetExpireTimer() != 0 {
 		ev.ExpiresIn = time.Duration(dm.GetExpireTimer()) * time.Second
 	}

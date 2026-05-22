@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
@@ -51,6 +52,27 @@ func (m *Message) Reply(ctx context.Context, text string) error {
 	}
 	_, err := m.bot.cli.Send(ctx, m.event.Sender, text)
 	return err
+}
+
+// ReplyAttachment sends a file attachment back to the sender (1:1) or group
+// thread (Groups v2).
+func (m *Message) ReplyAttachment(ctx context.Context, r io.Reader, contentType string) error {
+	opts := signal.SendAttachmentOptions{ContentType: contentType}
+	if m.IsGroup() {
+		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
+		if err != nil {
+			return err
+		}
+		_, err = m.bot.cli.SendGroupAttachment(ctx, masterKey, r, opts)
+		return err
+	}
+	_, err := m.bot.cli.SendAttachment(ctx, m.event.Sender, r, opts)
+	return err
+}
+
+// Attachments returns inbound attachment metadata from the message event.
+func (m *Message) Attachments() []signal.AttachmentMeta {
+	return m.event.Attachments
 }
 
 // React reacts to this message with the given emoji on the sender's

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"sync"
 	"testing"
@@ -26,6 +27,13 @@ type fakeClient struct {
 	receipts       []sentReceipt
 	typings        []sentTyping
 	reactions      []sentReaction
+	attachments    []sentAttachment
+}
+
+type sentAttachment struct {
+	to          string
+	contentType string
+	size        int
 }
 
 type sentMessage struct {
@@ -124,6 +132,22 @@ func (f *fakeClient) SendReaction(_ context.Context, to, emoji, targetAuthor str
 	defer f.mu.Unlock()
 	f.reactions = append(f.reactions, sentReaction{to: to, emoji: emoji, targetAuthor: targetAuthor, targetTS: targetTS, remove: remove})
 	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
+}
+
+func (f *fakeClient) SendAttachment(_ context.Context, to string, r io.Reader, opts signal.SendAttachmentOptions) (signal.Receipt, error) {
+	body, _ := io.ReadAll(r)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.attachments = append(f.attachments, sentAttachment{to: to, contentType: opts.ContentType, size: len(body)})
+	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
+}
+
+func (f *fakeClient) SendGroupAttachment(_ context.Context, _ []byte, r io.Reader, opts signal.SendAttachmentOptions) (signal.Receipt, error) {
+	body, _ := io.ReadAll(r)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.attachments = append(f.attachments, sentAttachment{contentType: opts.ContentType, size: len(body)})
+	return signal.Receipt{Timestamp: time.Now()}, nil
 }
 
 func (f *fakeClient) Close() error { close(f.events); return nil }
