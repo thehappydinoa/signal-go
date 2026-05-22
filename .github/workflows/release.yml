@@ -166,7 +166,7 @@ jobs:
         run: bash scripts/build-libsignal.sh
 
       # ---------------- Go ----------------
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
