@@ -113,6 +113,13 @@ func (s *inlineSignalStores) StoreSession(addr store.Address, blob []byte) error
 	return nil
 }
 
+func (s *inlineSignalStores) DeleteSession(addr store.Address) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, addr.String())
+	return nil
+}
+
 func (s *inlineSignalStores) LoadPreKey(id uint32) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
