@@ -367,6 +367,40 @@ client, err := signal.Open(ctx, signal.OpenOptions{
 
 See [ADR 0027](../adr/0027-storage-service-sync.md).
 
+### CDSI contact discovery
+
+Resolve E.164 phone numbers to Signal ACIs via CDSI (requires network access
+to Signal's contact discovery service):
+
+```go
+result, err := client.DiscoverContacts(ctx, []string{"+15551234567", "+441234567890"})
+for _, c := range result.Contacts {
+    fmt.Println(c.E164, c.ACI, c.PNI)
+}
+```
+
+Directory credentials are fetched automatically from `GET /v2/directory/auth`.
+See [ADR 0028](../adr/0028-cdsi-contact-discovery.md).
+
+### SQLite-backed store
+
+For production bots that must survive restarts with sessions and prekeys intact,
+use `internal/store/sqlstore` instead of `memstore` + `fsstore`:
+
+```go
+import "github.com/thehappydinoa/signal-go/internal/store/sqlstore"
+
+db, err := sqlstore.OpenWithPassphrase("./.signal-data", passphrase)
+// db implements account.Store
+// db.SignalStores() implements store.SignalStores
+client, err := signal.Open(ctx, signal.OpenOptions{
+    AccountStore: db,
+    SignalStores: db.SignalStores(),
+})
+```
+
+See [ADR 0029](../adr/0029-sqlite-backed-store.md).
+
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are

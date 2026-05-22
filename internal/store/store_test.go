@@ -10,6 +10,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
 	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
 	"github.com/thehappydinoa/signal-go/internal/store/memstore"
+	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
 )
 
 // validAccount returns an Account that passes Validate.
@@ -64,7 +65,18 @@ func stores(t *testing.T) map[string]account.Store {
 	return map[string]account.Store{
 		"memstore": memstore.New(),
 		"fsstore":  fs,
+		"sqlstore": mustSQLStore(t),
 	}
+}
+
+func mustSQLStore(t *testing.T) account.Store {
+	t.Helper()
+	s, err := sqlstore.Open(filepath.Join(t.TempDir(), "sql"))
+	if err != nil {
+		t.Fatalf("sqlstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s
 }
 
 func TestStoreLoadAccountWhenEmpty(t *testing.T) {

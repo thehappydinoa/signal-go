@@ -23,6 +23,7 @@ Everything else is stdlib. Current allowlist:
 | `google.golang.org/protobuf` | Required by protoc-gen-go output; considered ecosystem-core. |
 | `github.com/coder/websocket` | RFC 6455 client. **Zero transitive deps**, single maintainer, context-aware API, used in production by Cloudflare/Tailscale. We initially hand-rolled this (~250 LOC + tests, all green) but the maintenance burden of edge cases (close codes, fragmentation under load, permessage-deflate negotiation) isn't worth the small audit gain. |
 | `golang.org/x/crypto` | Go team's staging area for cryptographic primitives. No transitive non-stdlib deps. We use `argon2` for passphrase-based key derivation (ADR 0012). Effectively part of the standard library; same maintainers as `crypto/*`. |
+| `modernc.org/sqlite` | Pure-Go SQLite driver for the Phase 7 `internal/store/sqlstore` backend ([ADR 0029](./0029-sqlite-backed-store.md)). Avoids a second cgo dependency alongside libsignal. Transitive deps audited in ADR 0029. |
 
 - HTTP: `net/http`.
 - QR code rendering for the CLI demo: we'll print the `sgnl://` URL only
