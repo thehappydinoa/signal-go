@@ -127,6 +127,24 @@ func (c *Client) FetchGroup(ctx context.Context, masterKey []byte) (*Group, erro
 	return grp, nil
 }
 
+// InvalidateGroupAuthCache drops every cached zkgroup auth credential.
+//
+// Auth credentials are bound to the redemption day AND to our (ACI, PNI)
+// identity tuple. The cache is keyed only by the redemption day, so it
+// silently goes stale when the local PNI changes — typically after a
+// phone-number-change sync. Production code calls this from those
+// identity-change paths; callers can also invoke it explicitly after a
+// CHANGE_NUMBER sync or any identity-store rotation, per the Phase-8
+// audit checklist item "zkgroup credential cache eviction on
+// identity-key change".
+//
+// It is safe to call this even when there are no cached credentials.
+func (c *Client) InvalidateGroupAuthCache() {
+	c.groupAuthMu.Lock()
+	defer c.groupAuthMu.Unlock()
+	c.groupAuthCreds = nil
+}
+
 func (c *Client) groupsV2AuthHeader(
 	ctx context.Context,
 	secretParams [libsignal.GroupSecretParamsLen]byte,
