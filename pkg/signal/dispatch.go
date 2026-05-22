@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 )
 
@@ -64,6 +65,9 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 	}
 	if dm.GetExpireTimer() != 0 {
 		ev.ExpiresIn = time.Duration(dm.GetExpireTimer()) * time.Second
+	}
+	if pk := dm.GetProfileKey(); len(pk) == libsignal.ProfileKeyLen {
+		c.storeRecipientProfileKey(sender, pk)
 	}
 	c.emit(ev)
 }

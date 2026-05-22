@@ -1,0 +1,64 @@
+package web
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"net/http"
+)
+
+// VersionedProfileResponse is the JSON body of
+// GET /v1/profile/{aci}/{profileKeyVersion}. Encrypted fields are
+// standard base64; callers decrypt them with the profile key.
+type VersionedProfileResponse struct {
+	Name                           string `json:"name"`
+	About                          string `json:"about"`
+	AboutEmoji                     string `json:"aboutEmoji"`
+	Avatar                         string `json:"avatar"`
+	PaymentAddress                 string `json:"paymentAddress"`
+	PhoneNumberShare               string `json:"phoneNumberSharing"`
+	UnidentifiedAccess             string `json:"unidentifiedAccess"`
+	UnrestrictedUnidentifiedAccess bool   `json:"unrestrictedUnidentifiedAccess"`
+}
+
+// FetchVersionedProfile issues GET /v1/profile/{aci}/{profileKeyVersion}
+// with the Unidentified-Access-Key header set to base64(uak). The server
+// returns encrypted profile fields when the UAK matches the recipient's
+// profile key.
+func (c *Client) FetchVersionedProfile(
+	ctx context.Context,
+	aci, profileKeyVersion string,
+	uak []byte,
+) (*VersionedProfileResponse, error) {
+	if aci == "" {
+		return nil, errors.New("web.FetchVersionedProfile: aci required")
+	}
+	if profileKeyVersion == "" {
+		return nil, errors.New("web.FetchVersionedProfile: profileKeyVersion required")
+	}
+	if len(uak) != 16 {
+		return nil, fmt.Errorf("web.FetchVersionedProfile: uak length %d, want 16", len(uak))
+	}
+	var resp VersionedProfileResponse
+	if err := c.Do(ctx, Request{
+		Method: http.MethodGet,
+		Path:   fmt.Sprintf("/v1/profile/%s/%s", aci, profileKeyVersion),
+		Headers: http.Header{
+			"Unidentified-Access-Key": {base64.StdEncoding.EncodeToString(uak)},
+		},
+		Out: &resp,
+	}); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DecodeBase64Field decodes a nullable base64 profile field from the wire
+// JSON. Empty strings decode to nil without error.
+func DecodeBase64Field(b64 string) ([]byte, error) {
+	if b64 == "" {
+		return nil, nil
+	}
+	return DecodeBase64(b64)
+}

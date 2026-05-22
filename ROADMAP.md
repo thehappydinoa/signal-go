@@ -72,7 +72,7 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Prekey rotation on use; top-up endpoint
       (`internal/prekeymaint.Maintainer`, `PUT /v2/keys` after inbound prekey decrypt)
 
-## Phase 4 — Send 1:1 **(in progress)**
+## Phase 4 — Send 1:1 **(done)**
 
 - [x] Establish session: prekey bundle fetch (`GET /v2/keys/{aci}/{dev}`)
       → `ProcessPreKeyBundle` (`pkg/signal.Client.Send` first-call path)
@@ -89,10 +89,14 @@ the "Link this device?" prompt; we won't yet complete the link).
       + serialization; sender-cert fetch from `/v1/certificate/delivery`
       with 5-minute-headroom cache ([ADR 0015](docs/adr/0015-sealed-sender-encrypt.md)).
       Activated automatically once the recipient's UAK is provided via
-      `Client.SetRecipientUAK` (populated by profile fetch, Phase 5).
+      `Client.SetRecipientUAK` or derived from a known profile key
+      ([ADR 0017](docs/adr/0017-profile-fetch.md)).
 - [x] Unidentified-access certificate refresh + cache (sender cert cached
       in `Client.senderCert`; re-fetched when < 5 min from expiry)
-- [ ] Profile fetch (decrypt with profile key via libsignal `ProfileCipher`)
+- [x] Profile fetch: `GET /v1/profile/{aci}/{profileKeyVersion}` with
+      UAK header; decrypt name/about via ProfileCipher-compatible
+      AES-GCM-SIV ([ADR 0017](docs/adr/0017-profile-fetch.md)). Inbound
+      `DataMessage.profileKey` auto-derives UAK for sealed-sender send.
 - [x] Read/delivery receipts (`Client.SendReceipt`; also `SendTyping`,
       `SendReaction`). Inbound receipts continue to surface as
       `*ReceiptEvent` from the existing receive pipeline.
