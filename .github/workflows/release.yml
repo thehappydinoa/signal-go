@@ -1,0 +1,265 @@
+name: Release
+
+# Build and publish `signal-go` binaries on every tag push that looks like
+# a SemVer release tag (`v0.1.0`, `v1.2.3-rc1`, ...).
+#
+# `workflow_dispatch` lets a maintainer dry-run the matrix without
+# cutting a tag — when invoked manually the upload-to-release step is
+# skipped, so the artifacts are only kept on the workflow run (1-day
+# retention, see `dry_run` in the env block).
+#
+# See ADR 0033 for the release pipeline rationale.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Synthetic version tag for dry-run artifacts (e.g. v0.0.0-dryrun)'
+        required: false
+        default: 'v0.0.0-dryrun'
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # required by softprops/action-gh-release to upload assets
+
+env:
+  GO_VERSION: '1.25'
+  # Resolved version string used in archive names. `${{ github.ref_name }}`
+  # is the tag for `on.push.tags` events; manual dispatch falls back to the
+  # `tag` input.
+  RELEASE_VERSION: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.os_name }}/${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Keep going if a single platform fails; we still want the other
+      # archives published so a maintainer can ship a partial release if
+      # a stubborn platform breaks.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os_name: linux
+            arch: amd64
+            cargo_target: ''            # use host default (x86_64-unknown-linux-gnu)
+            cache_key_suffix: ubuntu-latest-x86_64
+            archive: tar.gz
+            experimental: false
+          - runner: ubuntu-24.04-arm
+            os_name: linux
+            arch: arm64
+            cargo_target: ''            # use host default (aarch64-unknown-linux-gnu)
+            cache_key_suffix: ubuntu-24.04-arm-aarch64
+            archive: tar.gz
+            experimental: false
+          - runner: macos-15-intel
+            os_name: darwin
+            arch: amd64
+            cargo_target: ''            # use host default (x86_64-apple-darwin)
+            cache_key_suffix: macos-15-intel-x86_64
+            archive: tar.gz
+            experimental: false
+          - runner: macos-latest
+            os_name: darwin
+            arch: arm64
+            cargo_target: ''            # use host default (aarch64-apple-darwin)
+            cache_key_suffix: macos-latest-aarch64
+            archive: tar.gz
+            experimental: false
+          - runner: windows-latest
+            os_name: windows
+            arch: amd64
+            cargo_target: x86_64-pc-windows-gnu
+            cache_key_suffix: windows-latest-x86_64-gnu
+            archive: zip
+            # Windows runs against MinGW-w64 so cgo can link the static
+            # archive. BoringSSL upstream prefers MSVC; mark this leg as
+            # experimental until we've shipped a clean release from it.
+            experimental: true
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pinned libsignal version
+        id: version
+        shell: bash
+        run: |
+          v=$(grep -oP 'LIBSIGNAL_VERSION="\$\{LIBSIGNAL_VERSION:-\K[^"}]+' scripts/build-libsignal.sh)
+          if [ -z "$v" ]; then
+            echo "Could not extract LIBSIGNAL_VERSION from scripts/build-libsignal.sh" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "libsignal pinned at: $v"
+
+      - name: Cache libsignal_ffi.a
+        id: cache-libsignal
+        uses: actions/cache@v5
+        with:
+          path: internal/libsignal/lib
+          key: libsignal-${{ steps.version.outputs.version }}-${{ matrix.cache_key_suffix }}-v1
+
+      # ---------------- Linux deps ----------------
+      - name: (Linux) Install protoc
+        if: matrix.os_name == 'linux' && steps.cache-libsignal.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      # ---------------- macOS deps ----------------
+      - name: (macOS) Install protoc + nasm
+        if: matrix.os_name == 'darwin' && steps.cache-libsignal.outputs.cache-hit != 'true'
+        run: |
+          brew install protobuf nasm
+
+      # ---------------- Windows deps ----------------
+      - name: (Windows) Install MSYS2 / MinGW-w64
+        if: matrix.os_name == 'windows' && steps.cache-libsignal.outputs.cache-hit != 'true'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-protobuf
+            mingw-w64-x86_64-nasm
+            git
+
+      - name: (Windows) Expose MinGW on PATH
+        if: matrix.os_name == 'windows'
+        shell: bash
+        run: |
+          # Put MSYS2's MinGW-w64 bin first so cgo + cargo build agree on
+          # the gcc/g++ that link the static archive.
+          echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
+          echo "C:/msys64/usr/bin" >> "$GITHUB_PATH"
+
+      # ---------------- Rust ----------------
+      - name: Install Rust toolchain
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.cargo_target }}
+
+      # ---------------- Build libsignal ----------------
+      - name: Build libsignal_ffi.a
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          LIBSIGNAL_VERSION: ${{ steps.version.outputs.version }}
+          CARGO_TARGET: ${{ matrix.cargo_target }}
+          # On cloud VMs clang can fail to find -lstdc++; force gcc.
+          CC: gcc
+          CXX: g++
+        run: bash scripts/build-libsignal.sh
+
+      # ---------------- Go ----------------
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build signal-go binary
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+          # On Windows we need to pin cgo to MinGW gcc; on linux/darwin
+          # the auto-detected toolchain is fine.
+          CC: ${{ matrix.os_name == 'windows' && 'gcc' || '' }}
+          CXX: ${{ matrix.os_name == 'windows' && 'g++' || '' }}
+        run: |
+          ext=""
+          if [ "${{ matrix.os_name }}" = "windows" ]; then ext=".exe"; fi
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w -X main.version=${RELEASE_VERSION}" \
+            -o "dist/signal-go${ext}" ./cmd/signal-go
+
+      - name: Smoke-test binary
+        shell: bash
+        run: |
+          ext=""
+          if [ "${{ matrix.os_name }}" = "windows" ]; then ext=".exe"; fi
+          "./dist/signal-go${ext}" --help
+
+      # ---------------- Package ----------------
+      - name: Package archive
+        id: package
+        shell: bash
+        run: |
+          name="signal-go-${RELEASE_VERSION}-${{ matrix.os_name }}-${{ matrix.arch }}"
+          stage="dist/${name}"
+          mkdir -p "${stage}"
+          if [ "${{ matrix.os_name }}" = "windows" ]; then
+            cp dist/signal-go.exe "${stage}/"
+          else
+            cp dist/signal-go "${stage}/"
+          fi
+          cp LICENSE NOTICE README.md "${stage}/"
+          cd dist
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            # 7z is pre-installed on windows-latest; produces a clean zip
+            # without absolute paths.
+            7z a -tzip "${name}.zip" "${name}" >/dev/null
+            sha256sum "${name}.zip" > "${name}.zip.sha256"
+            echo "archive_path=dist/${name}.zip" >> "$GITHUB_OUTPUT"
+            echo "sha256_path=dist/${name}.zip.sha256" >> "$GITHUB_OUTPUT"
+          else
+            tar -czf "${name}.tar.gz" "${name}"
+            shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256"
+            echo "archive_path=dist/${name}.tar.gz" >> "$GITHUB_OUTPUT"
+            echo "sha256_path=dist/${name}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: signal-go-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: |
+            ${{ steps.package.outputs.archive_path }}
+            ${{ steps.package.outputs.sha256_path }}
+          retention-days: 7
+          if-no-files-found: error
+
+    # `experimental` legs must not fail the matrix.
+    continue-on-error: ${{ matrix.experimental }}
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    # Tag pushes produce a real release; manual dispatch leaves artifacts
+    # on the workflow run only.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        id: collect
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sha256' \) -print -exec cp -v {} release/ \;
+          ls -la release/
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/*

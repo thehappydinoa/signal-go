@@ -292,9 +292,11 @@ Phase A — bootstrap (this PR):
 - [x] CI status badge in [`README.md`](./README.md)
 
 Phase B — broaden:
-- [ ] macOS runners (`macos-latest`) with their own libsignal cache
-- [ ] Windows runners (`windows-latest`) once we've validated the cgo
-      build path
+- [x] macOS runners (`macos-latest` arm64, `macos-15-intel` amd64) +
+      Windows runner (`windows-latest`, MinGW-w64) validated via the
+      release workflow's `workflow_dispatch` dry-run path
+      ([ADR 0033](./docs/adr/0033-release-pipeline.md)). Windows is
+      `experimental: true` until the first clean release.
 - [x] `staticcheck` job in `ci.yml`; `gosec` still gated on triage
 - [x] Coverage report uploaded as a PR check (`ci.yml` `cover` job;
       `task cover` locally)
@@ -302,10 +304,14 @@ Phase B — broaden:
       dependency)
 
 Phase C — release pipeline (lands with v0.1.0):
-- [ ] `.github/workflows/release.yml`: build `signal-go` binaries on
-      tag push; publish to the GitHub Release
-- [ ] Cross-compiled binaries for linux/{amd64,arm64} + darwin/arm64;
-      Windows iff Phase B Windows runner is green
+- [x] `.github/workflows/release.yml`: build `signal-go` binaries on
+      tag push; publish to a draft GitHub Release
+      ([ADR 0033](./docs/adr/0033-release-pipeline.md))
+- [x] Native-built binaries for linux/{amd64,arm64} +
+      darwin/{amd64,arm64} + windows/amd64 (Windows leg is
+      `experimental: true` until promoted)
+- [ ] Code signing (macOS Developer ID, Windows EV cert) — follow-up
+- [ ] Homebrew tap + Scoop manifest — post-v0.1.0 follow-up
 
 ## Non-goals
 
