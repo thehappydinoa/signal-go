@@ -41,11 +41,13 @@ Has full read/write on the wire to Signal's servers. Defence:
 - Callers can pin the trust store with `web.Options.PinnedRootCAs`
   ([ADR 0011 §"TLS posture"](../adr/0011-security-audit.md)) when their
   deployment policy requires it.
-- When the platform does not expose a usable system root pool (notably
-  cgo Windows binaries), [`internal/tlsroots`](../../internal/tlsroots/)
-  registers the Go team's embedded Mozilla NSS bundle via
-  `golang.org/x/crypto/x509roots/fallback` so default `RootCAs: nil`
-  verification still succeeds against Signal's public CAs.
+- Production `*.signal.org` hosts use Signal's **private** TLS root (vendored
+  `signal-messenger.cer`), not public CAs — see
+  [ADR 0034](../adr/0034-signal-tls-root-pinning.md) and
+  [Certifiably Fine](https://signal.org/blog/certifiably-fine/).
+- When the platform does not expose a usable system root pool (cgo Windows),
+  [`internal/tlsroots`](../../internal/tlsroots/) also registers Mozilla NSS
+  fallbacks via `golang.org/x/crypto/x509roots/fallback` for non-Signal hosts.
 - No credentials are ever placed in URL query strings. `Credentials.Header`
   emits an `Authorization: Basic …` value; the `req.Path` and
   `req.Query` arguments to `web.Client.Do` are scrubbed at the call site.

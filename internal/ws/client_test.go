@@ -18,13 +18,13 @@ import (
 
 func TestMergeTLSConfigEnforcesMinVersion(t *testing.T) {
 	// nil base → fresh config with MinVersion locked to 1.2.
-	got := mergeTLSConfig(nil)
+	got := mergeTLSConfig(nil, "chat.signal.org")
 	if got.MinVersion != MinTLSVersion {
 		t.Errorf("nil base: MinVersion = 0x%x, want 0x%x", got.MinVersion, MinTLSVersion)
 	}
 	// Caller TLS 1.0 is silently raised; ServerName preserved.
 	base := &tls.Config{ServerName: "chat.signal.org", MinVersion: tls.VersionTLS10}
-	got = mergeTLSConfig(base)
+	got = mergeTLSConfig(base, "chat.signal.org")
 	if got == base {
 		t.Error("mergeTLSConfig must return a clone, not the caller's config")
 	}
@@ -34,9 +34,15 @@ func TestMergeTLSConfigEnforcesMinVersion(t *testing.T) {
 	if got.ServerName != "chat.signal.org" {
 		t.Errorf("ServerName dropped: %q", got.ServerName)
 	}
+	if got.RootCAs == nil {
+		t.Error("chat.signal.org: expected Signal RootCAs pool")
+	}
 	// Caller TLS 1.3 stays as 1.3.
 	base = &tls.Config{MinVersion: tls.VersionTLS13}
-	got = mergeTLSConfig(base)
+	got = mergeTLSConfig(base, "example.com")
+	if got.RootCAs != nil {
+		t.Error("example.com: RootCAs should stay nil")
+	}
 	if got.MinVersion != tls.VersionTLS13 {
 		t.Errorf("high MinVersion: got 0x%x, want 0x%x", got.MinVersion, tls.VersionTLS13)
 	}

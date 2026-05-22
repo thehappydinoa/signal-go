@@ -13,6 +13,10 @@ A separate ADR — [`docs/adr/README.md`](./docs/adr/README.md) — tracks
 
 ### Fixed
 
+- TLS to `*.signal.org` now pins Signal's private root CA (vendored from
+  Signal-iOS `signal-messenger.cer`), not public WebPKI or Mozilla fallback
+  alone. Fixes `signal-go link` and REST/WebSocket calls when the OS/browser
+  lacks Signal's CA ([ADR 0034](./docs/adr/0034-signal-tls-root-pinning.md)).
 - Windows release binaries failed `signal-go link` with
   `tls: failed to verify certificate: x509: certificate signed by unknown
   authority` on the provisioning WebSocket. cgo/MinGW builds often ship

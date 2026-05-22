@@ -1,8 +1,12 @@
-// Package tlsroots registers Mozilla NSS-derived fallback X.509 roots via
-// [crypto/x509.SetFallbackRoots]. Go binaries linked with cgo on Windows
-// (and some container images) often cannot load the OS trust store, so
-// [tls.Config] with RootCAs nil would otherwise fail with "certificate signed
-// by unknown authority" against chat.signal.org.
+// Package tlsroots configures TLS trust for Signal service endpoints.
+//
+// Production hosts under *.signal.org use Signal's private TLS root (vendored
+// from Signal-iOS as signal-messenger.cer), not public WebPKI CAs — see
+// https://signal.org/blog/certifiably-fine/ and [ApplyRootCAs].
+//
+// A blank import of golang.org/x/crypto/x509roots/fallback still registers
+// Mozilla NSS roots for environments where the OS trust store is empty
+// (cgo Windows builds dialing non-Signal hosts).
 //
 // Import this package once per process (for example from [internal/ws] and
 // [internal/web]); Go runs package init only once.

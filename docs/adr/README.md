@@ -41,3 +41,4 @@ with a new ADR that links back to the one it replaces.
 | 0031 | Transfer archive frame import (v1)               | Accepted |
 | 0032 | Phase 8 internal security audit pass             | Accepted |
 | 0033 | Release pipeline (Linux, macOS, Windows)         | Accepted |
+| 0034 | Pin Signal private TLS root for *.signal.org     | Accepted |
