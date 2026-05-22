@@ -15,6 +15,22 @@ import (
 // an AccountEntropyPool.
 const SVRKeyLen = int(C.SignalSVR_KEY_LEN)
 
+// DeriveBackupKey derives the 32-byte backup key from an AccountEntropyPool.
+func DeriveBackupKey(accountEntropyPool string) ([BackupKeyLen]byte, error) {
+	var out [BackupKeyLen]byte
+	if accountEntropyPool == "" {
+		return out, errors.New("libsignal.DeriveBackupKey: empty account entropy pool")
+	}
+	cstr := C.CString(accountEntropyPool)
+	defer C.free(unsafe.Pointer(cstr))
+	var key [C.SignalBACKUP_KEY_LEN]C.uint8_t
+	if err := checkError(C.signal_account_entropy_pool_derive_backup_key(&key, cstr)); err != nil {
+		return out, err
+	}
+	copy(out[:], C.GoBytes(unsafe.Pointer(&key), C.int(BackupKeyLen)))
+	return out, nil
+}
+
 // DeriveSVRKey derives the 32-byte master key from an AccountEntropyPool
 // string via libsignal's signal_account_entropy_pool_derive_svr_key.
 func DeriveSVRKey(accountEntropyPool string) ([SVRKeyLen]byte, error) {

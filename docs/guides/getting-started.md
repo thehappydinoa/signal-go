@@ -53,6 +53,27 @@ envelope, generates ACI + PNI prekeys, registers via
 `PUT /v1/devices/link`, uploads one-time prekey batches, and persists
 the account under `./.signal-data/`.
 
+### Link-and-sync (message history transfer)
+
+To request the primary device upload message history during linking,
+enable link-and-sync when calling [`signal.Link`](../../pkg/signal/link.go)
+from library code:
+
+```go
+linked, err := signal.Link(ctx, signal.LinkOptions{
+    OnURL:      printURL,
+    Store:      store,
+    LinkAndSync: true, // advertises backup3; polls transfer archive after link
+})
+if linked.Sync != nil && linked.Sync.Validated {
+    // v1: archive passed libsignal validation; store import is not yet implemented.
+    _ = linked.Sync.ArchiveBytes
+}
+```
+
+The primary may respond with `CONTINUE_WITHOUT_UPLOAD` (link proceeds
+without history) or `RELINK_REQUESTED` (start linking again).
+
 ## Receive messages (library API)
 
 After linking, use `signal.Open` to load the account and start
