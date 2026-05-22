@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/web/useragent"
+
+	_ "github.com/thehappydinoa/signal-go/internal/tlsroots" // Windows/cgo trust store
 )
 
 // DefaultBaseURL is Signal's production REST endpoint.
