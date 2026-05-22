@@ -14,6 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
+
+	_ "github.com/thehappydinoa/signal-go/internal/tlsroots" // Windows/cgo trust store
 )
 
 // DialOptions configures [Dial].

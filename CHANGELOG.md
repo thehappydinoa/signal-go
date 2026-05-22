@@ -11,6 +11,16 @@ A separate ADR — [`docs/adr/README.md`](./docs/adr/README.md) — tracks
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows release binaries failed `signal-go link` with
+  `tls: failed to verify certificate: x509: certificate signed by unknown
+  authority` on the provisioning WebSocket. cgo/MinGW builds often ship
+  without a working OS root store; register Mozilla NSS fallback roots via
+  `golang.org/x/crypto/x509roots/fallback` from [`internal/tlsroots`](./internal/tlsroots/)
+  (pulled in by `internal/ws` and `internal/web`). Rebuild and re-tag to
+  pick up the fix on Windows artifacts.
+
 ### Fixed (first real tag push, v0.1.0-rc1)
 
 - All five legs of `release.yml` failed on the `v0.1.0-rc1` tag push
