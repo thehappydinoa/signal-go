@@ -32,7 +32,9 @@ jobs:
       - id: version
         name: Read pinned libsignal version
         run: |
-          v=$(grep -oP 'LIBSIGNAL_VERSION="\$\{LIBSIGNAL_VERSION:-\K[^"}]+' scripts/build-libsignal.sh)
+          # Portable BRE sed (BSD + GNU). Avoids `grep -oP`, which is a
+          # GNU extension and breaks on macOS runners (see release.yml).
+          v=$(sed -n 's/^LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-\([^}]*\)}".*/\1/p' scripts/build-libsignal.sh)
           if [ -z "$v" ]; then
             echo "Could not extract LIBSIGNAL_VERSION from scripts/build-libsignal.sh" >&2
             exit 1

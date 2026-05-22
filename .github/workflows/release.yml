@@ -94,7 +94,10 @@ jobs:
         id: version
         shell: bash
         run: |
-          v=$(grep -oP 'LIBSIGNAL_VERSION="\$\{LIBSIGNAL_VERSION:-\K[^"}]+' scripts/build-libsignal.sh)
+          # Portable BRE sed (works on both BSD sed on macOS and GNU sed
+          # on Linux) — release.yml builds across both ecosystems, so no
+          # `grep -oP` here.
+          v=$(sed -n 's/^LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-\([^}]*\)}".*/\1/p' scripts/build-libsignal.sh)
           if [ -z "$v" ]; then
             echo "Could not extract LIBSIGNAL_VERSION from scripts/build-libsignal.sh" >&2
             exit 1
