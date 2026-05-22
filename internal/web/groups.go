@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -79,13 +78,4 @@ func CurrentDaySeconds(now time.Time) int64 {
 	utc := now.UTC()
 	midnight := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
 	return midnight.Unix()
-}
-
-// DecodeBase64Field decodes a nullable base64 field. Empty strings decode to
-// nil without error.
-func DecodeBase64Field(b64 string) ([]byte, error) {
-	if b64 == "" {
-		return nil, nil
-	}
-	return base64.StdEncoding.DecodeString(b64)
 }
