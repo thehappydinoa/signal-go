@@ -8,7 +8,7 @@ onward. Pre-1.0 tags may break API without a major bump.
 Architectural *why* lives in [`docs/adr/`](./docs/adr/README.md); this file
 is *what* changed and *when*.
 
-## [Unreleased]
+## [0.1.0-rc2] - 2026-05-22
 
 ### Added
 
