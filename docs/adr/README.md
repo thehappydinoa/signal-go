@@ -32,3 +32,4 @@ with a new ADR that links back to the one it replaces.
 | 0022 | Profile-key presentations, add/remove member, wizard | Accepted |
 | 0023 | Persistent GSE cache + invite-link join          | Accepted |
 | 0024 | Group log sync (snapshot-based)                  | Accepted |
+| 0025 | Inbound group update events + optional auto-sync | Accepted |

@@ -152,6 +152,7 @@ func (c *Client) SyncGroup(ctx context.Context, masterKey []byte, fromRevision u
 			c.log.Warn("group send endorsements unavailable after sync", "group", masterKeyHex, "err", err)
 		}
 	}
+	c.storeGroupRevision(masterKeyHex, grp.Revision)
 	return grp, nil
 }
 

@@ -91,6 +91,106 @@ func TestDispatchReactionWithoutDataMessageBodyDoesNotEmitMessageEvent(t *testin
 	}
 }
 
+func TestDispatchGroupUpdateEmitsGroupUpdateEvent(t *testing.T) {
+	c := newDispatchClient()
+	masterKey := make([]byte, 32)
+	for i := range masterKey {
+		masterKey[i] = byte(i)
+	}
+	rev := uint32(12)
+	change := []byte{1, 2, 3}
+	ts := uint64(time.Now().UnixMilli())
+	dm := &sspb.DataMessage{
+		Timestamp: &ts,
+		GroupV2: &sspb.GroupContextV2{
+			MasterKey:   masterKey,
+			Revision:    &rev,
+			GroupChange: change,
+		},
+	}
+	content := &sspb.Content{Content: &sspb.Content_DataMessage{DataMessage: dm}}
+
+	c.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+
+	select {
+	case ev := <-c.events:
+		gu, ok := ev.(*GroupUpdateEvent)
+		if !ok {
+			t.Fatalf("event type = %T, want *GroupUpdateEvent", ev)
+		}
+		if gu.Revision != rev {
+			t.Errorf("Revision = %d, want %d", gu.Revision, rev)
+		}
+		if string(gu.GroupChange) != string(change) {
+			t.Errorf("GroupChange = %v", gu.GroupChange)
+		}
+	default:
+		t.Fatal("no event emitted")
+	}
+}
+
+func TestDispatchGroupUpdateWithoutBodySkipsMessageEvent(t *testing.T) {
+	c := newDispatchClient()
+	rev := uint32(3)
+	dm := &sspb.DataMessage{
+		GroupV2: &sspb.GroupContextV2{
+			MasterKey:   make([]byte, 32),
+			Revision:    &rev,
+			GroupChange: []byte{9},
+		},
+	}
+	content := &sspb.Content{Content: &sspb.Content_DataMessage{DataMessage: dm}}
+
+	c.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+
+	select {
+	case ev := <-c.events:
+		if _, ok := ev.(*MessageEvent); ok {
+			t.Fatal("unexpected MessageEvent for group-update-only payload")
+		}
+	default:
+		t.Fatal("no event emitted")
+	}
+}
+
+func TestDispatchGroupUpdateWithBodyEmitsBoth(t *testing.T) {
+	c := newDispatchClient()
+	body := "update + text"
+	rev := uint32(5)
+	dm := &sspb.DataMessage{
+		Body: &body,
+		GroupV2: &sspb.GroupContextV2{
+			MasterKey:   make([]byte, 32),
+			Revision:    &rev,
+			GroupChange: []byte{1},
+		},
+	}
+	content := &sspb.Content{Content: &sspb.Content_DataMessage{DataMessage: dm}}
+
+	c.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+
+	first := <-c.events
+	if _, ok := first.(*GroupUpdateEvent); !ok {
+		t.Fatalf("first event = %T, want GroupUpdateEvent", first)
+	}
+	second := <-c.events
+	if _, ok := second.(*MessageEvent); !ok {
+		t.Fatalf("second event = %T, want MessageEvent", second)
+	}
+}
+
+func TestStoreGroupRevision(t *testing.T) {
+	c := newDispatchClient()
+	c.storeGroupRevision("abc", 7)
+	if got := c.cachedGroupRevision("abc"); got != 7 {
+		t.Fatalf("revision = %d", got)
+	}
+	c.deleteGroupRevision("abc")
+	if got := c.cachedGroupRevision("abc"); got != 0 {
+		t.Fatalf("after delete revision = %d", got)
+	}
+}
+
 func TestDispatchEditMessageEmitsEditEvent(t *testing.T) {
 	c := newDispatchClient()
 

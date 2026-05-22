@@ -87,6 +87,10 @@ type OpenOptions struct {
 	// group master key. When nil, endorsements are in-memory only.
 	GroupEndorsementStore store.GroupEndorsementStore
 
+	// AutoSyncGroupUpdates triggers a background [SyncGroup] when an
+	// inbound group change notification arrives.
+	AutoSyncGroupUpdates bool
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -150,6 +154,11 @@ type Client struct {
 	groupEndorseMu    sync.Mutex
 	groupEndorsements map[string]*groupSendEndorsementCache
 	groupSecretParams map[string][libsignal.GroupSecretParamsLen]byte
+
+	// groupRevMu guards cached group revisions for log sync.
+	groupRevMu           sync.Mutex
+	groupRevision        map[string]uint32 // hex master key → revision
+	autoSyncGroupUpdates bool
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -199,15 +208,16 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	}
 
 	c := &Client{
-		acct:              acct,
-		events:            events,
-		log:               log,
-		dec:               dec,
-		webc:              webc,
-		storageWebc:       storageWebc,
-		stores:            opts.SignalStores,
-		groupDistStore:    opts.GroupDistributionStore,
-		groupEndorseStore: opts.GroupEndorsementStore,
+		acct:                 acct,
+		events:               events,
+		log:                  log,
+		dec:                  dec,
+		webc:                 webc,
+		storageWebc:          storageWebc,
+		stores:               opts.SignalStores,
+		groupDistStore:       opts.GroupDistributionStore,
+		groupEndorseStore:    opts.GroupEndorsementStore,
+		autoSyncGroupUpdates: opts.AutoSyncGroupUpdates,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{

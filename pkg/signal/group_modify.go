@@ -34,6 +34,7 @@ func (c *Client) LeaveGroup(ctx context.Context, masterKey []byte) error {
 	}
 	masterKeyHex := hex.EncodeToString(masterKey)
 	c.deleteGroupSendEndorsements(masterKeyHex)
+	c.deleteGroupRevision(masterKeyHex)
 	c.groupDistMu.Lock()
 	delete(c.groupDistID, masterKeyHex)
 	c.groupDistMu.Unlock()
