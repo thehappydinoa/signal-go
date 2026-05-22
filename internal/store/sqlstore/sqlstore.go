@@ -121,6 +121,21 @@ func (s *DB) migrate() error {
 			master_key_hex TEXT PRIMARY KEY,
 			data BLOB NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS backup_contacts (
+			aci TEXT PRIMARY KEY,
+			pni TEXT,
+			e164 TEXT,
+			profile_key BLOB,
+			given_name TEXT,
+			family_name TEXT,
+			blocked INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE IF NOT EXISTS backup_groups (
+			master_key_hex TEXT PRIMARY KEY,
+			master_key BLOB NOT NULL,
+			title TEXT,
+			blocked INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
 	provpb "github.com/thehappydinoa/signal-go/internal/proto/gen/provisioningpb"
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
+	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
@@ -30,6 +31,15 @@ type LinkOptions struct {
 	// primary sends an ephemeralBackupKey, polls for and validates the
 	// transfer archive after registration completes.
 	LinkAndSync bool
+	// ImportTransferArchive imports validated backup frames into
+	// SignalStores / BackupImportStore after link-and-sync. When nil,
+	// defaults to true if either store is set.
+	ImportTransferArchive *bool
+	// SignalStores receives imported contact identity keys during
+	// link-and-sync import.
+	SignalStores store.SignalStores
+	// BackupImportStore receives imported contact/group list entries.
+	BackupImportStore store.BackupImportStore
 
 	// ClientProfile selects a realistic User-Agent preset when UserAgent is
 	// empty. Default: [UserAgentSignalGo].
@@ -212,6 +222,9 @@ func maybeSyncTransferArchive(
 	syncResult, err := SyncTransferArchive(ctx, webc, creds, SyncTransferArchiveOptions{
 		EphemeralBackupKey: msg.GetEphemeralBackupKey(),
 		ACI:                aci,
+		Import:             opts.shouldImportTransferArchive(),
+		Identities:         opts.SignalStores,
+		BackupImport:       opts.BackupImportStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("signal.Link: sync transfer archive: %w", err)
@@ -230,6 +243,13 @@ func (o LinkOptions) provisioningCapabilities() []string {
 		return []string{CapabilityBackup3}
 	}
 	return nil
+}
+
+func (o LinkOptions) shouldImportTransferArchive() bool {
+	if o.ImportTransferArchive != nil {
+		return *o.ImportTransferArchive
+	}
+	return o.SignalStores != nil || o.BackupImportStore != nil
 }
 
 func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int) (account.Identity, error) {

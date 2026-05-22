@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thehappydinoa/signal-go/internal/backup"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
+	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
@@ -16,9 +18,12 @@ const CapabilityBackup3 = "backup3"
 // SyncTransferArchiveResult summarizes a post-link transfer archive receive.
 type SyncTransferArchiveResult struct {
 	// Validated is true when ciphertext was downloaded and passed libsignal
-	// backup validation. Importing frames into the local store is not yet
-	// implemented; v1 stops at validation.
+	// backup validation.
 	Validated bool
+	// Imported is true when backup frames were imported into local stores.
+	Imported bool
+	// ImportStats holds per-frame import counts when Imported is true.
+	ImportStats *backup.ImportStats
 	// ArchiveBytes holds the validated ciphertext when Validated is true.
 	ArchiveBytes []byte
 	// Skipped is true when the primary chose CONTINUE_WITHOUT_UPLOAD.
@@ -36,11 +41,18 @@ type SyncTransferArchiveOptions struct {
 	// Timeout bounds polling for GET /v1/devices/transfer_archive. Zero uses
 	// [web.DefaultTransferArchiveTimeout].
 	Timeout time.Duration
+	// Import runs frame import after validation when true and a target store
+	// is configured.
+	Import bool
+	// Identities receives imported contact identity keys.
+	Identities store.IdentityStore
+	// BackupImport receives imported contact/group list entries.
+	BackupImport store.BackupImportStore
 }
 
 // SyncTransferArchive polls for a transfer archive from the primary device,
-// downloads it from the attachments CDN, and validates the encrypted backup
-// bundle via libsignal. v1 does not import backup frames into the store.
+// downloads it from the attachments CDN, validates the encrypted backup
+// bundle via libsignal, and optionally imports frames into local stores.
 func SyncTransferArchive(
 	ctx context.Context,
 	webc *web.Client,
@@ -101,8 +113,20 @@ func SyncTransferArchive(
 		return nil, fmt.Errorf("signal.SyncTransferArchive: %s", msg)
 	}
 
-	return &SyncTransferArchiveResult{
+	result := &SyncTransferArchiveResult{
 		Validated:    true,
 		ArchiveBytes: ciphertext,
-	}, nil
+	}
+	if opts.Import && (opts.Identities != nil || opts.BackupImport != nil) {
+		stats, err := backup.ImportArchive(msgKey, ciphertext, libsignal.BackupPurposeDeviceTransfer, backup.ImportTarget{
+			Identities:   opts.Identities,
+			BackupImport: opts.BackupImport,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("signal.SyncTransferArchive: import: %w", err)
+		}
+		result.Imported = true
+		result.ImportStats = stats
+	}
+	return result, nil
 }

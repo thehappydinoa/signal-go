@@ -175,7 +175,7 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
       ([ADR 0027](docs/adr/0027-storage-service-sync.md))
 - [x] CDSI contact discovery ([ADR 0028](docs/adr/0028-cdsi-contact-discovery.md))
 - [x] SQLite-backed store ([ADR 0029](docs/adr/0029-sqlite-backed-store.md))
-- [x] Backup/restore (linked-device "synchronized start") — receive + validate v1 ([ADR 0030](docs/adr/0030-linked-device-transfer-archive.md)); frame import into store tracked as follow-up
+	// Backup/restore (linked-device "synchronized start") — receive, validate, and import v1 ([ADR 0030](docs/adr/0030-linked-device-transfer-archive.md), [ADR 0031](docs/adr/0031-transfer-archive-frame-import.md)); ChatItem message history deferred
 - [x] **Suppress the `missing .note.GNU-stack section implies executable stack`
       linker warning** on every Go build that links libsignal_ffi.a. The
       warning comes from a BoringSSL assembly object inside libsignal's

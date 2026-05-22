@@ -64,6 +64,38 @@ func NewMessageBackupKeyForEphemeralTransfer(ephemeralKey [BackupKeyLen]byte, ac
 	return NewMessageBackupKeyFromBackupKeyAndBackupID(ephemeralKey, backupID, nil)
 }
 
+// AesKey returns the AES-256 key for decrypting backup archives.
+func (k *MessageBackupKey) AesKey() ([32]byte, error) {
+	if k == nil || k.raw.raw == nil {
+		return [32]byte{}, errors.New("libsignal.MessageBackupKey.AesKey: nil key")
+	}
+	var out [32]C.uint8_t
+	if err := checkError(C.signal_message_backup_key_get_aes_key(&out, C.SignalConstPointerMessageBackupKey{raw: k.raw.raw})); err != nil {
+		return [32]byte{}, err
+	}
+	var key [32]byte
+	for i := range key {
+		key[i] = byte(out[i])
+	}
+	return key, nil
+}
+
+// HmacKey returns the HMAC-SHA256 key for backup archive authentication.
+func (k *MessageBackupKey) HmacKey() ([32]byte, error) {
+	if k == nil || k.raw.raw == nil {
+		return [32]byte{}, errors.New("libsignal.MessageBackupKey.HmacKey: nil key")
+	}
+	var out [32]C.uint8_t
+	if err := checkError(C.signal_message_backup_key_get_hmac_key(&out, C.SignalConstPointerMessageBackupKey{raw: k.raw.raw})); err != nil {
+		return [32]byte{}, err
+	}
+	var key [32]byte
+	for i := range key {
+		key[i] = byte(out[i])
+	}
+	return key, nil
+}
+
 // MessageBackupValidationOutcome is the result of validating a backup archive.
 type MessageBackupValidationOutcome struct {
 	raw C.SignalMutPointerMessageBackupValidationOutcome
