@@ -110,10 +110,11 @@ type Client struct {
 	webc   *web.Client
 	stores store.SignalStores
 
-	// mu guards knownDevices and knownUAKs.
-	mu           sync.Mutex
-	knownDevices map[string][]uint32 // recipientACI → device ID set
-	knownUAKs    map[string][]byte   // recipientACI → 16-byte unidentified access key
+	// mu guards knownDevices, knownUAKs, and knownProfileKeys.
+	mu               sync.Mutex
+	knownDevices     map[string][]uint32 // recipientACI → device ID set
+	knownUAKs        map[string][]byte   // recipientACI → 16-byte unidentified access key
+	knownProfileKeys map[string][]byte   // recipientACI → 32-byte profile key
 
 	// certMu guards the sender-certificate cache.
 	certMu     sync.Mutex
@@ -217,11 +218,11 @@ func (c *Client) Account() *account.Account { return c.acct }
 // Once set, subsequent [Send] calls to that ACI will use sealed-sender
 // delivery (the server does not see the sender's ACI).
 //
-// The UAK is derived from the recipient's profile key:
+// The UAK is derived from the recipient's profile key via
+// libsignal's ProfileKey::derive_access_key.
 //
-//	HKDF-SHA256(ikm=profileKey, salt=zeroes, info="Unidentified Access Key")[:16]
-//
-// It is populated automatically when profile fetch is implemented (Phase 5).
+// It is populated automatically when a profile key is known — from an
+// inbound DataMessage, [FetchProfile], or [SetRecipientProfileKey].
 // Passing a nil or empty uak removes any cached key (reverts to basic auth).
 func (c *Client) SetRecipientUAK(aci string, uak []byte) {
 	c.mu.Lock()

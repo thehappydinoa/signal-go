@@ -48,20 +48,22 @@ re-fetch when the expiry is within 5 minutes.
 
 The 5-minute headroom avoids using an about-to-expire cert in flight.
 
-### UAK dependency on profile fetch (Phase 5)
+### UAK dependency on profile fetch
 
 The `Unidentified-Access-Key` is derived from the recipient's profile key
-via HKDF-SHA256. We do not yet implement profile fetch (`/v1/profile/{aci}`
-is Phase 5). Until then:
+via libsignal's `ProfileKey::derive_access_key` (see
+[ADR 0017](./0017-profile-fetch.md)). Implemented behavior:
 
-- `Client.knownUAKs` (a `map[string][]byte`) holds UAKs set externally via
-  `SetRecipientUAK(aci, uak)`.
-- `Send` checks for a UAK before attempting sealed sender; if none is set it
-  falls back to basic-auth delivery with no error or warning to the caller.
-- Phase 5 will call `SetRecipientUAK` after decrypting each profile.
+- `Client.knownUAKs` holds UAKs set via `SetRecipientUAK`, derived from
+  `SetRecipientProfileKey`, from inbound `DataMessage.profileKey`, or after
+  `FetchProfile`.
+- `Send` checks for a UAK before attempting sealed sender; if none is set
+  it falls back to basic-auth delivery with no error or warning to the caller.
+- `FetchProfile(ctx, aci, profileKey)` retrieves and decrypts the versioned
+  profile when the 32-byte profile key is known.
 
-This layering means sealed sender is fully operational when the UAK is
-available, and the fallback is transparent to callers.
+This layering means sealed sender is fully operational once a profile key
+is available, and the fallback is transparent to callers.
 
 ### Retry parity
 

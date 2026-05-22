@@ -151,6 +151,8 @@ func (c *Client) sendContent(
 		return Receipt{}, err
 	}
 
+	c.ensureRecipientUAK(recipientACI)
+
 	c.mu.Lock()
 	uak := c.knownUAKs[recipientACI]
 	c.mu.Unlock()

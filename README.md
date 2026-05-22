@@ -95,7 +95,7 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 | [2 — Complete the link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | ProvisioningCipher, prekey gen, REST registration, prekey upload |
 | [Encrypted store](./docs/adr/0012-encrypted-store.md) | ✅ | AES-256-GCM at rest, Argon2id passphrase mode |
 | [3 — Receive](./ROADMAP.md#phase-3--receive-done) | ✅ | authenticated chat ws, libsignal decrypt, typed events, prekey top-up |
-| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-in-progress) | 🔧 in progress | bundle fetch + session establish + encrypt + `PUT /v1/messages` + sealed-sender + auto-retry + multi-device + `SendReceipt`/`SendTyping`/`SendReaction`; profile fetch next |
+| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-done) | ✅ done | bundle fetch + session establish + encrypt + `PUT /v1/messages` + sealed-sender + auto-retry + multi-device + control messages + profile fetch / UAK auto-derive |
 | [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys + membership / admin surface |
 | [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-in-progress) | 🔧 in progress | OnText / OnRegex / OnCommand / OnReaction / OnEdit + DM/Group/From scopes + middleware + `Reply`/`React`/`Typing`/`MarkRead`; conversation state next |
 | [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | ⏳ | attachments, storage sync, CDSI, SQLite, backup, exec-stack warning |
