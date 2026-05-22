@@ -25,3 +25,4 @@ with a new ADR that links back to the one it replaces.
 | 0015 | Sealed-sender encrypt: per-device USMC + cert cache | Accepted |
 | 0016 | Control messages, reactions, and edits         | Accepted |
 | 0017 | Profile fetch and UAK derivation               | Accepted |
+| 0018 | Groups v2 bootstrap: fetch + decrypt state     | Accepted |
