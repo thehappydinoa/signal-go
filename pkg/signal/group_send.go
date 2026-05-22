@@ -20,11 +20,12 @@ import (
 // SendGroup fetches current membership via [FetchGroup], distributes a
 // sender-key message (SKDM) to each member over 1:1 sessions, then
 // encrypts the group payload with the sender key and delivers it via
-// PUT /v1/messages/multi_recipient (combined unidentified access key).
+// PUT /v1/messages/multi_recipient.
 //
-// Every member must have a known UAK ([SetRecipientUAK] or profile key
-// from an inbound message / [FetchProfile]). Group send endorsement
-// tokens are not yet supported.
+// Authorization prefers a cached group send endorsement token from the
+// most recent [FetchGroup] (Group-Send-Token header). If endorsements are
+// unavailable, SendGroup falls back to the legacy combined UAK (XOR of
+// member profile-key UAKs).
 func (c *Client) SendGroup(ctx context.Context, masterKey []byte, text string) (Receipt, error) {
 	if len(masterKey) != libsignal.GroupMasterKeyLen {
 		return Receipt{}, fmt.Errorf("signal.SendGroup: master key length %d, want %d", len(masterKey), libsignal.GroupMasterKeyLen)
@@ -73,12 +74,12 @@ func (c *Client) SendGroup(ctx context.Context, masterKey []byte, text string) (
 		return Receipt{}, err
 	}
 
-	payload, combinedUAK, err := c.buildGroupMultiRecipientPayload(ctx, creds, grp, masterKey, distID, local, h, padContent(contentBytes))
+	payload, auth, err := c.buildGroupMultiRecipientPayload(ctx, creds, grp, masterKey, distID, local, h, padContent(contentBytes))
 	if err != nil {
 		return Receipt{}, err
 	}
 
-	if err := c.webc.SendMultiRecipientMessage(ctx, combinedUAK, payload, ts, false, true); err != nil {
+	if err := c.webc.SendMultiRecipientMessage(ctx, auth, payload, ts, false, true); err != nil {
 		return Receipt{}, fmt.Errorf("signal.SendGroup: deliver: %w", err)
 	}
 
@@ -109,32 +110,35 @@ func (c *Client) buildGroupMultiRecipientPayload(
 	local *libsignal.Address,
 	h *libsignal.StoreHandle,
 	padded []byte,
-) (payload, combinedUAK []byte, err error) {
+) (payload []byte, auth web.MultiRecipientAuth, err error) {
 	cipher, err := libsignal.GroupEncryptMessage(padded, local, distID, h)
 	if err != nil {
-		return nil, nil, fmt.Errorf("signal.SendGroup: encrypt: %w", err)
+		return nil, web.MultiRecipientAuth{}, fmt.Errorf("signal.SendGroup: encrypt: %w", err)
 	}
 
 	cert, err := c.cachedSenderCert(ctx, creds)
 	if err != nil {
-		return nil, nil, err
+		return nil, web.MultiRecipientAuth{}, err
 	}
 	usmc, err := libsignal.NewUSMCForGroup(cipher, cert, masterKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("signal.SendGroup: build USMC: %w", err)
+		return nil, web.MultiRecipientAuth{}, fmt.Errorf("signal.SendGroup: build USMC: %w", err)
 	}
 
 	recipients, sessions, memberACIs, err := c.groupRecipientSessions(ctx, creds, grp)
 	if err != nil {
-		return nil, nil, err
+		return nil, web.MultiRecipientAuth{}, err
 	}
 	if len(recipients) == 0 {
-		return nil, nil, errors.New("signal.SendGroup: no recipient devices")
+		return nil, web.MultiRecipientAuth{}, errors.New("signal.SendGroup: no recipient devices")
 	}
 
-	combinedUAK, err = c.combinedMemberUAKs(memberACIs)
-	if err != nil {
-		return nil, nil, err
+	combinedUAK, uakErr := c.combinedMemberUAKs(memberACIs)
+	var groupToken []byte
+	if token, tokErr := c.groupSendTokenForRecipients(grp.ID, memberACIs); tokErr == nil {
+		groupToken = token
+	} else if uakErr != nil {
+		return nil, web.MultiRecipientAuth{}, fmt.Errorf("signal.SendGroup: auth: endorsement: %w; combined UAK: %w", tokErr, uakErr)
 	}
 
 	payload, err = libsignal.MultiRecipientEncrypt(libsignal.MultiRecipientEncryptParams{
@@ -144,9 +148,13 @@ func (c *Client) buildGroupMultiRecipientPayload(
 		Stores:            h,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("signal.SendGroup: multi-recipient encrypt: %w", err)
+		return nil, web.MultiRecipientAuth{}, fmt.Errorf("signal.SendGroup: multi-recipient encrypt: %w", err)
 	}
-	return payload, combinedUAK, nil
+
+	if len(groupToken) > 0 {
+		return payload, web.MultiRecipientAuth{GroupSendToken: groupToken}, nil
+	}
+	return payload, web.MultiRecipientAuth{CombinedUAK: combinedUAK}, nil
 }
 
 func (c *Client) groupDistributionID(groupIDHex string) (string, error) {

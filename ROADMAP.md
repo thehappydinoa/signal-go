@@ -114,7 +114,10 @@ the "Link this device?" prompt; we won't yet complete the link).
       ([ADR 0019](docs/adr/0019-group-sender-key.md)): inbound SKDM +
       sender-key decrypt, `Client.SendGroup`, `bot.Message.Reply` in groups.
       Combined UAK multi-recipient delivery; group send endorsements deferred.
-- [ ] Group membership changes (join/leave/role)
+- [x] Group send endorsement tokens ([ADR 0020](docs/adr/0020-group-endorsements-membership.md)):
+      cache GSE from fetch; prefer `Group-Send-Token` over combined UAK.
+- [x] Group membership changes — leave, promote/demote ([ADR 0020](docs/adr/0020-group-endorsements-membership.md));
+      add-member / invite-link join deferred.
 
 ## Phase 6 — Bot framework **(in progress)**
 
