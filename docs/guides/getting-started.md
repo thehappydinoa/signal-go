@@ -77,7 +77,23 @@ without history) or `RELINK_REQUESTED` (start linking again).
 ### Client User-Agent presets
 
 By default the CLI sends `signal-go` in `User-Agent` and `X-Signal-Agent`.
-For linked-device flows you can mimic upstream clients:
+For linked-device flows you can mimic upstream clients using templates taken
+from the official source trees:
+
+| Preset | Upstream template | Source |
+|--------|-------------------|--------|
+| `android` | `Signal-Android/{version} Android/{sdk}` | [StandardUserAgentInterceptor.java](https://github.com/signalapp/Signal-Android/blob/main/app/src/main/java/org/thoughtcrime/securesms/net/StandardUserAgentInterceptor.java#L12) |
+| `ios` | `Signal-iOS/{version} iOS/{systemVersion}` | [HttpHeaders.swift](https://github.com/signalapp/Signal-iOS/blob/main/SignalServiceKit/Network/HttpHeaders.swift#L151-L153) |
+| `desktop-linux` | `Signal-Desktop/{version} Linux {release}` | [getUserAgent.ts](https://github.com/signalapp/Signal-Desktop/blob/main/ts/util/getUserAgent.ts#L7-L28) |
+| `desktop-macos` | `Signal-Desktop/{version} macOS {release}` | same |
+| `desktop-windows` | `Signal-Desktop/{version} Windows {release}` | same |
+
+Default version numbers in each preset are snapshots (not live-fetched). Override
+with `UserAgentOptions` in library code or `-user-agent` on the CLI.
+
+Note: Signal Desktop sends `X-Signal-Agent: OWD` separately from
+`User-Agent` ([WebAPI.ts](https://github.com/signalapp/Signal-Desktop/blob/v7.47.0/ts/textsecure/WebAPI.ts#L336-L337));
+signal-go currently uses the same string for both headers.
 
 ```sh
 # Linux desktop linked device (recommended on servers/VMs)
@@ -89,8 +105,10 @@ For linked-device flows you can mimic upstream clients:
 
 Library callers set [`signal.LinkOptions.ClientProfile`](../../pkg/signal/link.go)
 (or [`signal.OpenOptions.ClientProfile`](../../pkg/signal/client.go)) to
-`signal.UserAgentDesktopLinux`, `signal.UserAgentAndroid`, etc. Pass a
-non-empty `UserAgent` string to override the preset entirely.
+`signal.UserAgentDesktopLinux`, `signal.UserAgentAndroid`, etc. Use
+[`signal.UserAgentUpstreamSource`](../../pkg/signal/useragent.go) to retrieve
+the citation for a profile. Pass a non-empty `UserAgent` string to override the
+preset entirely.
 
 ## Receive messages (library API)
 

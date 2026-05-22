@@ -1,10 +1,3 @@
-// Package useragent formats realistic Signal client User-Agent strings.
-//
-// signal-go sends the same value in User-Agent and X-Signal-Agent (see
-// [github.com/thehappydinoa/signal-go/internal/web]). Upstream mobile
-// clients only set User-Agent; Signal Desktop sets User-Agent to
-// getUserAgent() and X-Signal-Agent to "OWD". We mimic the User-Agent
-// formats from Signal-Android, Signal-iOS, and Signal-Desktop.
 package useragent
 
 import (
@@ -16,31 +9,34 @@ import (
 type Profile string
 
 const (
-	// SignalGo is the honest development default.
+	// SignalGo is the honest development default (no upstream counterpart).
 	SignalGo Profile = "signal-go"
-	// Android mimics Signal-Android's StandardUserAgentInterceptor.
+	// Android matches Signal-Android StandardUserAgentInterceptor.USER_AGENT.
+	// See [Profile.UpstreamSource].
 	Android Profile = "android"
-	// IOS mimics Signal-iOS HttpHeaders.userAgentHeaderValueSignalIos.
+	// IOS matches Signal-iOS HttpHeaders.userAgentHeaderValueSignalIos.
+	// See [Profile.UpstreamSource].
 	IOS Profile = "ios"
-	// DesktopLinux mimics Signal-Desktop on Linux linked devices.
+	// DesktopLinux matches Signal-Desktop getUserAgent on process.platform "linux".
 	DesktopLinux Profile = "desktop-linux"
-	// DesktopMacOS mimics Signal-Desktop on macOS linked devices.
+	// DesktopMacOS matches Signal-Desktop getUserAgent on process.platform "darwin".
 	DesktopMacOS Profile = "desktop-macos"
-	// DesktopWindows mimics Signal-Desktop on Windows linked devices.
+	// DesktopWindows matches Signal-Desktop getUserAgent on process.platform "win32".
 	DesktopWindows Profile = "desktop-windows"
 )
 
-// Snapshot versions aligned with upstream clients near libsignal v0.94.1.
-// Bump intentionally when we refresh the libsignal pin.
+// Default snapshot versions for presets. These are examples only — upstream
+// reads live values from BuildConfig, CFBundleShortVersionString, and
+// package.json. See [DefaultVersionSource] for where each default was taken.
 const (
-	DefaultAndroidAppVersion  = "8.12.1"
-	DefaultAndroidSDK         = "35"
-	DefaultIOSAppVersion      = "8.13"
-	DefaultIOSSystemVersion   = "18.2"
-	DefaultDesktopAppVersion  = "7.47.0"
-	DefaultLinuxKernelRelease = "6.1.0"
-	DefaultMacOSRelease       = "14.7.0"
-	DefaultWindowsRelease     = "10"
+	DefaultAndroidAppVersion  = "8.12.1" // Signal-Android canonicalVersionName at authoring time
+	DefaultAndroidSDK         = "35"     // example API level (Android 15)
+	DefaultIOSAppVersion      = "8.13"   // Signal-iOS CFBundleShortVersionString at authoring time
+	DefaultIOSSystemVersion   = "18.2"   // example UIDevice.systemVersion
+	DefaultDesktopAppVersion  = "7.47.0" // Signal-Desktop v7.47.0 release tag
+	DefaultLinuxKernelRelease = "6.1.0"  // example os.release() prefix on Linux
+	DefaultMacOSRelease       = "14.7.0" // example os.release() on macOS
+	DefaultWindowsRelease     = "10"     // example os.release() major on Windows
 )
 
 // Options overrides preset version strings.
