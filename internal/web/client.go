@@ -70,6 +70,7 @@ type Request struct {
 	Credentials Credentials // optional
 	Body        any         // JSON-encoded if non-nil
 	Out         any         // JSON-decoded if non-nil
+	RawOut      *[]byte     // raw body on 2xx, skips JSON decode
 }
 
 // Error is returned for non-2xx HTTP responses.
@@ -133,6 +134,10 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &Error{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+	}
+	if req.RawOut != nil {
+		*req.RawOut = append((*req.RawOut)[:0], body...)
+		return nil
 	}
 	if req.Out == nil || len(body) == 0 {
 		return nil

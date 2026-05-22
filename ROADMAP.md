@@ -97,18 +97,15 @@ the "Link this device?" prompt; we won't yet complete the link).
       `SendReaction`). Inbound receipts continue to surface as
       `*ReceiptEvent` from the existing receive pipeline.
 
-## Phase 5 — Groups v2 **(planned)**
+## Phase 5 — Groups v2 **(in progress)**
 
-- [ ] zkgroup credential cache (server params + auth credentials)
-- [ ] Group master key handling, GroupSecretParams
-- [ ] Fetch + decrypt group state (`/v1/groups`)
-- [ ] **Surface group membership + admin roles** on the public API:
-      parse the decrypted group state into typed Go (`signal.Group{
-      Title, Description, Avatar, Members[], Admins[]}`), expose a
-      `(*bot.Bot).Groups(ctx)` to list joined groups, and a
-      `(*bot.Message).Group(ctx)` accessor to fetch the parsed group
-      for a group-thread message. Needed so bots can branch on
-      `m.Group().IsAdmin(m.Sender())` for restricted commands.
+- [x] zkgroup credential cache (server params + auth credentials)
+- [x] Group master key handling, GroupSecretParams
+- [x] Fetch + decrypt group state (`/v2/groups`)
+- [x] **Surface group membership + admin roles** on the public API:
+      `signal.FetchGroup`, typed `signal.Group{Title, Members, Admins()}`
+      and `Group.IsAdmin(aci)`. Bot helpers (`bot.Groups`, `Message.Group`)
+      land once group send exists.
 - [ ] Sender-key distribution; group message encrypt/decrypt
 - [ ] Group membership changes (join/leave/role)
 

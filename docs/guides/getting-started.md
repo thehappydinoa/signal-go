@@ -174,6 +174,24 @@ The default store is in-memory (`bot.MemoryConvoStore`). Pass
 `ConvoStore` interface is small enough that wrapping any
 key/value store works).
 
+### Groups v2 (fetch state)
+
+Once you have a group's 32-byte master key (from an inbound group
+message's `groupV2.masterKey`, or hex-decoded from
+`MessageEvent.GroupID`), fetch the decrypted roster:
+
+```go
+masterKey, _ := hex.DecodeString(msg.GroupID)
+grp, err := client.FetchGroup(ctx, masterKey)
+if err != nil { return err }
+if grp.IsAdmin(msg.Sender) {
+    // restricted admin command
+}
+```
+
+Auth credentials are fetched from `GET /v1/certificate/auth/group` and
+cached per UTC day on the client. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md).
+
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
