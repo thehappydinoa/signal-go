@@ -37,6 +37,9 @@ func (c *Client) LeaveGroup(ctx context.Context, masterKey []byte) error {
 	delete(c.groupEndorsements, masterKeyHex)
 	delete(c.groupSecretParams, masterKeyHex)
 	c.groupEndorseMu.Unlock()
+	c.groupDistMu.Lock()
+	delete(c.groupDistID, masterKeyHex)
+	c.groupDistMu.Unlock()
 	return nil
 }
 
@@ -87,6 +90,92 @@ func (c *Client) PromoteMember(ctx context.Context, masterKey []byte, memberACI 
 // DemoteMember revokes administrator role from memberACI.
 func (c *Client) DemoteMember(ctx context.Context, masterKey []byte, memberACI string) (*Group, error) {
 	return c.SetMemberRole(ctx, masterKey, memberACI, GroupRoleDefault)
+}
+
+// RemoveMember removes memberACI from the group. The local user must be an
+// administrator and cannot remove themselves (use [LeaveGroup]).
+func (c *Client) RemoveMember(ctx context.Context, masterKey []byte, memberACI string) (*Group, error) {
+	if memberACI == "" {
+		return nil, errors.New("signal.RemoveMember: empty member ACI")
+	}
+	if memberACI == c.acct.ACI {
+		return nil, errors.New("signal.RemoveMember: use LeaveGroup to remove the local user")
+	}
+	grp, err := c.FetchGroup(ctx, masterKey)
+	if err != nil {
+		return nil, fmt.Errorf("signal.RemoveMember: %w", err)
+	}
+	if !grp.IsAdmin(c.acct.ACI) {
+		return nil, errors.New("signal.RemoveMember: local user is not an administrator")
+	}
+	secretParams, err := libsignal.GroupSecretParamsFromMasterKey(masterKey)
+	if err != nil {
+		return nil, err
+	}
+	actions, err := group.BuildRemoveMemberActions(secretParams, c.acct.ACI, memberACI, grp.Revision)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.patchGroup(ctx, secretParams, actions)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := c.FetchGroup(ctx, masterKey)
+	if err != nil {
+		return nil, err
+	}
+	changeBytes, err := proto.Marshal(resp.GetGroupChange())
+	if err != nil {
+		return nil, err
+	}
+	if err := c.sendGroupChangeNotification(ctx, masterKey, updated, changeBytes); err != nil {
+		c.log.Warn("group change notification failed", "err", err)
+	}
+	return updated, nil
+}
+
+// AddMember adds memberACI to the group using their profile key (fetches an
+// expiring profile key credential from the chat service). The local user must
+// be an administrator.
+func (c *Client) AddMember(ctx context.Context, masterKey []byte, memberACI string, profileKey []byte, role GroupRole) (*Group, error) {
+	if memberACI == "" {
+		return nil, errors.New("signal.AddMember: empty member ACI")
+	}
+	grp, err := c.FetchGroup(ctx, masterKey)
+	if err != nil {
+		return nil, fmt.Errorf("signal.AddMember: %w", err)
+	}
+	if !grp.IsAdmin(c.acct.ACI) {
+		return nil, errors.New("signal.AddMember: local user is not an administrator")
+	}
+	secretParams, err := libsignal.GroupSecretParamsFromMasterKey(masterKey)
+	if err != nil {
+		return nil, err
+	}
+	presentation, err := c.memberPresentationForAdd(ctx, secretParams, memberACI, profileKey)
+	if err != nil {
+		return nil, err
+	}
+	actions, err := group.BuildAddMemberActions(secretParams, c.acct.ACI, presentation, role, grp.Revision)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.patchGroup(ctx, secretParams, actions)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := c.FetchGroup(ctx, masterKey)
+	if err != nil {
+		return nil, err
+	}
+	changeBytes, err := proto.Marshal(resp.GetGroupChange())
+	if err != nil {
+		return nil, err
+	}
+	if err := c.sendGroupChangeNotification(ctx, masterKey, updated, changeBytes); err != nil {
+		c.log.Warn("group change notification failed", "err", err)
+	}
+	return updated, nil
 }
 
 func (c *Client) patchGroup(

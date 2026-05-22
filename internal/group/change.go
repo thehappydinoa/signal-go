@@ -73,3 +73,75 @@ func BuildModifyRoleActions(
 	}
 	return proto.Marshal(actions)
 }
+
+// BuildRemoveMemberActions constructs GroupChange.Actions for an admin to
+// remove another member from the group.
+func BuildRemoveMemberActions(
+	secretParams [libsignal.GroupSecretParamsLen]byte,
+	actorACI string,
+	targetACI string,
+	currentRevision uint32,
+) ([]byte, error) {
+	actorID, err := libsignal.ParseServiceIDString(actorACI)
+	if err != nil {
+		return nil, fmt.Errorf("group.BuildRemoveMemberActions: actor: %w", err)
+	}
+	targetID, err := libsignal.ParseServiceIDString(targetACI)
+	if err != nil {
+		return nil, fmt.Errorf("group.BuildRemoveMemberActions: target: %w", err)
+	}
+	encActor, err := libsignal.GroupSecretParamsEncryptServiceID(secretParams, actorID)
+	if err != nil {
+		return nil, err
+	}
+	encTarget, err := libsignal.GroupSecretParamsEncryptServiceID(secretParams, targetID)
+	if err != nil {
+		return nil, err
+	}
+	version := currentRevision + 1
+	actions := &groupspb.GroupChange_Actions{
+		SourceUserId: encActor[:],
+		Version:      version,
+		DeleteMembers: []*groupspb.GroupChange_Actions_DeleteMemberAction{
+			{DeletedUserId: encTarget[:]},
+		},
+	}
+	return proto.Marshal(actions)
+}
+
+// BuildAddMemberActions constructs GroupChange.Actions to add a member using
+// a profile-key credential presentation.
+func BuildAddMemberActions(
+	secretParams [libsignal.GroupSecretParamsLen]byte,
+	actorACI string,
+	presentation []byte,
+	role MemberRole,
+	currentRevision uint32,
+) ([]byte, error) {
+	if len(presentation) == 0 {
+		return nil, fmt.Errorf("group.BuildAddMemberActions: empty presentation")
+	}
+	actorID, err := libsignal.ParseServiceIDString(actorACI)
+	if err != nil {
+		return nil, fmt.Errorf("group.BuildAddMemberActions: actor: %w", err)
+	}
+	encActor, err := libsignal.GroupSecretParamsEncryptServiceID(secretParams, actorID)
+	if err != nil {
+		return nil, err
+	}
+	version := currentRevision + 1
+	r := groupspb.Member_Role(role)
+	actions := &groupspb.GroupChange_Actions{
+		SourceUserId: encActor[:],
+		Version:      version,
+		AddMembers: []*groupspb.GroupChange_Actions_AddMemberAction{
+			{
+				Added: &groupspb.Member{
+					Presentation: presentation,
+					Role:         r,
+				},
+			},
+		},
+	}
+	return proto.Marshal(actions)
+}

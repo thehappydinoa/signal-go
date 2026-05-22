@@ -192,11 +192,22 @@ func (c *Client) groupDistributionID(groupIDHex string) (string, error) {
 	if id, ok := c.groupDistID[groupIDHex]; ok {
 		return id, nil
 	}
+	if c.groupDistStore != nil {
+		if id, err := c.groupDistStore.LoadGroupDistributionID(groupIDHex); err == nil {
+			c.groupDistID[groupIDHex] = id
+			return id, nil
+		}
+	}
 	id, err := libsignal.NewRandomUUID()
 	if err != nil {
 		return "", err
 	}
 	c.groupDistID[groupIDHex] = id
+	if c.groupDistStore != nil {
+		if err := c.groupDistStore.StoreGroupDistributionID(groupIDHex, id); err != nil {
+			c.log.Warn("failed to persist group distribution id", "group", groupIDHex, "err", err)
+		}
+	}
 	return id, nil
 }
 

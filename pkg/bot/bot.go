@@ -408,6 +408,12 @@ func (b *Bot) OnCommand(name string) Match {
 	return Match{bot: b, m: matcher{kind: matchCommand, text: name}}
 }
 
+// OnAnyText registers a handler that matches any message body (including
+// empty). Useful with [Match.Stage] for wizard steps.
+func (b *Bot) OnAnyText() Match {
+	return Match{bot: b, m: matcher{kind: matchAnyText}}
+}
+
 type textHandler struct {
 	matcher    matcher
 	run        HandlerFunc

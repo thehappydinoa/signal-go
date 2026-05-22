@@ -64,3 +64,49 @@ func TestBuildModifyRoleActions(t *testing.T) {
 		t.Fatalf("role = %v", parsed.GetModifyMemberRoles()[0].GetRole())
 	}
 }
+
+func TestBuildRemoveMemberActions(t *testing.T) {
+	master := make([]byte, libsignal.GroupMasterKeyLen)
+	secret, err := libsignal.GroupSecretParamsFromMasterKey(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const actor = "00010203-0405-0607-0809-0a0b0c0d0e0f"
+	const target = "64656667-6869-6a6b-6c6d-6e6f70717273"
+	actions, err := BuildRemoveMemberActions(secret, actor, target, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed groupspb.GroupChange_Actions
+	if err := proto.Unmarshal(actions, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed.GetVersion() != 3 {
+		t.Fatalf("version = %d", parsed.GetVersion())
+	}
+	if len(parsed.GetDeleteMembers()) != 1 {
+		t.Fatalf("deleteMembers = %d", len(parsed.GetDeleteMembers()))
+	}
+}
+
+func TestBuildAddMemberActions(t *testing.T) {
+	master := make([]byte, libsignal.GroupMasterKeyLen)
+	secret, err := libsignal.GroupSecretParamsFromMasterKey(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions, err := BuildAddMemberActions(secret, "00010203-0405-0607-0809-0a0b0c0d0e0f", []byte("presentation-bytes"), MemberRoleDefault, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed groupspb.GroupChange_Actions
+	if err := proto.Unmarshal(actions, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.GetAddMembers()) != 1 {
+		t.Fatalf("addMembers = %d", len(parsed.GetAddMembers()))
+	}
+	if len(parsed.GetAddMembers()[0].GetAdded().GetPresentation()) == 0 {
+		t.Fatal("expected presentation on added member")
+	}
+}

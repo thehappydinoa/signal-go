@@ -98,7 +98,22 @@ func decodeMember(secretParams [libsignal.GroupSecretParamsLen]byte, m *groupspb
 		return Member{}, fmt.Errorf("nil member")
 	}
 	if len(m.GetPresentation()) > 0 {
-		return Member{}, fmt.Errorf("profile-key presentation members not supported in bootstrap")
+		uuidCT, err := libsignal.ProfileKeyPresentationUUIDCiphertext(m.GetPresentation())
+		if err != nil {
+			return Member{}, fmt.Errorf("presentation uuid: %w", err)
+		}
+		id, err := libsignal.GroupSecretParamsDecryptServiceID(secretParams, uuidCT[:])
+		if err != nil {
+			return Member{}, fmt.Errorf("presentation decrypt aci: %w", err)
+		}
+		aci, err := libsignal.ServiceIDString(id)
+		if err != nil {
+			return Member{}, err
+		}
+		return Member{
+			ACI:  aci,
+			Role: MemberRole(m.GetRole()),
+		}, nil
 	}
 	aci, err := decryptACI(secretParams, m.GetUserId())
 	if err != nil {
