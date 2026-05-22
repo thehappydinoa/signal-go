@@ -64,11 +64,10 @@ func ProfileKeyVersion(profileKey []byte, aci string) (string, error) {
 	var pk [C.SignalPROFILE_KEY_LEN]C.uchar
 	copyProfileKey(&pk, profileKey)
 	var version [C.SignalPROFILE_KEY_VERSION_ENCODED_LEN]C.uint8_t
-	sidPtr := (*[17]C.uint8_t)(unsafe.Pointer(&sid[0]))
 	if err := checkError(C.signal_profile_key_get_profile_key_version(
 		&version,
 		&pk,
-		sidPtr,
+		cServiceIDPtr(&sid),
 	)); err != nil {
 		return "", err
 	}

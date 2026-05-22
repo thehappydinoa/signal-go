@@ -62,6 +62,10 @@ func serviceIDFromC(out C.SignalServiceIdFixedWidthBinaryBytes) ServiceIDFixedWi
 	return id
 }
 
-func cServiceID(id ServiceIDFixedWidth) *[ServiceIDFixedWidthLen]C.uint8_t {
-	return (*[ServiceIDFixedWidthLen]C.uint8_t)(unsafe.Pointer(&id[0]))
-}
+// cServiceID and cServiceIDPtr (the variants that bridge a Go-side
+// ServiceIDFixedWidth and a C-side parsed SignalServiceIdFixedWidthBinaryBytes,
+// respectively) live in per-toolchain files because cgo's representation of
+// `const SignalServiceIdFixedWidthBinaryBytes *` differs between GCC and
+// clang: GCC-style hosts (Linux, Windows MinGW, FreeBSD) get the underlying
+// `*[17]C.uint8_t`; clang-style hosts (Darwin) keep the typedef name. See
+// service_id_cgo_typedef_*.go.
