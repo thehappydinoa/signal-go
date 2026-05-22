@@ -1,4 +1,4 @@
-# ADR 0026: Attachment cipher in Go (classic AES-CBC + HMAC)
+# ADR 0026: Attachment cipher and CDN pipeline
 
 **Status:** Accepted  
 **Date:** 2026-05-22
@@ -10,46 +10,50 @@ ROADMAP mentions "attachment cipher via libsignal", but libsignal v0.94.1 FFI
 exposes **incremental MAC primitives** only — no high-level `AttachmentCipher`
 type (same situation as ProfileCipher in [ADR 0017](./0017-profile-fetch.md)).
 
-libsignal-service-java's `AttachmentCipherInputStream` / `OutputStream`
-define the wire format Signal clients use for message attachments:
+Signal clients today use attachment **v2** (Signal Desktop): log padding,
+AES-256-CBC (with PKCS7 block padding), trailing HMAC-SHA256, SHA-256 digest,
+and optional incremental MAC (`video/mp4`). Legacy libsignal-service-java
+PKCS7-only padding remains supported on decrypt via [DecryptAuto].
 
-- 64-byte combined key (32-byte AES-256 key + 32-byte HMAC key), stored in
-  `AttachmentPointer.key`
-- Blob layout: `IV (16) || AES-CBC ciphertext || HMAC-SHA256 (32)`
-- HMAC covers IV and ciphertext (not the trailing MAC bytes)
-- Transmitted digest: `SHA256(blob_without_mac || mac)` — stored in
-  `AttachmentPointer.digest`
-- Sticker packs derive the 64-byte key via HKDF(packKey, info="Sticker Pack")
-
-Newer attachments may also carry `incrementalMac` + `chunkSize` for chunked
-verification; that path uses libsignal's `incremental_mac` / `validating_mac`
-FFI and is deferred.
+Upload uses `GET /v4/attachments/form/upload?uploadLength=N` and CDN3 TUS
+creation-with-upload to `signedUploadLocation`.
 
 ## Decision
 
-1. **`internal/attachment`** — classic AttachmentCipher encrypt/decrypt,
-   `NewKey`, `ExpandStickerPackKey`, and `CiphertextLength` helpers.
+### Layering
 
-2. **Crypto in Go** atop stdlib `crypto/aes`, `crypto/cipher`, and
-   `crypto/hmac`; HKDF for sticker keys via existing
-   [libsignal.HKDFSHA256].
+| Layer | Responsibility |
+|-------|----------------|
+| `internal/libsignal` | `incremental_mac` / `validating_mac` FFI wrappers |
+| `internal/attachment` | v2 encrypt/decrypt, legacy PKCS7, sticker HKDF |
+| `internal/web` | Upload form, TUS upload, CDN download |
+| `pkg/signal` | `SendAttachment`, `SendGroupAttachment`, `DownloadAttachment`, inbound `MessageEvent.Attachments` |
+| `pkg/bot` | `Message.ReplyAttachment`, `Message.Attachments()` |
 
-3. **Constant-time checks** — `subtle.ConstantTimeCompare` for MAC and digest
-   verification.
+### Wire formats
 
-4. **Deferred (follow-up PRs):**
-   - Incremental-MAC attachment path (`AttachmentPointer.incrementalMac`)
-   - CDN3 upload form + download HTTP (`internal/web`)
-   - `Client.SendAttachment`, inbound attachment events, `bot.ReplyAttachment`
+**v2 (primary):** log-padded plaintext → AES-CBC → `IV || ciphertext || HMAC`;
+digest = `SHA256(blob)`; incremental MAC over encrypted blob for streaming
+types.
+
+**Legacy:** PKCS7-padded plaintext (libsignal-service-java); decrypted when v2
+fails and no incremental MAC metadata is present.
+
+### CDN
+
+- Form: authenticated `GET /v4/attachments/form/upload`
+- Upload: TUS POST for `cdn == 3`; simple POST for CDN 2
+- Download: `GET {cdnHost}/attachments/{cdnKey}` (public)
 
 ## Consequences
 
-- Unblocks CDN and send/receive integration without waiting for upstream FFI.
-- Matches libsignal-service-java test vectors (round-trip, MAC/digest failure).
-- ROADMAP Phase 7 "attachment cipher" item can be split: cipher done, CDN next.
+- Bots can send and receive file attachments in 1:1 and group threads.
+- Outbound attachments interoperate with official Signal clients (v2 + CDN3).
+- Incremental MAC generation is limited to `video/mp4`; other types omit it but
+  decrypt inbound incremental attachments via libsignal validating MAC.
 
 ## References
 
-- [ADR 0017](./0017-profile-fetch.md) — precedent for Go-side cipher
-- libsignal-service-java `AttachmentCipherInputStream.java`
-- [`proto/SignalService.proto`](../../proto/SignalService.proto) `AttachmentPointer`
+- [ADR 0017](./0017-profile-fetch.md)
+- Signal Desktop `AttachmentCrypto.node.ts`, `uploadAttachment.preload.ts`
+- libsignal `GET /v4/attachments/form/upload` ([`ws/messages.rs`](https://github.com/signalapp/libsignal))

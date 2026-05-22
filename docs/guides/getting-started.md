@@ -228,6 +228,30 @@ endorsement token** from the latest [FetchGroup]; combined UAK is the
 legacy fallback. See [ADR 0019](../adr/0019-group-sender-key.md) and
 [ADR 0020](../adr/0020-group-endorsements-membership.md).
 
+### Attachments
+
+Send a file in 1:1 or group threads; inbound messages expose metadata on
+`MessageEvent.Attachments`:
+
+```go
+_, err := client.SendAttachment(ctx, recipientACI, bytes.NewReader(data), signal.SendAttachmentOptions{
+    ContentType: "image/png",
+    FileName:    "chart.png",
+})
+_, err = client.SendGroupAttachment(ctx, masterKey, bytes.NewReader(data), signal.SendAttachmentOptions{
+    ContentType: "application/pdf",
+})
+
+// In a bot handler:
+for _, att := range m.Attachments() {
+    plain, err := client.DownloadAttachment(ctx, att)
+    // ...
+}
+return m.ReplyAttachment(ctx, bytes.NewReader([]byte("ok")), "text/plain")
+```
+
+See [ADR 0026](../adr/0026-attachment-cipher.md).
+
 ### Groups v2 (membership)
 
 Administrators can promote/demote, add/remove members, or any member can leave:

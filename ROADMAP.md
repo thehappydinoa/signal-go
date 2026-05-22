@@ -145,7 +145,8 @@ bots as ergonomic as Telegram or Slack Bolt:
       `Typing` (started/stopped), `MarkRead` / `MarkViewed` (READ /
       VIEWED receipts). Group variants via [ADR 0021](docs/adr/0021-group-control-messages.md)
       (`SendGroupReaction`, `SendGroupTyping`; receipts 1:1 to author).
-- [x] Group `Reply` via `SendGroup` ([ADR 0019](docs/adr/0019-group-sender-key.md)); `ReplyAttachment` still open
+- [x] Group `Reply` via `SendGroup` ([ADR 0019](docs/adr/0019-group-sender-key.md)); `ReplyAttachment` via
+      [ADR 0026](docs/adr/0026-attachment-cipher.md)
 - [x] Reaction and edit event handlers: `Bot.OnReaction(emoji)`,
       `Bot.OnAnyReaction()`, `Bot.OnEdit()` with the same
       `DM`/`Group`/`From` scope helpers as text dispatchers
@@ -168,9 +169,8 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 
 ## Phase 7 — Niceties **(planned, out of MVP)**
 
-- [ ] Attachments (CDN3 upload/download, attachment cipher via libsignal)
-      — classic AttachmentCipher in [`internal/attachment`](internal/attachment)
-      ([ADR 0026](docs/adr/0026-attachment-cipher.md)); CDN + incremental MAC deferred
+- [x] Attachments — v2 cipher, CDN3 upload/download, send/receive, `bot.ReplyAttachment`
+      ([ADR 0026](docs/adr/0026-attachment-cipher.md))
 - [ ] Storage Service sync (contacts, group list)
 - [ ] CDSI contact discovery
 - [ ] SQLite-backed store

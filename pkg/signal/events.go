@@ -25,6 +25,9 @@ type MessageEvent struct {
 	ServerTimestamp time.Time
 	// Body is the plaintext message text.
 	Body string
+	// Attachments carries metadata for inbound file attachments. Use
+	// [Client.DownloadAttachment] to fetch and decrypt bytes.
+	Attachments []AttachmentMeta
 	// GroupID is non-empty for group messages (hex-encoded group v2 master key).
 	GroupID string
 	// ExpiresIn is the disappearing-message timer, if set.

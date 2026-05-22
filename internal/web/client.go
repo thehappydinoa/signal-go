@@ -23,6 +23,8 @@ type Client struct {
 	BaseURL    string
 	UserAgent  string
 	HTTPClient *http.Client
+	// CDNHosts overrides [DefaultCDNHosts] for tests.
+	CDNHosts map[uint32]string
 }
 
 // New returns a Client with sensible defaults. baseURL may be empty to use
@@ -130,6 +132,71 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("web: do: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return fmt.Errorf("web: read body: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &Error{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+	}
+	if req.RawOut != nil {
+		*req.RawOut = append((*req.RawOut)[:0], body...)
+		return nil
+	}
+	if req.Out == nil || len(body) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(body, req.Out); err != nil {
+		return fmt.Errorf("web: decode response: %w", err)
+	}
+	return nil
+}
+
+// DoAbsolute executes an HTTP request against an absolute URL (CDN uploads,
+// signed upload locations). Auth and User-Agent match [Do].
+func (c *Client) DoAbsolute(ctx context.Context, rawURL string, req Request) error {
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, rawURL, nil)
+	if err != nil {
+		return fmt.Errorf("web: build absolute request: %w", err)
+	}
+	var bodyReader io.Reader
+	switch {
+	case req.Body != nil:
+		raw, err := json.Marshal(req.Body)
+		if err != nil {
+			return fmt.Errorf("web: marshal body: %w", err)
+		}
+		bodyReader = bytes.NewReader(raw)
+	case len(req.RawBody) > 0:
+		bodyReader = bytes.NewReader(req.RawBody)
+	}
+	if bodyReader != nil {
+		httpReq.Body = io.NopCloser(bodyReader)
+	}
+	httpReq.Header.Set("User-Agent", c.UserAgent)
+	httpReq.Header.Set("X-Signal-Agent", c.UserAgent)
+	if req.Body != nil {
+		httpReq.Header.Set("Content-Type", "application/json")
+	}
+	if h := req.Credentials.Header(); h != "" {
+		httpReq.Header.Set("Authorization", h)
+	}
+	for k, vs := range req.Headers {
+		for _, v := range vs {
+			httpReq.Header.Add(k, v)
+		}
+	}
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("web: do absolute: %w", err)
 	}
 	defer resp.Body.Close()
 

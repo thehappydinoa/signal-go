@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"regexp"
 	"sync"
@@ -56,6 +57,8 @@ type Client interface {
 	SendReceipt(ctx context.Context, recipient string, kind signal.ReceiptType, timestamps []time.Time) (signal.Receipt, error)
 	SendTyping(ctx context.Context, recipient string, action signal.TypingAction) (signal.Receipt, error)
 	SendReaction(ctx context.Context, recipient, emoji, targetAuthor string, targetTimestamp time.Time, remove bool) (signal.Receipt, error)
+	SendAttachment(ctx context.Context, recipient string, r io.Reader, opts signal.SendAttachmentOptions) (signal.Receipt, error)
+	SendGroupAttachment(ctx context.Context, masterKey []byte, r io.Reader, opts signal.SendAttachmentOptions) (signal.Receipt, error)
 	Close() error
 }
 
