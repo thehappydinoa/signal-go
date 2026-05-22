@@ -110,7 +110,10 @@ the "Link this device?" prompt; we won't yet complete the link).
       `signal.FetchGroup`, typed `signal.Group{Title, Members, Admins()}`
       and `Group.IsAdmin(aci)`. Bot helpers (`bot.Groups`, `Message.Group`)
       land once group send exists.
-- [ ] Sender-key distribution; group message encrypt/decrypt
+- [x] Sender-key distribution; group message encrypt/decrypt
+      ([ADR 0019](docs/adr/0019-group-sender-key.md)): inbound SKDM +
+      sender-key decrypt, `Client.SendGroup`, `bot.Message.Reply` in groups.
+      Combined UAK multi-recipient delivery; group send endorsements deferred.
 - [ ] Group membership changes (join/leave/role)
 
 ## Phase 6 — Bot framework **(in progress)**
@@ -122,7 +125,7 @@ bots as ergonomic as Telegram or Slack Bolt:
       chat ws, returns a dispatcher; `bot.Wrap(client)` for tests
 - [x] Pattern dispatchers: `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/foo")`,
       first-match-wins ordering, `ErrPass` to fall through
-- [x] `Reply` helper on `*Message` (1:1 only — group reply lands with Phase 5)
+- [x] `Reply` helper on `*Message` (1:1 and group via [ADR 0019](docs/adr/0019-group-sender-key.md))
 - [x] Custom error handler via `Bot.OnError`
 - [x] Graceful shutdown via `Bot.Close` + `Bot.Run(ctx)`; structured
       logging via the injected `*slog.Logger`
@@ -132,8 +135,7 @@ bots as ergonomic as Telegram or Slack Bolt:
       `Typing` (started/stopped), `MarkRead` / `MarkViewed` (READ /
       VIEWED receipts). Group variants land with Phase 5 — they
       currently return `ErrReplyNotSupportedInGroup`.
-- [ ] Group `Reply` once Phase 5 surfaces the group identifier + send
-      path; `ReplyAttachment`
+- [x] Group `Reply` via `SendGroup` ([ADR 0019](docs/adr/0019-group-sender-key.md)); `ReplyAttachment` still open
 - [x] Reaction and edit event handlers: `Bot.OnReaction(emoji)`,
       `Bot.OnAnyReaction()`, `Bot.OnEdit()` with the same
       `DM`/`Group`/`From` scope helpers as text dispatchers

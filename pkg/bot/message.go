@@ -2,6 +2,9 @@ package bot
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/thehappydinoa/signal-go/pkg/signal"
@@ -34,14 +37,19 @@ func (m *Message) IsGroup() bool { return m.event.GroupID != "" }
 // the empty string for 1:1 DMs.
 func (m *Message) GroupID() string { return m.event.GroupID }
 
-// Reply sends a 1:1 text message back to the original sender.
-//
-// Group replies are not yet supported (they need group v2 — Phase 5).
-// Calling Reply on a group message returns an error; use the lower-
-// level [signal.Client] until then.
+// Reply sends a text message back to the sender (1:1) or to the group
+// thread (Groups v2 via [signal.Client.SendGroup]).
 func (m *Message) Reply(ctx context.Context, text string) error {
 	if m.IsGroup() {
-		return ErrReplyNotSupportedInGroup
+		masterKey, err := hex.DecodeString(m.event.GroupID)
+		if err != nil {
+			return fmt.Errorf("bot.Reply: invalid group id: %w", err)
+		}
+		if len(masterKey) != 32 {
+			return errors.New("bot.Reply: group id must be 32-byte master key")
+		}
+		_, err = m.bot.cli.SendGroup(ctx, masterKey, text)
+		return err
 	}
 	_, err := m.bot.cli.Send(ctx, m.event.Sender, text)
 	return err

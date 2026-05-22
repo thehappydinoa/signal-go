@@ -26,3 +26,4 @@ with a new ADR that links back to the one it replaces.
 | 0016 | Control messages, reactions, and edits         | Accepted |
 | 0017 | Profile fetch and UAK derivation               | Accepted |
 | 0018 | Groups v2 bootstrap: fetch + decrypt state     | Accepted |
+| 0019 | Groups v2 sender-key distribution + group send | Accepted |

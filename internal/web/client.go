@@ -60,8 +60,9 @@ func (c Credentials) Header() string {
 }
 
 // Request is a tagged HTTP call. Body, if non-nil, is JSON-encoded and the
-// Content-Type header is set to application/json. Out, if non-nil, is
-// JSON-decoded from the response body on 2xx responses.
+// Content-Type header is set to application/json. RawBody, if non-nil, is sent
+// as-is (Content-Type must be set in Headers). Out, if non-nil, is JSON-decoded
+// from the response body on 2xx responses.
 type Request struct {
 	Method      string
 	Path        string      // e.g. "/v1/devices/link"
@@ -69,6 +70,7 @@ type Request struct {
 	Headers     http.Header // optional, merged after auth + user-agent
 	Credentials Credentials // optional
 	Body        any         // JSON-encoded if non-nil
+	RawBody     []byte      // sent as-is when Body is nil
 	Out         any         // JSON-decoded if non-nil
 	RawOut      *[]byte     // raw body on 2xx, skips JSON decode
 }
@@ -96,12 +98,15 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 	}
 
 	var bodyReader io.Reader
-	if req.Body != nil {
+	switch {
+	case req.Body != nil:
 		raw, err := json.Marshal(req.Body)
 		if err != nil {
 			return fmt.Errorf("web: marshal body: %w", err)
 		}
 		bodyReader = bytes.NewReader(raw)
+	case len(req.RawBody) > 0:
+		bodyReader = bytes.NewReader(req.RawBody)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, full, bodyReader)

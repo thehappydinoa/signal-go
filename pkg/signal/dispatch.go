@@ -12,6 +12,12 @@ import (
 // dispatchContent routes a decoded Content protobuf to the appropriate
 // typed event constructor and emits the result.
 func (c *Client) dispatchContent(sender string, senderDevice uint32, envTS, srvTS time.Time, content *sspb.Content) {
+	if skdm := content.GetSenderKeyDistributionMessage(); len(skdm) > 0 {
+		if err := c.processSenderKeyDistribution(sender, senderDevice, skdm); err != nil {
+			c.log.Warn("sender key distribution failed", "sender", sender, "err", err)
+		}
+	}
+
 	switch {
 	case content.GetDataMessage() != nil:
 		c.handleDataMessage(sender, senderDevice, envTS, srvTS, content.GetDataMessage())

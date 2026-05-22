@@ -42,6 +42,9 @@ func decryptUSMCInner(
 		}
 		pt, err := DecryptPlaintextContent(pc)
 		return pt, false, err
+	case CiphertextSenderKey:
+		pt, err := GroupDecryptMessage(inner, senderAddr, h)
+		return pt, false, err
 	default:
 		return nil, false, fmt.Errorf("libsignal.DecryptSealedSender: unsupported inner type %d", msgType)
 	}

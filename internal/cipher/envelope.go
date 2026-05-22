@@ -121,7 +121,11 @@ func (d *EnvelopeDecryptor) decryptPlaintext(content []byte, env *sspb.Envelope)
 }
 
 func (d *EnvelopeDecryptor) decryptSealed(ctx context.Context, content []byte) ([]byte, string, uint32, error) {
-	res, err := libsignal.DecryptSealedSender(content, libsignal.DecryptParams{
+	payload := content
+	if single, err := libsignal.MultiRecipientMessageForSingleRecipient(content); err == nil {
+		payload = single
+	}
+	res, err := libsignal.DecryptSealedSender(payload, libsignal.DecryptParams{
 		Stores:         d.stores,
 		LocalServiceID: d.localServiceID,
 		LocalDeviceID:  d.localDeviceID,

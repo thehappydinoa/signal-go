@@ -392,7 +392,10 @@ func TestSendRoundTripDecryptsOnRecipient(t *testing.T) {
 
 	// Strip padding (terminator 0x80 + trailing zeros) and parse the
 	// signalservice.Content protobuf.
-	unpadded := stripContentPadding(t, plain)
+	unpadded := stripContentPadding(plain)
+	if bytes.LastIndexByte(plain, 0x80) < 0 {
+		t.Fatalf("no 0x80 terminator in padded plaintext")
+	}
 	var got sspb.Content
 	if err := proto.Unmarshal(unpadded, &got); err != nil {
 		t.Fatalf("unmarshal Content: %v", err)
@@ -722,18 +725,6 @@ func bobDecryptPreKey(t *testing.T, bob *recipientFixture, senderACI string, sen
 		t.Fatalf("DecryptPreKeySignalMessage: %v", err)
 	}
 	return plain
-}
-
-// stripContentPadding strips Signal's padding scheme: find the last
-// 0x80 byte and drop everything from there onward. Anything before is
-// the marshalled Content protobuf.
-func stripContentPadding(t *testing.T, padded []byte) []byte {
-	t.Helper()
-	idx := bytes.LastIndexByte(padded, 0x80)
-	if idx < 0 {
-		t.Fatalf("no 0x80 terminator in padded plaintext")
-	}
-	return padded[:idx]
 }
 
 // Compile-time guard: stress an obvious pitfall — the addr used during
