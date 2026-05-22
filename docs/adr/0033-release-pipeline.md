@@ -94,9 +94,21 @@ A `.sha256` sidecar is uploaded alongside the archive so downstream
 consumers can verify integrity without trusting only the GitHub
 Release page.
 
-The Go binary is linked with `-ldflags="-s -w -X main.version=<tag>"`
-so `signal-go --help` can surface the version once we wire up a flag
-parser entry for it (out of scope for this ADR).
+The Go binary is linked with `-ldflags="-s -w -X main.version=<tag>"`;
+`signal-go version` / `signal-go --version` prints the embedded tag,
+Go toolchain, and the `vcs.{revision,time,modified}` block that
+`go build -buildvcs=true` (the default) writes to
+`runtime/debug.ReadBuildInfo`.
+
+### Provenance
+
+Every archive built from a real tag push is signed by Sigstore via
+[`actions/attest-build-provenance@v3`](https://github.com/actions/attest-build-provenance).
+The attestation lands on the GitHub Release run and is verifiable with
+`gh attestation verify <archive> --repo thehappydinoa/signal-go`. Dry-
+runs (`workflow_dispatch`) skip the attest step — Sigstore declines to
+attest non-tag refs anyway, and a dry-run shouldn't pollute the public
+transparency log.
 
 ### Build-script changes
 
