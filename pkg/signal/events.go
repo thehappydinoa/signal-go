@@ -146,3 +146,63 @@ type QueueEmptyEvent struct {
 }
 
 func (e *QueueEmptyEvent) eventTimestamp() time.Time { return e.Timestamp }
+
+// ReactionEvent represents an inbound reaction to a previously-sent message.
+//
+// Reactions arrive as DataMessage payloads with a populated Reaction field
+// (and no body text); they are dispatched as ReactionEvent rather than
+// MessageEvent so handlers can treat them distinctly.
+type ReactionEvent struct {
+	// Sender is the ACI UUID of the reacting user.
+	Sender string
+	// SenderDevice is the device that produced the reaction.
+	SenderDevice uint32
+	// Timestamp is the reaction's own send time.
+	Timestamp time.Time
+	// ServerTimestamp is the server-side receive time.
+	ServerTimestamp time.Time
+	// Emoji is the reaction emoji (UTF-8 string). Empty when Remove is
+	// true and the reactor did not specify which emoji to remove.
+	Emoji string
+	// Remove is true when the sender is removing a previous reaction
+	// rather than adding one.
+	Remove bool
+	// TargetAuthorACI is the ACI UUID of the message being reacted to.
+	TargetAuthorACI string
+	// TargetTimestamp is the sender-side timestamp of the message being
+	// reacted to (the conversation-level identifier).
+	TargetTimestamp time.Time
+	// GroupID is non-empty for reactions in group threads (hex-encoded
+	// group v2 master key).
+	GroupID string
+}
+
+func (e *ReactionEvent) eventTimestamp() time.Time { return e.Timestamp }
+
+// EditMessageEvent represents an inbound edit of a previously-sent message.
+//
+// Edits arrive as the EditMessage Content variant (not DataMessage). The
+// new body, target sent timestamp, and edit timestamp are surfaced
+// directly; richer fields (mentions, attachments) are available via the
+// raw protobuf accessors when needed.
+type EditMessageEvent struct {
+	// Sender is the ACI UUID of the editor.
+	Sender string
+	// SenderDevice is the device that produced the edit.
+	SenderDevice uint32
+	// Timestamp is the edit's send time (used as the conversation-level
+	// identifier of the edit itself).
+	Timestamp time.Time
+	// ServerTimestamp is the server-side receive time.
+	ServerTimestamp time.Time
+	// TargetTimestamp is the sender-side timestamp of the original
+	// message being replaced.
+	TargetTimestamp time.Time
+	// NewBody is the edited plaintext body. Empty if the edit removes
+	// the body without supplying a new one.
+	NewBody string
+	// GroupID is non-empty for edits in group threads.
+	GroupID string
+}
+
+func (e *EditMessageEvent) eventTimestamp() time.Time { return e.Timestamp }

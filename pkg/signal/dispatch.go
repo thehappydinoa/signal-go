@@ -20,6 +20,8 @@ func (c *Client) dispatchContent(sender string, senderDevice uint32, envTS, srvT
 		c.handleTypingMessage(sender, senderDevice, content.GetTypingMessage())
 	case content.GetSyncMessage() != nil:
 		c.handleSyncMessage(senderDevice, envTS, content.GetSyncMessage())
+	case content.GetEditMessage() != nil:
+		c.handleEditMessage(sender, senderDevice, envTS, srvTS, content.GetEditMessage())
 	case content.GetDecryptionErrorMessage() != nil:
 		c.handleDecryptionErrorMessage(sender, senderDevice, envTS)
 	default:
@@ -28,23 +30,67 @@ func (c *Client) dispatchContent(sender string, senderDevice uint32, envTS, srvT
 }
 
 func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, srvTS time.Time, dm *sspb.DataMessage) {
+	ts := msToTime(dm.GetTimestamp())
+	if ts.IsZero() {
+		ts = envTS
+	}
+	groupID := ""
+	if dm.GetGroupV2() != nil && len(dm.GetGroupV2().GetMasterKey()) > 0 {
+		groupID = hex.EncodeToString(dm.GetGroupV2().GetMasterKey())
+	}
+
+	if r := dm.GetReaction(); r != nil {
+		c.emit(&ReactionEvent{
+			Sender:          sender,
+			SenderDevice:    senderDevice,
+			Timestamp:       ts,
+			ServerTimestamp: srvTS,
+			Emoji:           r.GetEmoji(),
+			Remove:          r.GetRemove(),
+			TargetAuthorACI: r.GetTargetAuthorAci(),
+			TargetTimestamp: msToTime(r.GetTargetSentTimestamp()),
+			GroupID:         groupID,
+		})
+		return
+	}
+
 	ev := &MessageEvent{
 		Sender:          sender,
 		SenderDevice:    senderDevice,
-		Timestamp:       msToTime(dm.GetTimestamp()),
+		Timestamp:       ts,
 		ServerTimestamp: srvTS,
 		Body:            dm.GetBody(),
-	}
-	if ev.Timestamp.IsZero() {
-		ev.Timestamp = envTS
+		GroupID:         groupID,
 	}
 	if dm.GetExpireTimer() != 0 {
 		ev.ExpiresIn = time.Duration(dm.GetExpireTimer()) * time.Second
 	}
-	if dm.GetGroupV2() != nil && len(dm.GetGroupV2().GetMasterKey()) > 0 {
-		ev.GroupID = hex.EncodeToString(dm.GetGroupV2().GetMasterKey())
-	}
 	c.emit(ev)
+}
+
+func (c *Client) handleEditMessage(sender string, senderDevice uint32, envTS, srvTS time.Time, em *sspb.EditMessage) {
+	dm := em.GetDataMessage()
+	ts := envTS
+	groupID := ""
+	body := ""
+	if dm != nil {
+		if dmts := msToTime(dm.GetTimestamp()); !dmts.IsZero() {
+			ts = dmts
+		}
+		body = dm.GetBody()
+		if dm.GetGroupV2() != nil && len(dm.GetGroupV2().GetMasterKey()) > 0 {
+			groupID = hex.EncodeToString(dm.GetGroupV2().GetMasterKey())
+		}
+	}
+	c.emit(&EditMessageEvent{
+		Sender:          sender,
+		SenderDevice:    senderDevice,
+		Timestamp:       ts,
+		ServerTimestamp: srvTS,
+		TargetTimestamp: msToTime(em.GetTargetSentTimestamp()),
+		NewBody:         body,
+		GroupID:         groupID,
+	})
 }
 
 func (c *Client) handleReceiptMessage(sender string, senderDevice uint32, rm *sspb.ReceiptMessage) {
