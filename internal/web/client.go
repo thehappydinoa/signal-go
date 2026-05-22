@@ -14,9 +14,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/thehappydinoa/signal-go/internal/tlsroots"
 	"github.com/thehappydinoa/signal-go/internal/web/useragent"
-
-	_ "github.com/thehappydinoa/signal-go/internal/tlsroots" // Windows/cgo trust store
 )
 
 // DefaultBaseURL is Signal's production REST endpoint.
@@ -43,9 +42,10 @@ type Client struct {
 type Options struct {
 	// Timeout overrides the 30s default request timeout.
 	Timeout time.Duration
-	// PinnedRootCAs, when non-nil, replaces the system trust store with
-	// the supplied pool. Opt-in pinning is documented in
-	// docs/security/threat-model.md; nil keeps the system roots.
+	// PinnedRootCAs, when non-nil, replaces the trust store with the
+	// supplied pool. Opt-in pinning is documented in
+	// docs/security/threat-model.md. When nil and the client base URL is a
+	// *.signal.org host, [tlsroots.ApplyRootCAs] pins Signal's private root.
 	PinnedRootCAs *x509.CertPool
 	// InsecureSkipVerify disables certificate verification. Tests only.
 	// Production code MUST leave this false — the field exists so the
@@ -78,10 +78,14 @@ func NewWithOptions(baseURL, userAgent string, opts Options) *Client {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
+	host := ""
+	if u, err := url.Parse(baseURL); err == nil {
+		host = tlsroots.Hostname(u.Host)
+	}
 	return &Client{
 		BaseURL:    baseURL,
 		UserAgent:  userAgent,
-		HTTPClient: newHTTPClient(timeout, opts),
+		HTTPClient: newHTTPClient(timeout, opts, host),
 	}
 }
 
@@ -89,25 +93,29 @@ func NewWithOptions(baseURL, userAgent string, opts Options) *Client {
 // explicit TLS minimum version and (optionally) a pinned CA pool. Cloning
 // [http.DefaultTransport] preserves Go's connection-pool and HTTP/2
 // upgrade behaviour.
-func newHTTPClient(timeout time.Duration, opts Options) *http.Client {
+func newHTTPClient(timeout time.Duration, opts Options, host string) *http.Client {
 	tr, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return &http.Client{
 			Timeout:   timeout,
-			Transport: &http.Transport{TLSClientConfig: tlsConfigFromOptions(opts)},
+			Transport: &http.Transport{TLSClientConfig: tlsConfigFromOptions(opts, host)},
 		}
 	}
 	clone := tr.Clone()
-	clone.TLSClientConfig = tlsConfigFromOptions(opts)
+	clone.TLSClientConfig = tlsConfigFromOptions(opts, host)
 	return &http.Client{Timeout: timeout, Transport: clone}
 }
 
-func tlsConfigFromOptions(opts Options) *tls.Config {
-	return &tls.Config{
+func tlsConfigFromOptions(opts Options, host string) *tls.Config {
+	cfg := &tls.Config{
 		MinVersion:         MinTLSVersion,
 		RootCAs:            opts.PinnedRootCAs,
 		InsecureSkipVerify: opts.InsecureSkipVerify, //nolint:gosec // guarded in NewWithOptions, used only by tests
 	}
+	if err := tlsroots.ApplyRootCAs(cfg, host); err != nil {
+		panic(err)
+	}
+	return cfg
 }
 
 // Credentials carries the username + password used for HTTP Basic auth.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,8 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
-
-	_ "github.com/thehappydinoa/signal-go/internal/tlsroots" // Windows/cgo trust store
+	"github.com/thehappydinoa/signal-go/internal/tlsroots"
 )
 
 // DialOptions configures [Dial].
@@ -45,8 +45,12 @@ func Dial(ctx context.Context, rawURL string, opts *DialOptions) (*Client, error
 	}
 	httpc := opts.HTTPClient
 	if httpc == nil {
+		host := ""
+		if u, err := url.Parse(rawURL); err == nil {
+			host = tlsroots.Hostname(u.Host)
+		}
 		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tr.TLSClientConfig = mergeTLSConfig(opts.TLSConfig)
+		tr.TLSClientConfig = mergeTLSConfig(opts.TLSConfig, host)
 		httpc = &http.Client{Transport: tr}
 	}
 	conn, resp, err := websocket.Dial(ctx, rawURL, &websocket.DialOptions{
@@ -305,7 +309,7 @@ func (c *Client) failPending() {
 // config with only MinVersion set. Returning a clone (rather than
 // mutating the caller's config) avoids surprising callers who reuse the
 // same *tls.Config for multiple dials.
-func mergeTLSConfig(base *tls.Config) *tls.Config {
+func mergeTLSConfig(base *tls.Config, host string) *tls.Config {
 	var cfg *tls.Config
 	if base != nil {
 		cfg = base.Clone()
@@ -314,6 +318,10 @@ func mergeTLSConfig(base *tls.Config) *tls.Config {
 	}
 	if cfg.MinVersion < MinTLSVersion {
 		cfg.MinVersion = MinTLSVersion
+	}
+	if err := tlsroots.ApplyRootCAs(cfg, host); err != nil {
+		// Embedded root is build-time constant; failure is a programming error.
+		panic(err)
 	}
 	return cfg
 }

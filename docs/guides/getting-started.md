@@ -542,3 +542,16 @@ See [ADR 0029](../adr/0029-sqlite-backed-store.md).
   `scripts/build-libsignal.sh`. Run `task libsignal` again (or
   `FORCE=1 task libsignal`); the script appends portable ADX fallbacks
   for COFF linkers.
+- *Browser or `curl` shows an untrusted cert for `https://chat.signal.org`* —
+  expected if Signal's private root is not in your OS trust store. The
+  official apps pin that CA; `signal-go` does too ([ADR 0034](../adr/0034-signal-tls-root-pinning.md)).
+  Browsers: install the same root Signal ships (`signal-messenger.cer` in
+  [Signal-iOS](https://github.com/signalapp/Signal-iOS/blob/main/SignalServiceKit/Resources/Certificates/signal-messenger.cer))
+  into **Trusted Root Certification Authorities** if you want Chrome/Edge to
+  open the site. For CLI use, rebuild after the pinning change — do not use
+  `InsecureSkipVerify` against production.
+- *`signal-go link`: `x509: certificate signed by unknown authority`* — on
+  builds before ADR 0034, or if you override TLS with a custom `RootCAs` pool
+  that omits Signal's root. Update to current `main` and retry; UniFi SSL
+  inspection can also break TLS if it replaces the leaf (check the issuer is
+  **Signal Messenger, LLC**, not your firewall vendor).
