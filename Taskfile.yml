@@ -97,6 +97,32 @@ tasks:
     cmds:
       - golangci-lint run ./...
 
+  staticcheck:
+    desc: Run staticcheck (Phase 8 audit gate)
+    deps: [libsignal]
+    cmds:
+      - |
+        command -v staticcheck >/dev/null || go install honnef.co/go/tools/cmd/staticcheck@latest
+        PKGS=$(go list ./... | grep -v 'internal/proto/gen')
+        staticcheck $PKGS
+
+  fuzz:
+    desc: Run every Go fuzz target for a short local budget
+    deps: [libsignal]
+    vars:
+      FUZZTIME: '{{.FUZZTIME | default "30s"}}'
+    cmds:
+      - |
+        targets=$(go test -list '^Fuzz' ./... 2>/dev/null | awk '/^Fuzz/ {print pkg":"$0} /^ok|^---|^FAIL/ {} /signal-go/ {pkg=$0}')
+        # Fallback when -list isn't supported; iterate the known list.
+        for entry in \
+            internal/provisioning:FuzzDecryptEnvelope \
+            internal/provisioning:FuzzPKCS7Unpad ; do
+          pkg=$(echo "$entry" | cut -d: -f1); fn=$(echo "$entry" | cut -d: -f2)
+          echo ">> fuzzing $pkg::$fn for {{.FUZZTIME}}"
+          go test -run='^$' -fuzz="^${fn}$" -fuzztime={{.FUZZTIME}} ./$pkg
+        done
+
   fmt:
     desc: Format Go code (ignores the libsignal build cache under .build/)
     cmds:
@@ -127,5 +153,6 @@ tasks:
       - task: libsignal
       - task: proto
       - task: lint
+      - task: staticcheck
       - task: test
       - task: cover

@@ -1,0 +1,114 @@
+name: Fuzz (nightly)
+
+# Runs each Go fuzz target for a fixed budget on the master schedule.
+# The job is deliberately not on every PR — fuzzing is expensive and
+# flake-prone for diff-based gating. Phase 8 of the roadmap requires at
+# least 5 minutes per target on a nightly schedule; this workflow
+# satisfies that.
+#
+# Findings are stored as workflow artifacts (the failing corpus entries)
+# so the on-call can reproduce locally with
+#   go test -run=TestName/<entry> ./<pkg>
+# after extracting the artifact.
+
+on:
+  schedule:
+    # 03:13 UTC daily — outside US business hours, off the hour to avoid
+    # the GH cron stampede.
+    - cron: '13 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.25'
+  FUZZTIME: 5m
+
+jobs:
+  libsignal:
+    name: Build libsignal_ffi.a
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: version
+        run: |
+          v=$(grep -oP 'LIBSIGNAL_VERSION="\$\{LIBSIGNAL_VERSION:-\K[^"}]+' scripts/build-libsignal.sh)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - id: cache
+        uses: actions/cache@v5
+        with:
+          path: internal/libsignal/lib
+          key: libsignal-${{ steps.version.outputs.version }}-ubuntu-latest-x86_64-v1
+
+      - name: Install Rust toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Build libsignal_ffi.a
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          LIBSIGNAL_VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/build-libsignal.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: libsignal_ffi-linux-amd64-${{ steps.version.outputs.version }}
+          path: internal/libsignal/lib/libsignal_ffi.a
+          retention-days: 1
+          if-no-files-found: error
+
+  fuzz:
+    name: Fuzz ${{ matrix.pkg }}/${{ matrix.target }}
+    runs-on: ubuntu-latest
+    needs: libsignal
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: ./internal/provisioning
+            target: FuzzDecryptEnvelope
+          - pkg: ./internal/provisioning
+            target: FuzzPKCS7Unpad
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libsignal_ffi-linux-amd64-${{ needs.libsignal.outputs.version }}
+          path: internal/libsignal/lib
+
+      - name: Restore fuzz corpus cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: fuzz-${{ matrix.pkg }}-${{ matrix.target }}-v1
+          restore-keys: |
+            fuzz-${{ matrix.pkg }}-${{ matrix.target }}-
+
+      - name: Run fuzz target
+        run: |
+          go test -run='^$' -fuzz='^${{ matrix.target }}$' -fuzztime=${{ env.FUZZTIME }} ${{ matrix.pkg }}
+
+      - name: Upload failing corpus on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-fail-${{ matrix.target }}
+          path: |
+            ${{ matrix.pkg }}/testdata/fuzz/${{ matrix.target }}
+          if-no-files-found: ignore
