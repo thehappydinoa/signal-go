@@ -3,6 +3,8 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -18,6 +20,10 @@ import (
 // DefaultBaseURL is Signal's production REST endpoint.
 const DefaultBaseURL = "https://chat.signal.org"
 
+// MinTLSVersion is the minimum TLS version this package ever negotiates.
+// Documented for the Phase-8 audit: see docs/security/threat-model.md.
+const MinTLSVersion = tls.VersionTLS12
+
 // Client is an HTTP client targeting one Signal service endpoint.
 //
 // Goroutine-safe: net/http.Client underneath.
@@ -29,19 +35,76 @@ type Client struct {
 	CDNHosts map[uint32]string
 }
 
+// Options tweaks the default HTTP behaviour. The zero value is fine for
+// production use; tests pass a [Options.PinnedRootCAs] of nil to keep the
+// system trust store.
+type Options struct {
+	// Timeout overrides the 30s default request timeout.
+	Timeout time.Duration
+	// PinnedRootCAs, when non-nil, replaces the system trust store with
+	// the supplied pool. Opt-in pinning is documented in
+	// docs/security/threat-model.md; nil keeps the system roots.
+	PinnedRootCAs *x509.CertPool
+	// InsecureSkipVerify disables certificate verification. Tests only.
+	// Production code MUST leave this false — the field exists so the
+	// test harness can stand up an httptest.NewTLSServer without a real
+	// CA. A run-time guard in [New] panics if this is set while the
+	// BaseURL points at chat.signal.org.
+	InsecureSkipVerify bool
+}
+
 // New returns a Client with sensible defaults. baseURL may be empty to use
 // [DefaultBaseURL]; pass a test server URL in unit tests.
 func New(baseURL, userAgent string) *Client {
+	return NewWithOptions(baseURL, userAgent, Options{})
+}
+
+// NewWithOptions returns a Client configured per opts. All TLS dials use
+// MinVersion=TLS 1.2 explicitly (see [MinTLSVersion]); callers may
+// optionally pin a CA pool via [Options.PinnedRootCAs].
+func NewWithOptions(baseURL, userAgent string, opts Options) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
 	if userAgent == "" {
 		userAgent = useragent.Resolve(useragent.SignalGo, "", useragent.Options{})
 	}
+	if opts.InsecureSkipVerify && baseURL == DefaultBaseURL {
+		panic("web: InsecureSkipVerify must never be set against the production base URL")
+	}
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
 	return &Client{
 		BaseURL:    baseURL,
 		UserAgent:  userAgent,
-		HTTPClient: &http.Client{Timeout: 30 * time.Second},
+		HTTPClient: newHTTPClient(timeout, opts),
+	}
+}
+
+// newHTTPClient returns an *http.Client whose transport enforces an
+// explicit TLS minimum version and (optionally) a pinned CA pool. Cloning
+// [http.DefaultTransport] preserves Go's connection-pool and HTTP/2
+// upgrade behaviour.
+func newHTTPClient(timeout time.Duration, opts Options) *http.Client {
+	tr, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{
+			Timeout:   timeout,
+			Transport: &http.Transport{TLSClientConfig: tlsConfigFromOptions(opts)},
+		}
+	}
+	clone := tr.Clone()
+	clone.TLSClientConfig = tlsConfigFromOptions(opts)
+	return &http.Client{Timeout: timeout, Transport: clone}
+}
+
+func tlsConfigFromOptions(opts Options) *tls.Config {
+	return &tls.Config{
+		MinVersion:         MinTLSVersion,
+		RootCAs:            opts.PinnedRootCAs,
+		InsecureSkipVerify: opts.InsecureSkipVerify, //nolint:gosec // guarded in NewWithOptions, used only by tests
 	}
 }
 

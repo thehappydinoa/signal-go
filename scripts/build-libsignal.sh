@@ -27,8 +27,44 @@ STAMP="$LIB_DIR/.version"
 
 mkdir -p "$LIB_DIR" "$INCLUDE_DIR" "$BUILD_DIR"
 
+# patch_gnu_stack appends a zero-length `.note.GNU-stack` ELF section to
+# every member of libsignal_ffi.a missing one. BoringSSL ships a handful
+# of assembly objects without the section, so GNU ld emits a noisy
+# "executable stack" warning on every Go link. The Go-produced binary
+# itself is fine (Go injects PT_GNU_STACK as non-exec regardless), but
+# the warning is alarming. Patching is idempotent.
+patch_gnu_stack() {
+  if ! command -v ar >/dev/null || ! command -v objcopy >/dev/null || ! command -v readelf >/dev/null; then
+    echo ">> warning: ar/objcopy/readelf not found; skipping GNU-stack patch" >&2
+    return 0
+  fi
+  echo ">> patching libsignal_ffi.a for .note.GNU-stack"
+  PATCH_DIR="$(mktemp -d)"
+  (
+    cd "$PATCH_DIR"
+    ar x "$LIB_DIR/libsignal_ffi.a"
+    patched=0
+    for obj in *.o; do
+      [[ -f "$obj" ]] || continue
+      if ! readelf -S "$obj" 2>/dev/null | grep -q '\.note\.GNU-stack'; then
+        objcopy --add-section .note.GNU-stack=/dev/null "$obj" "$obj.patched"
+        mv "$obj.patched" "$obj"
+        patched=$((patched + 1))
+      fi
+    done
+    if ls *.o >/dev/null 2>&1; then
+      ar rcs "$LIB_DIR/libsignal_ffi.a" *.o
+    fi
+    echo ">> patched $patched object(s) missing .note.GNU-stack"
+  )
+  rm -rf "$PATCH_DIR"
+}
+
 if [[ "${FORCE:-0}" != "1" && -f "$LIB_DIR/libsignal_ffi.a" && -f "$STAMP" && "$(cat "$STAMP")" == "$LIBSIGNAL_VERSION" ]]; then
   echo "libsignal_ffi.a already built for $LIBSIGNAL_VERSION (use FORCE=1 to rebuild)"
+  # The patch is idempotent and cheap; re-running guarantees existing
+  # caches built before the patch landed (Phase 7 option 1) get fixed.
+  patch_gnu_stack
   exit 0
 fi
 
@@ -58,33 +94,7 @@ fi
 echo ">> installing artifacts"
 cp -f "$SRC_LIB" "$LIB_DIR/libsignal_ffi.a"
 
-# BoringSSL assembly objects inside libsignal_ffi.a may lack .note.GNU-stack,
-# which makes GNU ld warn about an executable stack on every Go link. Post-
-# process members missing the section (ROADMAP Phase 7 option 1).
-if command -v ar >/dev/null && command -v objcopy >/dev/null && command -v readelf >/dev/null; then
-  echo ">> patching libsignal_ffi.a for .note.GNU-stack"
-  PATCH_DIR="$(mktemp -d)"
-  (
-    cd "$PATCH_DIR"
-    ar x "$LIB_DIR/libsignal_ffi.a"
-    patched=0
-    for obj in *.o; do
-      [[ -f "$obj" ]] || continue
-      if ! readelf -S "$obj" 2>/dev/null | grep -q '\.note\.GNU-stack'; then
-        objcopy --add-section .note.GNU-stack=/dev/null "$obj" "$obj.patched"
-        mv "$obj.patched" "$obj"
-        patched=$((patched + 1))
-      fi
-    done
-    if ls *.o >/dev/null 2>&1; then
-      ar rcs "$LIB_DIR/libsignal_ffi.a" *.o
-    fi
-    echo ">> patched $patched object(s) missing .note.GNU-stack"
-  )
-  rm -rf "$PATCH_DIR"
-else
-  echo ">> warning: ar/objcopy/readelf not found; skipping GNU-stack patch" >&2
-fi
+patch_gnu_stack
 
 # The cbindgen-generated header lives in the Swift consumer tree of upstream.
 cp -f "$BUILD_DIR/swift/Sources/SignalFfi/signal_ffi.h" "$INCLUDE_DIR/signal_ffi.h"

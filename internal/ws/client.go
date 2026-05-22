@@ -31,6 +31,10 @@ type DialOptions struct {
 	Handler RequestHandler
 }
 
+// MinTLSVersion is the minimum TLS version this package ever negotiates.
+// Documented for the Phase-8 audit: see docs/security/threat-model.md.
+const MinTLSVersion = tls.VersionTLS12
+
 // Dial opens a websocket connection to rawURL (wss:// or ws://) and starts a
 // Client speaking Signal's WebSocketMessage envelope on top of it.
 func Dial(ctx context.Context, rawURL string, opts *DialOptions) (*Client, error) {
@@ -40,9 +44,7 @@ func Dial(ctx context.Context, rawURL string, opts *DialOptions) (*Client, error
 	httpc := opts.HTTPClient
 	if httpc == nil {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
-		if opts.TLSConfig != nil {
-			tr.TLSClientConfig = opts.TLSConfig
-		}
+		tr.TLSClientConfig = mergeTLSConfig(opts.TLSConfig)
 		httpc = &http.Client{Transport: tr}
 	}
 	conn, resp, err := websocket.Dial(ctx, rawURL, &websocket.DialOptions{
@@ -294,4 +296,22 @@ func (c *Client) failPending() {
 		close(ch)
 		delete(c.pending, id)
 	}
+}
+
+// mergeTLSConfig clones the supplied *tls.Config and enforces the
+// package-wide minimum TLS version. A nil base config yields a fresh
+// config with only MinVersion set. Returning a clone (rather than
+// mutating the caller's config) avoids surprising callers who reuse the
+// same *tls.Config for multiple dials.
+func mergeTLSConfig(base *tls.Config) *tls.Config {
+	var cfg *tls.Config
+	if base != nil {
+		cfg = base.Clone()
+	} else {
+		cfg = &tls.Config{}
+	}
+	if cfg.MinVersion < MinTLSVersion {
+		cfg.MinVersion = MinTLSVersion
+	}
+	return cfg
 }
