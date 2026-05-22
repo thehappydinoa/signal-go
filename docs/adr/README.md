@@ -34,3 +34,4 @@ with a new ADR that links back to the one it replaces.
 | 0024 | Group log sync (snapshot-based)                  | Accepted |
 | 0025 | Inbound group update events + optional auto-sync | Accepted |
 | 0026 | Attachment cipher (classic AES-CBC + HMAC)       | Accepted |
+| 0027 | Storage Service sync (pull-only v1)              | Accepted |

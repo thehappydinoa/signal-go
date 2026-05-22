@@ -9,6 +9,11 @@ import (
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 )
 
+func storageManifestFetchLatest(sm *sspb.SyncMessage) bool {
+	fl := sm.GetFetchLatest()
+	return fl != nil && fl.GetType() == sspb.SyncMessage_FetchLatest_STORAGE_MANIFEST
+}
+
 // dispatchContent routes a decoded Content protobuf to the appropriate
 // typed event constructor and emits the result.
 func (c *Client) dispatchContent(sender string, senderDevice uint32, envTS, srvTS time.Time, content *sspb.Content) {
@@ -192,6 +197,15 @@ func (c *Client) handleSyncMessage(senderDevice uint32, envTS time.Time, sm *ssp
 	if reads := sm.GetRead(); len(reads) > 0 {
 		for _, r := range reads {
 			ev.ReadTimestamps = append(ev.ReadTimestamps, msToTime(r.GetTimestamp()))
+		}
+	}
+
+	if storageManifestFetchLatest(sm) {
+		c.maybeAutoSyncStorage()
+	}
+	if keys := sm.GetKeys(); keys != nil {
+		if pool := keys.GetAccountEntropyPool(); pool != "" {
+			c.updateAccountEntropyPool(pool)
 		}
 	}
 

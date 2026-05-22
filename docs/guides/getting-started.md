@@ -334,6 +334,39 @@ signup.Register()
 See [ADR 0021](../adr/0021-group-control-messages.md) and
 [ADR 0022](../adr/0022-phase5-finish.md).
 
+### Storage Service sync (contacts + group list)
+
+Pull the encrypted contact list and Groups v2 chat list from Signal's
+storage service. Requires a non-empty `AccountEntropyPool` on the linked
+account (populated at link time; updated via `SyncMessage.Keys`):
+
+```go
+result, err := client.SyncStorage(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+for _, c := range result.Contacts {
+    fmt.Println(c.ACI, c.GivenName)
+}
+for _, g := range result.Groups {
+    grp, _ := client.FetchGroup(ctx, g.MasterKey)
+    fmt.Println(g.ID, grp.Title)
+}
+```
+
+Contact profile keys are cached automatically for sealed-sender send.
+Enable background sync when a linked device requests it:
+
+```go
+client, err := signal.Open(ctx, signal.OpenOptions{
+    AccountStore:    acctStore,
+    SignalStores:    signalStores,
+    AutoSyncStorage: true,
+})
+```
+
+See [ADR 0027](../adr/0027-storage-service-sync.md).
+
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are

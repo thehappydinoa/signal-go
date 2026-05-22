@@ -126,7 +126,7 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Group log sync (`GET /v2/groups/logs/{version}`) — snapshot-based
       ([ADR 0024](docs/adr/0024-group-log-sync.md)).
 
-## Phase 6 — Bot framework **(in progress)**
+## Phase 6 — Bot framework **(done)**
 
 A higher-level `pkg/bot` package on top of `pkg/signal` that makes Signal
 bots as ergonomic as Telegram or Slack Bolt:
@@ -171,7 +171,8 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 
 - [x] Attachments — v2 cipher, CDN3 upload/download, send/receive, `bot.ReplyAttachment`
       ([ADR 0026](docs/adr/0026-attachment-cipher.md))
-- [ ] Storage Service sync (contacts, group list)
+- [x] Storage Service sync (contacts, group list)
+      ([ADR 0027](docs/adr/0027-storage-service-sync.md))
 - [ ] CDSI contact discovery
 - [ ] SQLite-backed store
 - [ ] Backup/restore (linked-device "synchronized start")
