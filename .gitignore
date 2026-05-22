@@ -31,6 +31,9 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# Taskfile
+.task/
+
 # signal-go: built libsignal artifacts (header is committed, .a is not)
 /internal/libsignal/lib/*.a
 /internal/libsignal/lib/.version
