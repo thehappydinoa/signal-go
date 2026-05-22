@@ -23,5 +23,26 @@
 //   - Borrowed buffers (SignalBorrowedBuffer) are read-only views the
 //     callee will not retain past the call.
 //
+// # Memory-safety contract
+//
+// We adhere to the following invariants at the cgo boundary. Phase 8 of
+// the roadmap revisits them as part of the internal audit pass.
+//
+//   - Every type wrapping a Rust-owned opaque pointer (SignalMutPointer*
+//     types) has a [runtime.SetFinalizer] that frees it exactly once.
+//     Types with explicit Destroy methods also clear the finalizer so the
+//     same pointer is never freed twice.
+//   - Every borrowed buffer passed via [borrowed] is paired with a
+//     [keepAlive] (a [runtime.KeepAlive] wrapper) so the GC cannot reclaim
+//     the underlying slice while Rust still has the pointer.
+//   - Every cgo.Handle created via [savePointer] is paired with a
+//     [deletePointer] in the C-to-Go callback path, and the wrapper is
+//     pinned so concurrent GCs cannot move it under the callback.
+//   - Every [SignalFfiError] returned from libsignal is freed exactly once
+//     by [checkError]; we never re-touch the pointer after.
+//   - We link the release build of libsignal_ffi.a (scripts/build-libsignal.sh
+//     pins `--release`); no `-testing` variants make it into production
+//     binaries.
+//
 // [libsignal]: https://github.com/signalapp/libsignal
 package libsignal
