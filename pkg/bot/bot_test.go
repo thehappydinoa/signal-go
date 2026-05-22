@@ -12,17 +12,37 @@ import (
 )
 
 // fakeClient is a stand-in for *signal.Client. It exposes a buffered
-// Events channel the test can push events into, and records every Send
-// call.
+// Events channel the test can push events into, and records every Send /
+// SendReceipt / SendTyping / SendReaction call.
 type fakeClient struct {
 	events chan signal.Event
 
-	mu    sync.Mutex
-	sends []sentMessage
+	mu        sync.Mutex
+	sends     []sentMessage
+	receipts  []sentReceipt
+	typings   []sentTyping
+	reactions []sentReaction
 }
 
 type sentMessage struct {
 	to, text string
+}
+
+type sentReceipt struct {
+	to         string
+	kind       signal.ReceiptType
+	timestamps []time.Time
+}
+
+type sentTyping struct {
+	to     string
+	action signal.TypingAction
+}
+
+type sentReaction struct {
+	to, emoji, targetAuthor string
+	targetTS                time.Time
+	remove                  bool
 }
 
 func newFakeClient() *fakeClient {
@@ -38,6 +58,28 @@ func (f *fakeClient) Send(_ context.Context, to, text string) (signal.Receipt, e
 	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
 }
 
+func (f *fakeClient) SendReceipt(_ context.Context, to string, kind signal.ReceiptType, ts []time.Time) (signal.Receipt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	tsCopy := append([]time.Time(nil), ts...)
+	f.receipts = append(f.receipts, sentReceipt{to: to, kind: kind, timestamps: tsCopy})
+	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
+}
+
+func (f *fakeClient) SendTyping(_ context.Context, to string, action signal.TypingAction) (signal.Receipt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typings = append(f.typings, sentTyping{to: to, action: action})
+	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
+}
+
+func (f *fakeClient) SendReaction(_ context.Context, to, emoji, targetAuthor string, targetTS time.Time, remove bool) (signal.Receipt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reactions = append(f.reactions, sentReaction{to: to, emoji: emoji, targetAuthor: targetAuthor, targetTS: targetTS, remove: remove})
+	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
+}
+
 func (f *fakeClient) Close() error { close(f.events); return nil }
 
 func (f *fakeClient) Sends() []sentMessage {
@@ -45,6 +87,30 @@ func (f *fakeClient) Sends() []sentMessage {
 	defer f.mu.Unlock()
 	out := make([]sentMessage, len(f.sends))
 	copy(out, f.sends)
+	return out
+}
+
+func (f *fakeClient) Receipts() []sentReceipt {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]sentReceipt, len(f.receipts))
+	copy(out, f.receipts)
+	return out
+}
+
+func (f *fakeClient) Typings() []sentTyping {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]sentTyping, len(f.typings))
+	copy(out, f.typings)
+	return out
+}
+
+func (f *fakeClient) Reactions() []sentReaction {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]sentReaction, len(f.reactions))
+	copy(out, f.reactions)
 	return out
 }
 
@@ -530,6 +596,245 @@ func TestGlobalMiddlewareOuterPerHandlerMiddlewareInner(t *testing.T) {
 	if len(order) != 3 || order[0] != "global" || order[1] != "per-handler" || order[2] != "handler" {
 		t.Errorf("order = %v, want [global per-handler handler]", order)
 	}
+}
+
+// --- reaction / edit / receipt / typing helpers ---
+
+// targetACI used by all reactionEv constructions in this file. Pulled
+// out as a constant so unparam doesn't flag a string parameter that's
+// always the same literal.
+const targetACI = "bob"
+
+func reactionEv(sender, emoji string, targetTS time.Time, remove bool) *signal.ReactionEvent {
+	return &signal.ReactionEvent{
+		Sender:          sender,
+		Emoji:           emoji,
+		Remove:          remove,
+		TargetAuthorACI: targetACI,
+		TargetTimestamp: targetTS,
+		Timestamp:       time.Now(),
+	}
+}
+
+func editEv(sender string, targetTS time.Time, body string) *signal.EditMessageEvent {
+	return &signal.EditMessageEvent{
+		Sender:          sender,
+		TargetTimestamp: targetTS,
+		NewBody:         body,
+		Timestamp:       time.Now(),
+	}
+}
+
+func TestOnReactionEmojiMatch(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var fired sync.WaitGroup
+	fired.Add(1)
+	var got *Reaction
+	b.OnReaction("👍").Do(func(_ context.Context, r *Reaction) error {
+		defer fired.Done()
+		got = r
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	target := time.Now().Add(-time.Minute)
+	fc.events <- reactionEv("alice", "👍", target, false)
+	fired.Wait()
+	cancel()
+	_ = wait()
+
+	if got == nil || got.Emoji() != "👍" || got.Sender() != "alice" || !got.TargetTimestamp().Equal(target) {
+		t.Errorf("got reaction = %+v", got)
+	}
+}
+
+func TestOnReactionSkipsEmojiMismatch(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.OnReaction("👍").Do(func(_ context.Context, _ *Reaction) error {
+		t.Fatal("handler must not fire for different emoji")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- reactionEv("alice", "❤️", time.Now(), false)
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
+}
+
+func TestOnReactionSkipsRemovalsByDefault(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.OnReaction("👍").Do(func(_ context.Context, _ *Reaction) error {
+		t.Fatal("handler must not fire for removals by default")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- reactionEv("alice", "👍", time.Now(), true)
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
+}
+
+func TestOnReactionIncludeRemovalsFires(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var fired sync.WaitGroup
+	fired.Add(1)
+	var got *Reaction
+	b.OnReaction("👍").IncludeRemovals().Do(func(_ context.Context, r *Reaction) error {
+		defer fired.Done()
+		got = r
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- reactionEv("alice", "👍", time.Now(), true)
+	fired.Wait()
+	cancel()
+	_ = wait()
+	if got == nil || !got.IsRemoval() {
+		t.Errorf("got = %+v, want IsRemoval()=true", got)
+	}
+}
+
+func TestOnAnyReactionFiresForAnyEmoji(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var fired sync.WaitGroup
+	fired.Add(1)
+	b.OnAnyReaction().Do(func(_ context.Context, _ *Reaction) error {
+		defer fired.Done()
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- reactionEv("alice", "🎉", time.Now(), false)
+	fired.Wait()
+	cancel()
+	_ = wait()
+}
+
+func TestOnEditFires(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var fired sync.WaitGroup
+	fired.Add(1)
+	var got *Edit
+	b.OnEdit().Do(func(_ context.Context, e *Edit) error {
+		defer fired.Done()
+		got = e
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	target := time.Now().Add(-time.Minute)
+	fc.events <- editEv("alice", target, "fixed typo")
+	fired.Wait()
+	cancel()
+	_ = wait()
+	if got == nil || got.NewBody() != "fixed typo" || !got.TargetTimestamp().Equal(target) {
+		t.Errorf("got = %+v", got)
+	}
+}
+
+func TestMessageReactSendsReaction(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var done sync.WaitGroup
+	done.Add(1)
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		return m.React(ctx, "👍")
+	})
+	cancel, wait := runBot(t, b)
+	ev := msgEv("alice", "hi")
+	fc.events <- ev
+	done.Wait()
+	cancel()
+	_ = wait()
+
+	got := fc.Reactions()
+	if len(got) != 1 || got[0].emoji != "👍" || got[0].targetAuthor != "alice" || got[0].remove {
+		t.Errorf("reactions = %+v", got)
+	}
+}
+
+func TestMessageReactInGroupReturnsError(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var done sync.WaitGroup
+	done.Add(1)
+	var reactErr error
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		reactErr = m.React(ctx, "👍")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- groupMsgEv("alice", "g1", "hi")
+	done.Wait()
+	cancel()
+	_ = wait()
+	if !errors.Is(reactErr, ErrReplyNotSupportedInGroup) {
+		t.Errorf("reactErr = %v", reactErr)
+	}
+	if len(fc.Reactions()) != 0 {
+		t.Error("group react should not send")
+	}
+}
+
+func TestMessageMarkReadSendsReceipt(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var done sync.WaitGroup
+	done.Add(1)
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		return m.MarkRead(ctx)
+	})
+	cancel, wait := runBot(t, b)
+	ev := msgEv("alice", "hi")
+	fc.events <- ev
+	done.Wait()
+	cancel()
+	_ = wait()
+	got := fc.Receipts()
+	if len(got) != 1 || got[0].kind != signal.ReceiptRead || got[0].to != "alice" {
+		t.Errorf("receipts = %+v", got)
+	}
+}
+
+func TestMessageTypingSendsTyping(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	var done sync.WaitGroup
+	done.Add(1)
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		return m.Typing(ctx, signal.TypingStarted)
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	done.Wait()
+	cancel()
+	_ = wait()
+	got := fc.Typings()
+	if len(got) != 1 || got[0].action != signal.TypingStarted || got[0].to != "alice" {
+		t.Errorf("typings = %+v", got)
+	}
+}
+
+func TestReactionScopeFromFiltersOtherSenders(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.OnAnyReaction().From("allowed").Do(func(_ context.Context, _ *Reaction) error {
+		t.Fatal("must not fire for other sender")
+		return nil
+	})
+	cancel, wait := runBot(t, b)
+	fc.events <- reactionEv("other", "👍", time.Now(), false)
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
 }
 
 func TestMiddlewareErrPassFallsThrough(t *testing.T) {
