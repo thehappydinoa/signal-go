@@ -15,16 +15,13 @@ is *what* changed and *when*.
 - Terminal QR for `signal-go link` via audited `github.com/skip2/go-qrcode`
   ([ADR 0035](./docs/adr/0035-go-qrcode-cli-qr.md)); `-no-qr` and `NO_COLOR`
   skip rendering.
+- **Trigger Release for tag** workflow to start **Release** for an existing `v*`
+  tag (recovery).
 
 ### Fixed
 
 - **Create release tag** now dispatches **Release** after the tag push. Pushes
   made with the default `GITHUB_TOKEN` do not trigger other workflows on GitHub.
-
-### Added
-
-- **Trigger Release for tag** workflow to start **Release** for an existing `v*`
-  tag (recovery).
 
 ## [0.1.0-rc2] - 2026-05-22
 
