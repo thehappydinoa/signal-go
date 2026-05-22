@@ -20,7 +20,10 @@ import (
 // senderPriv's identity. It is the inverse of [DecryptEnvelope] and exists
 // only to round-trip test the decrypt path; production secondary devices
 // only ever decrypt.
-func encryptForTest(t *testing.T, senderPriv *libsignal.PrivateKey, senderPub *libsignal.PublicKey, recipientPub *libsignal.PublicKey, message *provpb.ProvisionMessage) *provpb.ProvisionEnvelope {
+//
+// Accepts [testing.TB] (not just [*testing.T]) so the fuzz-seed corpus in
+// fuzz_test.go can reuse it from a *testing.F.
+func encryptForTest(t testing.TB, senderPriv *libsignal.PrivateKey, senderPub *libsignal.PublicKey, recipientPub *libsignal.PublicKey, message *provpb.ProvisionMessage) *provpb.ProvisionEnvelope {
 	t.Helper()
 	shared, err := libsignal.Agree(senderPriv, recipientPub)
 	if err != nil {
