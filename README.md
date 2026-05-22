@@ -57,8 +57,10 @@ for the full walkthrough.
   receive is a real-time chat-ws loop emitting typed events on
   `Client.Events()`.
 - **Bot dispatch out of the box** — `pkg/bot` wraps the client with
-  `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/help")` registration
-  and a `Message.Reply` helper. Scopes + middleware land next.
+  `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/help")`,
+  `OnReaction`/`OnAnyReaction`, `OnEdit`, plus DM/Group/From scopes,
+  per-handler + global middleware, and `*Message` helpers (`Reply`,
+  `React`, `Typing`, `MarkRead`, `MarkViewed`).
   ([ADR 0008](./docs/adr/0008-bot-framework.md))
 
 ## Architecture
@@ -93,9 +95,9 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 | [2 — Complete the link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | ProvisioningCipher, prekey gen, REST registration, prekey upload |
 | [Encrypted store](./docs/adr/0012-encrypted-store.md) | ✅ | AES-256-GCM at rest, Argon2id passphrase mode |
 | [3 — Receive](./ROADMAP.md#phase-3--receive-done) | ✅ | authenticated chat ws, libsignal decrypt, typed events, prekey top-up |
-| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-in-progress) | 🔧 in progress | bundle fetch + session establish + encrypt + `PUT /v1/messages`; sealed-sender + auto-retry + multi-device next |
+| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-in-progress) | 🔧 in progress | bundle fetch + session establish + encrypt + `PUT /v1/messages` + sealed-sender + auto-retry + multi-device + `SendReceipt`/`SendTyping`/`SendReaction`; profile fetch next |
 | [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys + membership / admin surface |
-| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-in-progress) | 🔧 in progress | `pkg/bot` OnText/OnRegex/OnCommand + Reply; scopes + middleware next |
+| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-in-progress) | 🔧 in progress | OnText / OnRegex / OnCommand / OnReaction / OnEdit + DM/Group/From scopes + middleware + `Reply`/`React`/`Typing`/`MarkRead`; conversation state next |
 | [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | ⏳ | attachments, storage sync, CDSI, SQLite, backup, exec-stack warning |
 | [8 — Security audit](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010) | ⏳ | internal + external review gates `v0.1.0` |
 

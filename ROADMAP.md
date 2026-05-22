@@ -93,7 +93,9 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Unidentified-access certificate refresh + cache (sender cert cached
       in `Client.senderCert`; re-fetched when < 5 min from expiry)
 - [ ] Profile fetch (decrypt with profile key via libsignal `ProfileCipher`)
-- [ ] Read/delivery receipts
+- [x] Read/delivery receipts (`Client.SendReceipt`; also `SendTyping`,
+      `SendReaction`). Inbound receipts continue to surface as
+      `*ReceiptEvent` from the existing receive pipeline.
 
 ## Phase 5 — Groups v2 **(planned)**
 
@@ -125,9 +127,15 @@ bots as ergonomic as Telegram or Slack Bolt:
       logging via the injected `*slog.Logger`
 - [x] Scopes: `.DM()` (direct-message only), `.Group()` (group only),
       `.From(aci)` (sender filter)
+- [x] DM helpers on `*Message`: `React` / `Unreact` (1:1 reactions),
+      `Typing` (started/stopped), `MarkRead` / `MarkViewed` (READ /
+      VIEWED receipts). Group variants land with Phase 5 — they
+      currently return `ErrReplyNotSupportedInGroup`.
 - [ ] Group `Reply` once Phase 5 surfaces the group identifier + send
-      path; `ReplyAttachment`, `React`, `Typing`, `MarkRead`
-- [ ] Reaction and edit event handlers
+      path; `ReplyAttachment`
+- [x] Reaction and edit event handlers: `Bot.OnReaction(emoji)`,
+      `Bot.OnAnyReaction()`, `Bot.OnEdit()` with the same
+      `DM`/`Group`/`From` scope helpers as text dispatchers
 - [x] Middleware chain: `Bot.Use(MiddlewareFunc)` for global middleware;
       `Match.Use(MiddlewareFunc)` for per-handler middleware; outermost-first
       ordering; `ErrPass` still causes dispatcher to try the next handler
