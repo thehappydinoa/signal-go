@@ -24,6 +24,21 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
+// Canonical fixtures used across every send-side test. Pulled out as
+// package-level constants because they're only ever the same literal —
+// golangci-lint's `unparam` flags helpers that always receive the same
+// argument, and the values are also referenced from assertions.
+//
+// Multi-device tests use [newRecipientWithIdentity] directly with
+// varying deviceID + registrationID.
+const (
+	testRecipientACI   = "bob-aci-uuid"
+	testRecipientDevID = uint32(1)
+	testRecipientRegID = uint32(4242)
+	testSenderACI      = "alice-aci-uuid"
+	testSenderDevID    = uint32(1)
+)
+
 // recipientFixture is a peer ("Bob") with all the identity + prekey
 // material needed to (a) publish a bundle the sender can fetch, and
 // (b) decrypt what the sender produces.
@@ -61,8 +76,11 @@ type oneTimePreKeyPair struct {
 	priv *libsignal.PrivateKey
 }
 
-func newRecipient(t *testing.T, aci string, devID, regID uint32) *recipientFixture {
+func newRecipient(t *testing.T) *recipientFixture {
 	t.Helper()
+	aci := testRecipientACI
+	devID := testRecipientDevID
+	regID := testRecipientRegID
 	ident, err := libsignal.GenerateIdentityKeyPair()
 	if err != nil {
 		t.Fatalf("identity: %v", err)
@@ -281,8 +299,10 @@ func (r *recipientFixture) bundleResponse() web.FetchPreKeyResponse {
 // senderFixture is the equivalent of Bob's setup but for the sender
 // ("Alice"). Alice doesn't publish a bundle in this test; she just
 // needs identity + stores to drive Send.
-func newSenderClient(t *testing.T, aci string, devID uint32, baseURL string) *Client {
+func newSenderClient(t *testing.T, baseURL string) *Client {
 	t.Helper()
+	aci := testSenderACI
+	devID := testSenderDevID
 	ident, err := libsignal.GenerateIdentityKeyPair()
 	if err != nil {
 		t.Fatalf("alice identity: %v", err)
@@ -305,7 +325,7 @@ func newSenderClient(t *testing.T, aci string, devID uint32, baseURL string) *Cl
 }
 
 func TestSendRoundTripDecryptsOnRecipient(t *testing.T) {
-	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bob := newRecipient(t)
 
 	// Fake REST server: GET /* returns bundle, PUT /messages captures envelope.
 	var (
@@ -333,7 +353,7 @@ func TestSendRoundTripDecryptsOnRecipient(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	alice := newSenderClient(t, srv.URL)
 
 	const text = "hello bob, from alice"
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -397,7 +417,7 @@ func TestSendSecondMessageReusesSession(t *testing.T) {
 	// still bootstrap from any later one. Transitioning to type=Whisper
 	// requires inbound traffic from the recipient, which this test
 	// doesn't model.
-	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bob := newRecipient(t)
 
 	var (
 		mu           sync.Mutex
@@ -425,7 +445,7 @@ func TestSendSecondMessageReusesSession(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	alice := newSenderClient(t, srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -453,7 +473,7 @@ func TestSendMultiDeviceFanOut(t *testing.T) {
 	// Both devices must share one identity key (Signal's invariant). We use
 	// newRecipientWithIdentity for device 2 so its prekeys are signed by the
 	// same keypair that the bundle response advertises.
-	bobDev1 := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bobDev1 := newRecipient(t)
 	bobDev2 := newRecipientWithIdentity(t, "bob-aci-uuid", 2, 5555, bobDev1.identityKey)
 
 	var (
@@ -480,7 +500,7 @@ func TestSendMultiDeviceFanOut(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	alice := newSenderClient(t, srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -508,7 +528,7 @@ func TestSendRetryOnMismatchedDevices(t *testing.T) {
 	// fetch a bundle for device 2, then retry and succeed.
 	//
 	// Device 2 uses the same identity key as device 1 (shared account identity).
-	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bob := newRecipient(t)
 	bob2 := newRecipientWithIdentity(t, "bob-aci-uuid", 2, 5555, bob.identityKey)
 
 	var (
@@ -549,7 +569,7 @@ func TestSendRetryOnMismatchedDevices(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	alice := newSenderClient(t, srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -571,7 +591,7 @@ func TestSendRetryOnMismatchedDevices(t *testing.T) {
 func TestSendRetryOnStaleDevices(t *testing.T) {
 	// The first PUT returns HTTP 410 (stale registration ID for device 1).
 	// Send must drop the session, re-fetch the bundle, and retry.
-	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bob := newRecipient(t)
 
 	var (
 		mu      sync.Mutex
@@ -610,7 +630,7 @@ func TestSendRetryOnStaleDevices(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	alice := newSenderClient(t, srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -653,7 +673,7 @@ func TestSendPropagatesMismatchedDevicesErrorAfterRetry(t *testing.T) {
 	// If both the initial send AND the retry return 409, the error
 	// propagates to the caller. errors.As can still find the typed error
 	// through the wrapping.
-	bob := newRecipient(t, "bob-aci-uuid", 1, 4242)
+	bob := newRecipient(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -668,7 +688,7 @@ func TestSendPropagatesMismatchedDevicesErrorAfterRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	alice := newSenderClient(t, "alice-aci-uuid", 1, srv.URL)
+	alice := newSenderClient(t, srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := alice.Send(ctx, bob.aci, "hi")
