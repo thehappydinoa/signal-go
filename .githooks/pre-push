@@ -11,6 +11,10 @@
 # to build it, after which all subsequent pushes will be checked.
 set -euo pipefail
 
+repo_root="$(git rev-parse --show-toplevel)"
+# shellcheck source=scripts/dev-env.sh
+source "$repo_root/scripts/dev-env.sh"
+
 LIB="internal/libsignal/lib/libsignal_ffi.a"
 
 if [[ ! -f "$LIB" ]]; then
