@@ -24,6 +24,12 @@ type Options struct {
 	APIBaseURL string
 	UserAgent  string
 	Logger     *slog.Logger
+
+	// ConvoStore persists per-conversation state surfaced via
+	// [Bot.Convo] and [Message.Convo]. Defaults to an in-memory
+	// store; bots that need state to survive process restarts can
+	// supply a backing implementation.
+	ConvoStore ConvoStore
 }
 
 // ErrPass tells the dispatcher "I didn't really handle this event; try
@@ -60,8 +66,9 @@ type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 
 // Bot wraps a [Client] with registered dispatchers.
 type Bot struct {
-	cli Client
-	log *slog.Logger
+	cli   Client
+	log   *slog.Logger
+	convo *Conversations
 
 	mu               sync.RWMutex
 	middleware       []MiddlewareFunc
@@ -97,15 +104,38 @@ func Open(ctx context.Context, opts Options) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bot.Open: %w", err)
 	}
-	return wrap(cli, log), nil
+	return wrap(cli, log, opts.ConvoStore), nil
 }
 
 // Wrap returns a Bot driving an existing [Client]. Useful for tests
-// that already constructed a client (or want to use a stub).
-func Wrap(cli Client) *Bot { return wrap(cli, slog.Default()) }
+// that already constructed a client (or want to use a stub). The
+// returned Bot uses an in-memory [ConvoStore]; supply a custom one via
+// [WrapWithOptions] if persistence is needed.
+func Wrap(cli Client) *Bot { return wrap(cli, slog.Default(), nil) }
 
-func wrap(cli Client, log *slog.Logger) *Bot {
-	return &Bot{cli: cli, log: log}
+// WrapOptions tweaks the [Bot] returned by [WrapWithOptions]. All
+// fields are optional.
+type WrapOptions struct {
+	Logger     *slog.Logger
+	ConvoStore ConvoStore
+}
+
+// WrapWithOptions returns a Bot driving an existing [Client] with
+// non-default Logger / ConvoStore overrides. Useful for tests that
+// want to inject a persistent ConvoStore.
+func WrapWithOptions(cli Client, opts WrapOptions) *Bot {
+	log := opts.Logger
+	if log == nil {
+		log = slog.Default()
+	}
+	return wrap(cli, log, opts.ConvoStore)
+}
+
+func wrap(cli Client, log *slog.Logger, cs ConvoStore) *Bot {
+	if cs == nil {
+		cs = NewMemoryConvoStore()
+	}
+	return &Bot{cli: cli, log: log, convo: &Conversations{store: cs}}
 }
 
 // Use registers a global middleware that wraps every handler. Middleware
@@ -164,6 +194,12 @@ func (b *Bot) Run(ctx context.Context) error {
 // dispatcher doesn't cover (sending unsolicited messages, inspecting
 // the account, etc.).
 func (b *Bot) Underlying() Client { return b.cli }
+
+// Convo returns the bot-wide [Conversations] handle. Use
+// [Conversations.For] to obtain a per-key [Convo], or call
+// [Message.Convo] inside a handler to get one already scoped to the
+// inbound message.
+func (b *Bot) Convo() *Conversations { return b.convo }
 
 // dispatch routes one event through the registered handlers. Bot
 // dispatches [*signal.MessageEvent], [*signal.ReactionEvent], and
@@ -295,6 +331,25 @@ func (h Match) Group() Match {
 // From narrows the match to messages whose sender ACI equals aci.
 func (h Match) From(aci string) Match {
 	h.m.fromACI = aci
+	return h
+}
+
+// Stage narrows the match to conversations whose current stage equals
+// the given value (see [Convo.SetStage]). The empty string disables
+// the filter; pass it to [Match.AnyStage] to match conversations with
+// any non-empty stage.
+func (h Match) Stage(stage string) Match {
+	h.m.stage = stage
+	h.m.stageAny = false
+	return h
+}
+
+// AnyStage narrows the match to conversations that have a non-empty
+// stage. Useful for "wildcard" stage handlers, e.g. a /cancel command
+// that fires only when the user is mid-flow.
+func (h Match) AnyStage() Match {
+	h.m.stage = ""
+	h.m.stageAny = true
 	return h
 }
 

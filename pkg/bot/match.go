@@ -18,8 +18,8 @@ const (
 )
 
 // matcher describes one registered pattern. Only the relevant fields
-// for the kind are populated. Scope filters (dmOnly, groupOnly, fromACI)
-// are evaluated before the pattern match.
+// for the kind are populated. Scope filters (dmOnly, groupOnly, fromACI,
+// stage) are evaluated before the pattern match.
 type matcher struct {
 	kind      matchKind
 	text      string
@@ -27,22 +27,51 @@ type matcher struct {
 	dmOnly    bool
 	groupOnly bool
 	fromACI   string
+	// stage, when non-empty, requires the conversation's current
+	// stage (as written via [Convo.SetStage]) to match exactly.
+	// stageAny, when true, matches any non-empty stage.
+	stage    string
+	stageAny bool
 }
 
 // match evaluates the matcher against an inbound message event. Scope
 // filters are tested first; then the pattern match runs. Returns
 // (capture-groups-or-args, true) on match, (nil, false) otherwise.
 func (m matcher) match(ev *signal.MessageEvent, msg *Message) ([]string, bool) {
-	if m.dmOnly && msg.IsGroup() {
+	if !m.scopeOK(ev, msg) {
 		return nil, false
+	}
+	return m.bodyMatch(ev.Body)
+}
+
+// scopeOK evaluates the non-pattern scope filters: dmOnly, groupOnly,
+// fromACI, stage, stageAny. Pulled out of [matcher.match] to keep
+// cyclomatic complexity down.
+func (m matcher) scopeOK(ev *signal.MessageEvent, msg *Message) bool {
+	if m.dmOnly && msg.IsGroup() {
+		return false
 	}
 	if m.groupOnly && !msg.IsGroup() {
-		return nil, false
+		return false
 	}
 	if m.fromACI != "" && ev.Sender != m.fromACI {
-		return nil, false
+		return false
 	}
-	body := ev.Body
+	if m.stageAny || m.stage != "" {
+		current := msg.Convo().Stage()
+		if m.stageAny && current == "" {
+			return false
+		}
+		if m.stage != "" && current != m.stage {
+			return false
+		}
+	}
+	return true
+}
+
+// bodyMatch runs the pattern test against body and returns the captured
+// arguments on match. Caller is responsible for scope filtering.
+func (m matcher) bodyMatch(body string) ([]string, bool) {
 	switch m.kind {
 	case matchExact:
 		if body == m.text {
@@ -56,13 +85,11 @@ func (m matcher) match(ev *signal.MessageEvent, msg *Message) ([]string, bool) {
 		if m.re == nil {
 			return nil, false
 		}
-		groups := m.re.FindStringSubmatch(body)
-		if groups != nil {
+		if groups := m.re.FindStringSubmatch(body); groups != nil {
 			return groups, true
 		}
 	case matchCommand:
-		args, ok := parseCommand(body, m.text)
-		if ok {
+		if args, ok := parseCommand(body, m.text); ok {
 			return args, true
 		}
 	}
