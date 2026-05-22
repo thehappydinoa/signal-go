@@ -101,7 +101,7 @@ the "Link this device?" prompt; we won't yet complete the link).
       `SendReaction`). Inbound receipts continue to surface as
       `*ReceiptEvent` from the existing receive pipeline.
 
-## Phase 5 — Groups v2 **(in progress)**
+## Phase 5 — Groups v2 **(done except log sync)**
 
 - [x] zkgroup credential cache (server params + auth credentials)
 - [x] Group master key handling, GroupSecretParams
@@ -116,11 +116,14 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Group send endorsement tokens ([ADR 0020](docs/adr/0020-group-endorsements-membership.md)):
       cache GSE from fetch; prefer `Group-Send-Token` over combined UAK.
 - [x] Group membership changes — leave, promote/demote ([ADR 0020](docs/adr/0020-group-endorsements-membership.md));
-      add-member / remove-member ([ADR 0022](docs/adr/0022-phase5-finish.md)); invite-link join deferred.
+      add-member / remove-member ([ADR 0022](docs/adr/0022-phase5-finish.md));
+      invite-link join ([ADR 0023](docs/adr/0023-gse-persist-invite-join.md)).
 - [x] Group control messages — reactions + typing via sender-key;
       read/viewed receipts to message author ([ADR 0021](docs/adr/0021-group-control-messages.md)).
 - [x] Profile-key presentation member decode; persistent group distribution UUIDs
       ([ADR 0022](docs/adr/0022-phase5-finish.md)).
+- [x] Persistent group send endorsement cache ([ADR 0023](docs/adr/0023-gse-persist-invite-join.md)).
+- [ ] Group log sync (`GET /v2/groups/logs/{version}`) — deferred ([ADR 0023](docs/adr/0023-gse-persist-invite-join.md)).
 
 ## Phase 6 — Bot framework **(in progress)**
 

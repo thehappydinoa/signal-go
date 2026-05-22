@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
+	"github.com/thehappydinoa/signal-go/internal/store"
 )
 
 // groupSendEndorsementCache holds processed GSE material for one group.
@@ -24,11 +25,9 @@ func (c *Client) groupSendTokenForRecipients(
 	masterKeyHex string,
 	recipientACIs []string,
 ) ([]byte, error) {
-	c.groupEndorseMu.Lock()
-	cache := c.groupEndorsements[masterKeyHex]
-	c.groupEndorseMu.Unlock()
-	if cache == nil || len(cache.response) == 0 {
-		return nil, errors.New("signal: no cached group send endorsements (call FetchGroup first)")
+	cache, err := c.groupSendEndorsementCache(masterKeyHex)
+	if err != nil {
+		return nil, err
 	}
 	if time.Now().After(cache.expiration) {
 		return nil, errors.New("signal: group send endorsements expired")
@@ -52,6 +51,40 @@ func (c *Client) groupSendTokenForRecipients(
 		return nil, err
 	}
 	return libsignal.GroupSendEndorsementToFullToken(combined, secretParams, cache.expiration)
+}
+
+func (c *Client) groupSendEndorsementCache(masterKeyHex string) (*groupSendEndorsementCache, error) {
+	c.groupEndorseMu.Lock()
+	cache := c.groupEndorsements[masterKeyHex]
+	c.groupEndorseMu.Unlock()
+	if cache != nil && len(cache.response) > 0 {
+		return cache, nil
+	}
+	if c.groupEndorseStore == nil {
+		return nil, errors.New("signal: no cached group send endorsements (call FetchGroup first)")
+	}
+	rec, err := c.groupEndorseStore.LoadGroupEndorsements(masterKeyHex)
+	if err != nil {
+		if errors.Is(err, store.ErrGroupEndorsementNotFound) {
+			return nil, errors.New("signal: no cached group send endorsements (call FetchGroup first)")
+		}
+		return nil, fmt.Errorf("signal: load group endorsements: %w", err)
+	}
+	if time.Now().After(rec.Expiration) {
+		return nil, errors.New("signal: group send endorsements expired")
+	}
+	cache = &groupSendEndorsementCache{
+		response:     append([]byte(nil), rec.Response...),
+		expiration:   rec.Expiration,
+		endorsements: cloneEndorsementMap(rec.Endorsements),
+	}
+	c.groupEndorseMu.Lock()
+	if c.groupEndorsements == nil {
+		c.groupEndorsements = make(map[string]*groupSendEndorsementCache)
+	}
+	c.groupEndorsements[masterKeyHex] = cache
+	c.groupEndorseMu.Unlock()
+	return cache, nil
 }
 
 func (c *Client) storeGroupSendEndorsements(
@@ -103,6 +136,7 @@ func (c *Client) storeGroupSendEndorsements(
 	for i, aci := range memberACIs {
 		byACI[aci] = append([]byte(nil), endorsements[i]...)
 	}
+	expiration := time.Unix(int64(expSec), 0)
 
 	c.groupEndorseMu.Lock()
 	if c.groupEndorsements == nil {
@@ -113,12 +147,35 @@ func (c *Client) storeGroupSendEndorsements(
 	}
 	c.groupEndorsements[masterKeyHex] = &groupSendEndorsementCache{
 		response:     append([]byte(nil), response...),
-		expiration:   time.Unix(int64(expSec), 0),
+		expiration:   expiration,
 		endorsements: byACI,
 	}
 	c.groupSecretParams[masterKeyHex] = secretParams
 	c.groupEndorseMu.Unlock()
+
+	if c.groupEndorseStore != nil {
+		rec := &store.GroupEndorsementRecord{
+			Expiration:   expiration,
+			Response:     append([]byte(nil), response...),
+			Endorsements: cloneEndorsementMap(byACI),
+		}
+		if err := c.groupEndorseStore.StoreGroupEndorsements(masterKeyHex, rec); err != nil {
+			c.log.Warn("persist group send endorsements failed", "group", masterKeyHex, "err", err)
+		}
+	}
 	return nil
+}
+
+func (c *Client) deleteGroupSendEndorsements(masterKeyHex string) {
+	c.groupEndorseMu.Lock()
+	delete(c.groupEndorsements, masterKeyHex)
+	delete(c.groupSecretParams, masterKeyHex)
+	c.groupEndorseMu.Unlock()
+	if c.groupEndorseStore != nil {
+		if err := c.groupEndorseStore.DeleteGroupEndorsements(masterKeyHex); err != nil {
+			c.log.Warn("delete persisted group endorsements failed", "group", masterKeyHex, "err", err)
+		}
+	}
 }
 
 func (c *Client) groupSecretParamsForHexID(masterKeyHex string) ([libsignal.GroupSecretParamsLen]byte, error) {
@@ -138,4 +195,12 @@ func (c *Client) groupSecretParamsForHexID(masterKeyHex string) ([libsignal.Grou
 // HTTP headers.
 func GroupSendTokenHeader(fullToken []byte) string {
 	return base64.StdEncoding.EncodeToString(fullToken)
+}
+
+func cloneEndorsementMap(in map[string][]byte) map[string][]byte {
+	out := make(map[string][]byte, len(in))
+	for k, v := range in {
+		out[k] = append([]byte(nil), v...)
+	}
+	return out
 }

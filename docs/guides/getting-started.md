@@ -243,7 +243,19 @@ grp, err := client.AddMember(ctx, masterKey, memberACI, profileKey, signal.Group
 [AddMember] fetches an expiring profile key credential from the chat service
 (requires the member's 32-byte profile key). Optional
 `OpenOptions.GroupDistributionStore` (e.g. `fsstore.NewGroupDistributionStore`)
-persists sender-key distribution UUIDs across restarts.
+and `OpenOptions.GroupEndorsementStore` (e.g. `fsstore.NewGroupEndorsementStore`)
+persist sender-key distribution UUIDs and group send endorsement caches across
+restarts.
+
+Join a group via invite link (requires the linked account's profile key):
+
+```go
+preview, err := client.PreviewGroupJoin(ctx, "https://signal.group/#...")
+grp, err := client.JoinGroupViaInviteLink(ctx, "https://signal.group/#...")
+```
+
+When the link requires admin approval, [JoinGroupViaInviteLink] adds the local
+user to the pending list instead of full membership.
 
 ### Groups v2 (control messages)
 
@@ -279,9 +291,9 @@ See [ADR 0021](../adr/0021-group-control-messages.md) and
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
 - **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
   [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): core group features done; invite-link join and
-  group log sync remain. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md)
-  through [ADR 0022](../adr/0022-phase5-finish.md).
+- **Groups v2** (Phase 5): core group features done; group log sync remains.
+  See [ADR 0018](../adr/0018-groups-v2-bootstrap.md) through
+  [ADR 0023](../adr/0023-gse-persist-invite-join.md).
 - **Bot framework** (Phase 6): wizard sugar + group helpers shipped. See
   [ADR 0008](../adr/0008-bot-framework.md) and [ADR 0022](../adr/0022-phase5-finish.md).
 

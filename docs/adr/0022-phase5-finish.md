@@ -41,7 +41,8 @@ Phase 5 deferred several items after endorsements and control messages:
 - [FetchGroup] works for groups whose members use profile-key presentations.
 - [AddMember] requires the target's 32-byte profile key (inbound message,
   [FetchProfile], or [SetRecipientProfileKey]).
-- Invite-link join and group log sync remain deferred.
+- Invite-link join shipped in [ADR 0023](./0023-gse-persist-invite-join.md).
+  Group log sync remains deferred.
 - `fsstore.NewGroupDistributionStore(dir)` is separate from account store; CLI wiring
   can compose both under the same data directory.
 

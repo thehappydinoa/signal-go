@@ -83,6 +83,10 @@ type OpenOptions struct {
 	// group master key. When nil, distribution IDs are in-memory only.
 	GroupDistributionStore store.GroupDistributionStore
 
+	// GroupEndorsementStore persists group send endorsement caches per
+	// group master key. When nil, endorsements are in-memory only.
+	GroupEndorsementStore store.GroupEndorsementStore
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -139,6 +143,9 @@ type Client struct {
 	// groupDistStore optionally persists distribution UUIDs across restarts.
 	groupDistStore store.GroupDistributionStore
 
+	// groupEndorseStore optionally persists GSE caches across restarts.
+	groupEndorseStore store.GroupEndorsementStore
+
 	// groupEndorseMu guards group send endorsement caches.
 	groupEndorseMu    sync.Mutex
 	groupEndorsements map[string]*groupSendEndorsementCache
@@ -192,14 +199,15 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	}
 
 	c := &Client{
-		acct:           acct,
-		events:         events,
-		log:            log,
-		dec:            dec,
-		webc:           webc,
-		storageWebc:    storageWebc,
-		stores:         opts.SignalStores,
-		groupDistStore: opts.GroupDistributionStore,
+		acct:              acct,
+		events:            events,
+		log:               log,
+		dec:               dec,
+		webc:              webc,
+		storageWebc:       storageWebc,
+		stores:            opts.SignalStores,
+		groupDistStore:    opts.GroupDistributionStore,
+		groupEndorseStore: opts.GroupEndorsementStore,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{
