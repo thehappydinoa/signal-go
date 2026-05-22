@@ -11,6 +11,27 @@ A separate ADR — [`docs/adr/README.md`](./docs/adr/README.md) — tracks
 
 ## [Unreleased]
 
+### Fixed
+
+- `release.yml` macOS legs now use a portable `sed` extractor for the
+  pinned libsignal version. The original `grep -oP` worked on Linux
+  (GNU grep) but exited the macOS jobs with "invalid option -- P" on
+  BSD grep. Same fix mirrored into `ci.yml`, `fuzz-nightly.yml`, and
+  `codeql.yml` for consistency.
+- `scripts/build-libsignal.sh` now runs `rustup target add` from
+  *inside* the libsignal clone so the target's standard library lands
+  on the toolchain libsignal pins via its `rust-toolchain` file
+  (nightly-2026-03-23), not on the system default (stable). This was
+  the Windows release failure mode — `error[E0463]: can't find crate
+  for core` while compiling `cfg-if` against the gnu target.
+
+### Changed
+
+- `actions/setup-go` bumped from `@v5` to `@v6` across every workflow.
+  v6 was released 2025-09-04 with breaking changes around toolchain
+  handling and a Node.js 24 runtime; GitHub-hosted runners are on
+  ≥ v2.327.1 (already required).
+
 ### Added
 
 - Cross-platform release pipeline ([ADR 0033](./docs/adr/0033-release-pipeline.md)).
