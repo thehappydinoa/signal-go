@@ -26,7 +26,9 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write   # required by softprops/action-gh-release to upload assets
+  contents: write       # softprops/action-gh-release uploads assets
+  id-token: write       # actions/attest-build-provenance signs Sigstore envelopes
+  attestations: write   # ditto — records the attestation on the run
 
 env:
   GO_VERSION: '1.25'
@@ -216,6 +218,16 @@ jobs:
             echo "archive_path=dist/${name}.tar.gz" >> "$GITHUB_OUTPUT"
             echo "sha256_path=dist/${name}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
           fi
+
+      # SLSA build provenance — issued only for real tag releases, not
+      # workflow_dispatch dry-runs. Sigstore will refuse to attest a ref
+      # that isn't on the default branch / a tag anyway, so gating on
+      # the tag avoids confusing failures during dry-runs.
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.package.outputs.archive_path }}
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
