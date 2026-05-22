@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
 )
@@ -80,6 +81,76 @@ func (a *Account) Validate() error {
 		return fmt.Errorf("account: PNI identity: %w", err)
 	}
 	return nil
+}
+
+// LogValue redacts secret fields when an [Account] is passed to a
+// [log/slog] handler. Without it, logging an account by reference would
+// dump the [Password], [PrivateKey], [ProfileKey], and
+// [AccountEntropyPool] fields in the clear. The Phase-8 audit requires
+// these never appear in any logger output.
+//
+// Callers can still log non-secret fields directly (e.g.
+// slog.Info("linked", "aci", acct.ACI)) — only the Account-as-a-value
+// case is scrubbed.
+func (a *Account) LogValue() slog.Value {
+	if a == nil {
+		return slog.AnyValue(nil)
+	}
+	return slog.GroupValue(
+		slog.String("aci", a.ACI),
+		slog.String("pni", a.PNI),
+		slog.String("number", redactNumber(a.Number)),
+		slog.Uint64("deviceId", uint64(a.DeviceID)),
+		slog.String("password", "[REDACTED]"),
+		slog.String("profileKey", redactBytes(a.ProfileKey)),
+		slog.String("accountEntropyPool", redactString(a.AccountEntropyPool)),
+		slog.Bool("readReceipts", a.ReadReceipts),
+		slog.Any("aciIdentity", &a.ACIIdentity),
+		slog.Any("pniIdentity", &a.PNIIdentity),
+	)
+}
+
+// LogValue redacts the private-key half of an identity for [log/slog].
+func (i *Identity) LogValue() slog.Value {
+	if i == nil {
+		return slog.AnyValue(nil)
+	}
+	return slog.GroupValue(
+		slog.String("publicKey", redactBytes(i.PublicKey)),
+		slog.String("privateKey", "[REDACTED]"),
+		slog.Uint64("registrationId", uint64(i.RegistrationID)),
+	)
+}
+
+// redactBytes returns "[REDACTED N]" for any non-empty slice, "[empty]"
+// otherwise, so the *presence* of secret material is visible but the
+// material itself is not. Callers asking "did the key actually get
+// loaded?" still get a useful answer.
+func redactBytes(b []byte) string {
+	if len(b) == 0 {
+		return "[empty]"
+	}
+	return fmt.Sprintf("[REDACTED %d bytes]", len(b))
+}
+
+func redactString(s string) string {
+	if s == "" {
+		return "[empty]"
+	}
+	return fmt.Sprintf("[REDACTED %d chars]", len(s))
+}
+
+// redactNumber keeps the country code (everything up to the third
+// character) and replaces the rest. Phone numbers identify the user but
+// the country code carries little PII on its own.
+func redactNumber(num string) string {
+	if num == "" {
+		return ""
+	}
+	if len(num) <= 4 {
+		return "[REDACTED]"
+	}
+	return num[:4] + "[REDACTED]"
 }
 
 // Validate sanity-checks an Identity.
