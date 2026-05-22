@@ -14,7 +14,7 @@ requires Go 1.25+, Rust/Cargo, gcc/g++, nasm, and protoc as system deps.
 | Lint | `task lint` or `golangci-lint run ./...` |
 | Vet | `go vet ./...` |
 | Component tests | `task test:component` |
-| Build CLI | `go build -trimpath -o bin/signal-go ./cmd/signal-go` |
+| Build CLI | `task build` → `bin/signal-go`, or `go build -trimpath -o bin/signal-go ./cmd/signal-go` |
 
 All commands require `CGO_ENABLED=1` (the default) and `libsignal_ffi.a` to be built.
 

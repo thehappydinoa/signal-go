@@ -41,6 +41,7 @@ the friction and do it anyway.
 | Add a new CLI flag | [`cmd/signal-go/main.go`](./cmd/signal-go/main.go) help, [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) example |
 | Touch the on-disk store format | [ADR 0012](./docs/adr/0012-encrypted-store.md) (bump format version byte if wire-incompatible), [`docs/diagrams/encrypted-store.md`](./docs/diagrams/encrypted-store.md) |
 | Touch a network protocol | matching diagram under [`docs/diagrams/`](./docs/diagrams/), the relevant Phase section in [ROADMAP](./ROADMAP.md) |
+| Touch TLS trust for Signal hosts | [ADR 0034](./docs/adr/0034-signal-tls-root-pinning.md), [`docs/security/threat-model.md`](./docs/security/threat-model.md) |
 | Add cryptography (anything new that uses `crypto/*` or `internal/libsignal`) | new test using a published vector if one exists, [`docs/security.md`](./docs/security.md) if the threat model shifts, Phase 8 audit checklist |
 | Add a new ADR | add a row to [`docs/adr/README.md`](./docs/adr/README.md), link from any relevant code or docs |
 
@@ -137,7 +138,7 @@ GitHub Actions workflows under [`.github/workflows/`](./.github/workflows/)
   - `lint` — golangci-lint against the committed `.golangci.yml`
   - `vet` — `go vet ./...`
   - `test` — `go test -race -count=1 ./...`
-  - `build` — `go build ./cmd/signal-go` + smoke-test the binary's help
+  - `build` — `go build ./...` + `bin/signal-go` + smoke-test `--help`
   - `govulncheck` — vulnerability scan against the dep tree
 - **`codeql.yml`** runs CodeQL's `security-extended` query set on push,
   PR, and weekly schedule. Findings land in the *Security* tab; PRs

@@ -9,8 +9,9 @@ If you're reporting a vulnerability, jump to [Reporting](#reporting).
 
 We defend against:
 
-1. **Network attacker** on the wire to `chat.signal.org` — addressed at
-   the TLS + Signal-protocol layer (`libsignal` handles it).
+1. **Network attacker** on the wire to `chat.signal.org` — TLS 1.2+ to
+   `*.signal.org` pins Signal's private root ([ADR 0034](./adr/0034-signal-tls-root-pinning.md));
+   message content is protected by the Signal protocol via `libsignal`.
 2. **Malicious peer** crafting envelopes to crash us, steal state, or
    forge an identity-key swap — every decrypt path fails closed; the
    IdentityStore enforces trust-on-first-use semantics.

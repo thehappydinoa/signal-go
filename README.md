@@ -17,51 +17,85 @@
 [![Status](https://img.shields.io/badge/status-pre--alpha-red)](./ROADMAP.md)
 [![Threat model](https://img.shields.io/badge/security-threat--model-2e7d32)](./docs/security.md)
 
-A Go library that lets your program act as a linked **Signal**
+A Go library and CLI that lets your program act as a linked **Signal**
 secondary device. Cryptography flows through Signal's official Rust
-[`libsignal`][libsignal] via a thin cgo binding; the protocol plumbing
+[`libsignal`][libsignal] via a thin cgo binding; protocol plumbing
 (websockets, REST, prekey lifecycle, sealed sender, groups v2) is
 implemented in Go.
 
-> **Pre-alpha.** Linking, real-time receive, and 1:1 send all work
-> end-to-end with encrypted-at-rest persistence and an in-process
-> two-client test. Sealed-sender, auto-retry on device mismatch, and
-> groups v2 are the next slices. Track progress in the
-> [roadmap](./ROADMAP.md).
+> **Pre-alpha.** Linking, receive, 1:1 send, groups v2, storage sync, and
+> link-and-sync are implemented and covered by CI. The next gate before
+> **v0.1.0** is an external security review — see the
+> [roadmap](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010).
+
+## Quick start
+
+**From source** (Linux, macOS, or Windows with [MSYS2 MinGW-w64](./docs/guides/getting-started.md#windows-git-bash--msys2)):
 
 ```sh
-go install github.com/thehappydinoa/signal-go/cmd/signal-go@latest  # once we tag v0.1.0
-signal-go link -store ./.signal-data
+git clone https://github.com/thehappydinoa/signal-go
+cd signal-go
+
+task setup      # once per clone: tools + git hooks
+task libsignal  # once: build pinned libsignal_ffi.a (~5–10 min)
+task build      # → bin/signal-go
+
+./bin/signal-go link -store ./.signal-data
 ```
 
-The CLI prompts for a passphrase, prints a `sgnl://linkdevice?...` URL
-to scan, and persists an AES-256-GCM-encrypted account on disk.
-See [`docs/guides/getting-started.md`](./docs/guides/getting-started.md)
-for the full walkthrough.
+The CLI prompts for a passphrase, prints a `sgnl://linkdevice?...` URL to
+scan from your phone, and persists an AES-256-GCM-encrypted account.
+Full walkthrough: [`docs/guides/getting-started.md`](./docs/guides/getting-started.md).
+
+**Pre-built binaries** — see [GitHub Releases](https://github.com/thehappydinoa/signal-go/releases)
+(`v0.1.0-rc1` and later). Pick the archive for your OS/CPU, verify the
+`.sha256` sidecar, and run `signal-go link` the same way.
+
+**As a library** — import `github.com/thehappydinoa/signal-go/pkg/signal`
+(and optionally `pkg/bot`). You still need `libsignal_ffi.a` built locally
+or shipped with your deployment; see the getting-started guide.
+
+```go
+import "github.com/thehappydinoa/signal-go/pkg/signal"
+
+// After Link/Open: client.Send, client.Events(), bot.OnText, …
+```
 
 ## Highlights
 
-- **Trust-preserving by design** — every cryptographic operation goes
-  through the same `libsignal` that ships in the official Signal apps.
-  No re-implemented protocol crypto.
-- **PQXDH-ready** — Curve25519 + ML-KEM 1024 prekey generation and
-  upload at link time, matching Signal's 2026 mandate.
-- **Encrypted credentials at rest** — AES-256-GCM with an Argon2id-
-  derived key (or a caller-supplied raw key). Passphrase prompts +
-  `-passphrase-file` for non-interactive deployments. See
-  [the encrypted-store diagram](./docs/diagrams/encrypted-store.md).
+- **Trust-preserving by design** — protocol cryptography goes through the
+  same `libsignal` that ships in official Signal apps. No re-implemented
+  protocol crypto.
+- **PQXDH-ready** — Curve25519 + ML-KEM 1024 prekeys at link time.
+- **Encrypted credentials at rest** — AES-256-GCM + Argon2id passphrase
+  mode (or caller-supplied raw key). See
+  [encrypted-store diagram](./docs/diagrams/encrypted-store.md).
+- **Signal TLS pinning** — `*.signal.org` dials pin Signal's private root
+  ([ADR 0034](./docs/adr/0034-signal-tls-root-pinning.md)); no need to
+  install that CA for the CLI (browsers are a separate story — see
+  troubleshooting in the getting-started guide).
 - **Small dependency surface** — `coder/websocket`, `google.golang.org/protobuf`,
-  and `golang.org/x/crypto` (Argon2id). Everything else is stdlib.
-- **Send + receive working** — `signal.Client.Send(ctx, recipient, text)`
-  handles bundle fetch, session establishment, and message encryption;
-  receive is a real-time chat-ws loop emitting typed events on
-  `Client.Events()`.
-- **Bot dispatch out of the box** — `pkg/bot` wraps the client with
-  `OnText`, `OnPrefix`, `OnRegex`, `OnCommand("/help")`,
-  `OnReaction`/`OnAnyReaction`, `OnEdit`, plus DM/Group/From scopes,
-  per-handler + global middleware, and `*Message` helpers (`Reply`,
-  `React`, `Typing`, `MarkRead`, `MarkViewed`).
-  ([ADR 0008](./docs/adr/0008-bot-framework.md))
+  `golang.org/x/crypto` (+ embedded Mozilla roots for empty OS stores on
+  Windows cgo). Everything else is stdlib. Allowlist:
+  [ADR 0002](./docs/adr/0002-no-third-party-go-deps.md).
+- **Send + receive** — real-time chat websocket, typed events, sealed sender
+  when a profile key is known, multi-device fan-out, receipts/reactions/edits.
+- **Groups v2** — fetch/decrypt state, group send, membership changes,
+  invite links ([ADR 0018](./docs/adr/0018-groups-v2-bootstrap.md)–[0025](./docs/adr/0025-inbound-group-updates.md)).
+- **Bot dispatch** — `pkg/bot` with `OnText`, `OnCommand`, `OnRegex`,
+  middleware, and `Message.Reply` / `React` / `Typing`
+  ([ADR 0008](./docs/adr/0008-bot-framework.md)).
+
+## Platforms
+
+| Platform | CI / release | Notes |
+|----------|----------------|-------|
+| Linux amd64, arm64 | ✅ | Primary dev target |
+| macOS amd64, arm64 | ✅ | Native release binaries |
+| Windows amd64 | ⚠️ experimental | MSYS2 MinGW-w64; see [getting-started](./docs/guides/getting-started.md#windows-git-bash--msys2) |
+
+Cross-platform releases: [ADR 0033](./docs/adr/0033-release-pipeline.md),
+workflow [`.github/workflows/release.yml`](./.github/workflows/release.yml).
 
 ## Architecture
 
@@ -76,7 +110,7 @@ flowchart TB
     bot[pkg/bot<br/><i>OnText / OnRegex / OnCommand</i>]:::pub
     proto["Protocol layer<br/>(provisioning · web · ws · prekeys · chat)"]:::proto
     crypto[internal/libsignal<br/><i>cgo + libsignal_ffi.a</i>]:::crypto
-    store["Persistence<br/>(account · store · fsstore · memstore)"]:::store
+    store["Persistence<br/>(account · store · fsstore · sqlstore)"]:::store
 
     bot --> pub
     pub --> proto
@@ -87,49 +121,54 @@ flowchart TB
 
 Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.md).
 
-## What works · what's next
+## Roadmap snapshot
 
 | Phase | Status | Scope |
-|---|---|---|
-| [1 — Foundation](./ROADMAP.md#phase-1--foundation-done) | ✅ | cgo to libsignal, ws layer, QR-link handshake |
-| [2 — Complete the link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | ProvisioningCipher, prekey gen, REST registration, prekey upload |
-| [Encrypted store](./docs/adr/0012-encrypted-store.md) | ✅ | AES-256-GCM at rest, Argon2id passphrase mode |
-| [3 — Receive](./ROADMAP.md#phase-3--receive-done) | ✅ | authenticated chat ws, libsignal decrypt, typed events, prekey top-up |
-| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-done) | ✅ done | bundle fetch + session establish + encrypt + `PUT /v1/messages` + sealed-sender + auto-retry + multi-device + control messages + profile fetch / UAK auto-derive |
-| [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys + membership / admin surface |
-| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-in-progress) | 🔧 in progress | OnText / OnRegex / OnCommand / OnReaction / OnEdit + DM/Group/From scopes + middleware + `Reply`/`React`/`Typing`/`MarkRead`; conversation state next |
-| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-done) | ✅ | dispatchers, middleware, wizard, group updates |
-| [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | ⏳ | CDSI ✅, SQLite ✅, backup |
-| [8 — Security audit](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010) | ⏳ | internal + external review gates `v0.1.0` |
+|-------|--------|--------|
+| [1 — Foundation](./ROADMAP.md#phase-1--foundation-done) | ✅ | cgo, ws, QR-link handshake |
+| [2 — Link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | Provisioning, prekeys, REST registration |
+| [3 — Receive](./ROADMAP.md#phase-3--receive-done) | ✅ | Chat ws, decrypt, typed events |
+| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-done) | ✅ | Sessions, sealed sender, control messages |
+| [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-done) | ✅ | zkgroup, sender keys, membership |
+| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-done) | ✅ | Dispatchers, middleware, group helpers |
+| [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | 🔧 | CDSI ✅, SQLite ✅, backup polish |
+| [8 — Security audit](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010) | ⏳ | Internal pass ✅; external review before v0.1.0 |
 
-## Docs
+Detail and tick-boxes: [`ROADMAP.md`](./ROADMAP.md).
 
-- 📐 **[Diagrams](./docs/diagrams/)** — architecture, QR-link, encrypted store, receive, send
-- 🛠️ **[Getting started](./docs/guides/getting-started.md)** — build, link your first device
-- 🧪 **[Testing](./docs/guides/testing.md)** — unit, component, e2e against real Signal
-- 🔒 **[Security](./docs/security.md)** — threat model, encrypted-at-rest, reporting
-- 📋 **[Roadmap](./ROADMAP.md)** — staged plan through `v0.1.0`
-- 📜 **[ADRs](./docs/adr/)** — every architectural decision recorded
-  ([0001 architecture](./docs/adr/0001-overall-architecture.md),
-  [0002 deps](./docs/adr/0002-no-third-party-go-deps.md),
-  [0009 license](./docs/adr/0009-licensing.md),
-  [0010 receive](./docs/adr/0010-phase-3-receive.md),
-  [0011 audit](./docs/adr/0011-security-audit.md),
-  [0012 encrypted store](./docs/adr/0012-encrypted-store.md)…)
+## Documentation
+
+| Topic | Link |
+|-------|------|
+| Build, link, Windows setup | [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) |
+| Testing (unit / component / e2e) | [`docs/guides/testing.md`](./docs/guides/testing.md) |
+| Diagrams | [`docs/diagrams/`](./docs/diagrams/) |
+| Security + threat model | [`docs/security.md`](./docs/security.md), [`threat-model.md`](./docs/security/threat-model.md) |
+| Architecture decisions | [`docs/adr/`](./docs/adr/) |
+| Changelog | [`CHANGELOG.md`](./CHANGELOG.md) |
+| Contributing | [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CLAUDE.md`](./CLAUDE.md) |
+
+## Contributing
+
+1. Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`CLAUDE.md`](./CLAUDE.md).
+2. `task setup && task libsignal && task test && task lint` before pushing
+   (the pre-push hook runs the same checks when `libsignal_ffi.a` exists).
+3. Open a focused PR; one concept per change when possible.
+
+Security issues: [`SECURITY.md`](./SECURITY.md) — **do not** file public GitHub
+issues for vulnerabilities.
 
 ## Disclaimer
 
 Not affiliated with, endorsed by, or supported by Signal Messenger LLC.
-Upstream `libsignal` is published with the explicit caveat *"use
-outside of Signal is unsupported"*; we pin to a fixed tag and ride the
-API breaks ourselves.
+Upstream `libsignal` is published with the explicit caveat *"use outside of
+Signal is unsupported"*; we pin to a fixed tag and absorb API breaks ourselves.
 
 ## License
 
 [AGPL-3.0-only](./LICENSE). `signal-go` statically links AGPL-licensed
-`libsignal`, so the combined binary is AGPL. If you deploy `signal-go`
-(or anything built on it) as a network service, AGPL §13 obliges you to
-offer source to your users. See [ADR 0009](./docs/adr/0009-licensing.md)
-for the full reasoning and alternatives considered.
+`libsignal`, so the combined binary is AGPL. Network deployments must comply
+with AGPL §13 (offer corresponding source). See
+[ADR 0009](./docs/adr/0009-licensing.md).
 
 [libsignal]: https://github.com/signalapp/libsignal
