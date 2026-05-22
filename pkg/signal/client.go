@@ -58,6 +58,9 @@ type OpenOptions struct {
 	// APIBaseURL overrides the REST endpoint for prekey top-up. Default:
 	// production Signal.
 	APIBaseURL string
+	// GroupsStorageURL overrides the Groups v2 storage REST endpoint.
+	// Default: [web.DefaultGroupsStorageURL].
+	GroupsStorageURL string
 	// UserAgent is sent in X-Signal-Agent headers. Default: "signal-go".
 	UserAgent string
 	// Logger for structured diagnostics. Default: slog.Default().
@@ -107,14 +110,19 @@ type Client struct {
 
 	// Send-side dependencies. nil-safe for tests that only exercise
 	// receive; Send returns an error if either is missing.
-	webc   *web.Client
-	stores store.SignalStores
+	webc        *web.Client
+	storageWebc *web.Client
+	stores      store.SignalStores
 
 	// mu guards knownDevices, knownUAKs, and knownProfileKeys.
 	mu               sync.Mutex
 	knownDevices     map[string][]uint32 // recipientACI → device ID set
 	knownUAKs        map[string][]byte   // recipientACI → 16-byte unidentified access key
 	knownProfileKeys map[string][]byte   // recipientACI → 32-byte profile key
+
+	// groupAuthMu guards the zkgroup auth credential cache.
+	groupAuthMu    sync.Mutex
+	groupAuthCreds map[int64][]byte // redemption day seconds → credential response bytes
 
 	// certMu guards the sender-certificate cache.
 	certMu     sync.Mutex
@@ -146,6 +154,11 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	// One shared web client: prekey maintenance (receive side) and Send
 	// (this PR) both use it.
 	webc := web.New(opts.APIBaseURL, opts.UserAgent)
+	storageURL := opts.GroupsStorageURL
+	if storageURL == "" {
+		storageURL = web.DefaultGroupsStorageURL
+	}
+	storageWebc := web.New(storageURL, opts.UserAgent)
 
 	dec := opts.Decryptor
 	if dec == nil {
@@ -164,12 +177,13 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	}
 
 	c := &Client{
-		acct:   acct,
-		events: events,
-		log:    log,
-		dec:    dec,
-		webc:   webc,
-		stores: opts.SignalStores,
+		acct:        acct,
+		events:      events,
+		log:         log,
+		dec:         dec,
+		webc:        webc,
+		storageWebc: storageWebc,
+		stores:      opts.SignalStores,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{

@@ -119,7 +119,26 @@ ls -l ./.signal-data
 Open the Signal app → *Linked devices* and you should see "signal-go"
 listed (or whatever you passed to `-name`).
 
-<<<<<<< HEAD
+## Send and profile fetch (library API)
+
+After linking, `signal.Client.Send` delivers 1:1 text. Sealed-sender
+activates automatically once the recipient's profile key is known — it
+arrives on inbound messages (`DataMessage.profileKey`) or can be supplied
+explicitly:
+
+```go
+// Optional: fetch display name when you already have the profile key.
+prof, err := client.FetchProfile(ctx, senderACI, profileKey)
+if err == nil {
+    fmt.Println(prof.DisplayName())
+}
+
+_, err = client.Send(ctx, recipientACI, "hello")
+```
+
+See [ADR 0017](../adr/0017-profile-fetch.md) for the UAK derivation and
+ProfileCipher wire format.
+
 ## Build a bot (Phase 6)
 
 `pkg/bot` is a thin dispatcher on top of `pkg/signal` modeled on
@@ -174,45 +193,37 @@ The default store is in-memory (`bot.MemoryConvoStore`). Pass
 `bot.Options.ConvoStore` to plug in a persistent backend (the
 `ConvoStore` interface is small enough that wrapping any
 key/value store works).
-=======
-## Send and profile fetch (library API)
 
-After linking, `signal.Client.Send` delivers 1:1 text. Sealed-sender
-activates automatically once the recipient's profile key is known — it
-arrives on inbound messages (`DataMessage.profileKey`) or can be supplied
-explicitly:
+### Groups v2 (fetch state)
+
+Once you have a group's 32-byte master key (from an inbound group
+message's `groupV2.masterKey`, or hex-decoded from
+`MessageEvent.GroupID`), fetch the decrypted roster:
 
 ```go
-// Optional: fetch display name when you already have the profile key.
-prof, err := client.FetchProfile(ctx, senderACI, profileKey)
-if err == nil {
-    fmt.Println(prof.DisplayName())
+masterKey, _ := hex.DecodeString(msg.GroupID)
+grp, err := client.FetchGroup(ctx, masterKey)
+if err != nil { return err }
+if grp.IsAdmin(msg.Sender) {
+    // restricted admin command
 }
-
-_, err = client.Send(ctx, recipientACI, "hello")
 ```
 
-See [ADR 0017](../adr/0017-profile-fetch.md) for the UAK derivation and
-ProfileCipher wire format.
->>>>>>> 2a17139 (Phase 4: profile fetch + automatic UAK for sealed sender)
+Auth credentials are fetched from `GET /v1/certificate/auth/group` and
+cached per UTC day on the client. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md).
 
 ## What's next
 
 - **Receive** (Phase 3): connection, dispatch, and libsignal decrypt are
   working; inbound prekey decrypt triggers automatic `PUT /v2/keys` top-up
   when the local pool runs low (disable via `OpenOptions.DisablePreKeyMaintenance`).
-<<<<<<< HEAD
-- **Send** (Phase 4): mostly done. The [send flow](../diagrams/send-flow.md)
-  describes the shape; profile fetch is the last open item.
+- **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
+  [ADR 0017](../adr/0017-profile-fetch.md).
+- **Groups v2** (Phase 5): in progress — fetch/decrypt/membership done;
+  group send lands next. See [ADR 0018](../adr/0018-groups-v2-bootstrap.md).
 - **Bot framework** (Phase 6): in progress — DM dispatch, scopes,
   middleware, and conversation state shipped; group reply lands with
   Phase 5. See [ADR 0008](../adr/0008-bot-framework.md).
-=======
-- **Send** (Phase 4): done — see [send flow](../diagrams/send-flow.md) and
-  [ADR 0017](../adr/0017-profile-fetch.md).
-- **Groups v2** (Phase 5): planned.
-- **Bot framework** (Phase 6): in progress — see [ADR 0008](../adr/0008-bot-framework.md).
->>>>>>> 2a17139 (Phase 4: profile fetch + automatic UAK for sealed sender)
 
 ## Troubleshooting
 
