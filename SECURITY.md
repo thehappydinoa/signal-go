@@ -16,11 +16,10 @@ Preferred reporting channels, in order:
    This is the path we prefer; it gives you GitHub-mediated tracking
    and audit trail without exposing the report to anyone outside the
    maintainer team.
-2. **E-mail**: `security@thehappydinoa.example`
-   *(placeholder — update with a real address before tagging v0.1.0; see
-   the [v0.1.0 release checklist](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010))*.
-   PGP public key: `(placeholder — paste fingerprint and link to a
-   key-server URL before public release)`.
+2. **E-mail**: <signal-go-security@thehappydinoa.dev>. PGP is
+   available on request — drop us a line first and we'll exchange
+   keys before you send the report body. (No published PGP fingerprint
+   yet; once one is, this line will list it.)
 
 Whichever channel you use, include:
 
