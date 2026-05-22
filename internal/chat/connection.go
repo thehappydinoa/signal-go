@@ -13,6 +13,7 @@ import (
 	"time"
 
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
+	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	"github.com/thehappydinoa/signal-go/internal/ws"
 )
 
@@ -75,7 +76,7 @@ func (o *Options) userAgent() string {
 	if o.UserAgent != "" {
 		return o.UserAgent
 	}
-	return "signal-go"
+	return useragent.Resolve(useragent.SignalGo, "", useragent.Options{})
 }
 
 func (o *Options) logger() *slog.Logger {

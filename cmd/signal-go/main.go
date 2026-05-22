@@ -24,6 +24,7 @@ import (
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
+	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -57,12 +58,19 @@ Run 'signal-go <subcommand> -h' for subcommand flags.
 func runLink(args []string) int {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the user to scan")
-	userAgent := fs.String("user-agent", "signal-go", "value sent in X-Signal-Agent")
+	clientProfile := fs.String("client", string(useragent.SignalGo), "client User-Agent preset: signal-go, android, ios, desktop-linux, desktop-macos, desktop-windows")
+	userAgent := fs.String("user-agent", "", "override User-Agent / X-Signal-Agent (disables -client preset)")
 	storeDir := fs.String("store", ".signal-data", "directory where account state is persisted")
 	deviceName := fs.String("name", "", "device name shown in the user's linked devices list")
 	passphraseFile := fs.String("passphrase-file", "", "path to a file containing the passphrase (newline-trimmed); overrides interactive prompt")
 	plaintext := fs.Bool("plaintext", false, "EXPERIMENTAL: do NOT encrypt the store on disk. Test-only.")
 	_ = fs.Parse(args)
+
+	profile, err := useragent.Parse(*clientProfile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid -client: %v\n", err)
+		return 2
+	}
 
 	dir, err := filepath.Abs(*storeDir)
 	if err != nil {
@@ -96,9 +104,10 @@ func runLink(args []string) int {
 	go func() { <-sigCh; cancel() }()
 
 	la, err := sg.Link(ctx, sg.LinkOptions{
-		UserAgent:  *userAgent,
-		Store:      s,
-		DeviceName: *deviceName,
+		ClientProfile: profile,
+		UserAgent:     *userAgent,
+		Store:         s,
+		DeviceName:    *deviceName,
 		OnURL: func(linkURL string) error {
 			fmt.Println("Open Signal on your phone → Settings → Linked devices → +")
 			fmt.Println("Scan the URL below as a QR code, or paste it manually:")
