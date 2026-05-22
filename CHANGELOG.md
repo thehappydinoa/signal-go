@@ -11,6 +11,19 @@ A separate ADR — [`docs/adr/README.md`](./docs/adr/README.md) — tracks
 
 ## [Unreleased]
 
+### Fixed (first real tag push, v0.1.0-rc1)
+
+- All five legs of `release.yml` failed on the `v0.1.0-rc1` tag push
+  with `Failed to persist attestation: Feature not available for
+  user-owned private repositories.` from
+  `actions/attest-build-provenance@v3`. GitHub's Artifact Attestations
+  feature is unavailable on user-owned private repos. Gate the attest
+  step behind a new opt-in repo variable
+  `ENABLE_BUILD_PROVENANCE == 'true'` (flip on once the repo is
+  public), and add `continue-on-error: true` so a future transient
+  Sigstore failure can't tank an otherwise-good release. ADR 0033 +
+  CHANGELOG updated to document the toggle.
+
 ### Fixed (release dry-run round 3)
 
 - All three non-Linux legs of `release.yml` still failed with

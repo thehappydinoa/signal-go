@@ -259,11 +259,29 @@ jobs:
           fi
 
       # SLSA build provenance — issued only for real tag releases, not
-      # workflow_dispatch dry-runs. Sigstore will refuse to attest a ref
-      # that isn't on the default branch / a tag anyway, so gating on
-      # the tag avoids confusing failures during dry-runs.
+      # workflow_dispatch dry-runs. Two gates:
+      #
+      # 1. `refs/tags/v*` — Sigstore refuses to attest a ref that
+      #    isn't on the default branch / a tag anyway; gating here
+      #    avoids confusing failures during dry-runs.
+      # 2. Repo variable `ENABLE_BUILD_PROVENANCE == 'true'` — GitHub's
+      #    Artifact Attestations feature is *not available for
+      #    user-owned private repositories* and returns
+      #
+      #      Failed to persist attestation: Feature not available
+      #      for user-owned private repositories.
+      #
+      #    To enable: make the repo public (or move it to an org plan
+      #    that supports attestations), then set the repo variable
+      #    `ENABLE_BUILD_PROVENANCE` to `true` under
+      #    Settings → Secrets and variables → Actions → Variables.
+      #    `continue-on-error: true` is belt-and-suspenders: even if
+      #    the feature is somehow enabled but a transient Sigstore
+      #    issue surfaces, a single archive still lands on the draft
+      #    release.
       - name: Attest build provenance
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && vars.ENABLE_BUILD_PROVENANCE == 'true' }}
+        continue-on-error: true
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: ${{ steps.package.outputs.archive_path }}
