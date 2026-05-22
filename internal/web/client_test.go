@@ -127,3 +127,29 @@ func TestBuildURLValidation(t *testing.T) {
 		t.Error("expected error for path without leading /")
 	}
 }
+
+func TestNewEnforcesTLSMinVersion(t *testing.T) {
+	c := New("https://example.com", "test")
+	tr, ok := c.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport = %T, want *http.Transport", c.HTTPClient.Transport)
+	}
+	if tr.TLSClientConfig == nil {
+		t.Fatal("TLSClientConfig is nil; want explicit MinVersion=1.2")
+	}
+	if tr.TLSClientConfig.MinVersion != MinTLSVersion {
+		t.Errorf("MinVersion = 0x%x, want 0x%x", tr.TLSClientConfig.MinVersion, MinTLSVersion)
+	}
+	if tr.TLSClientConfig.InsecureSkipVerify {
+		t.Error("default TLS config must verify certificates")
+	}
+}
+
+func TestNewWithOptionsPanicsOnProdInsecure(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when InsecureSkipVerify is set against prod base URL")
+		}
+	}()
+	_ = NewWithOptions(DefaultBaseURL, "test", Options{InsecureSkipVerify: true})
+}

@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,32 @@ import (
 
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
 )
+
+func TestMergeTLSConfigEnforcesMinVersion(t *testing.T) {
+	// nil base → fresh config with MinVersion locked to 1.2.
+	got := mergeTLSConfig(nil)
+	if got.MinVersion != MinTLSVersion {
+		t.Errorf("nil base: MinVersion = 0x%x, want 0x%x", got.MinVersion, MinTLSVersion)
+	}
+	// Caller TLS 1.0 is silently raised; ServerName preserved.
+	base := &tls.Config{ServerName: "chat.signal.org", MinVersion: tls.VersionTLS10}
+	got = mergeTLSConfig(base)
+	if got == base {
+		t.Error("mergeTLSConfig must return a clone, not the caller's config")
+	}
+	if got.MinVersion != MinTLSVersion {
+		t.Errorf("low MinVersion: got 0x%x, want 0x%x", got.MinVersion, MinTLSVersion)
+	}
+	if got.ServerName != "chat.signal.org" {
+		t.Errorf("ServerName dropped: %q", got.ServerName)
+	}
+	// Caller TLS 1.3 stays as 1.3.
+	base = &tls.Config{MinVersion: tls.VersionTLS13}
+	got = mergeTLSConfig(base)
+	if got.MinVersion != tls.VersionTLS13 {
+		t.Errorf("high MinVersion: got 0x%x, want 0x%x", got.MinVersion, tls.VersionTLS13)
+	}
+}
 
 // fakeSignalServer answers WebSocketMessage requests with deterministic
 // responses. It mirrors what chat.signal.org does over the provisioning ws.
