@@ -35,6 +35,10 @@ type Options struct {
 	// AutoSyncGroupUpdates passes through to [signal.OpenOptions] so
 	// inbound group change notifications trigger background log sync.
 	AutoSyncGroupUpdates bool
+
+	// AutoSyncStorage passes through to [signal.OpenOptions] so linked
+	// devices requesting storage-manifest sync trigger background pull.
+	AutoSyncStorage bool
 }
 
 // ErrPass tells the dispatcher "I didn't really handle this event; try
@@ -112,6 +116,7 @@ func Open(ctx context.Context, opts Options) (*Bot, error) {
 		UserAgent:            opts.UserAgent,
 		Logger:               log,
 		AutoSyncGroupUpdates: opts.AutoSyncGroupUpdates,
+		AutoSyncStorage:      opts.AutoSyncStorage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bot.Open: %w", err)

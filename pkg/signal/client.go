@@ -91,6 +91,10 @@ type OpenOptions struct {
 	// inbound group change notification arrives.
 	AutoSyncGroupUpdates bool
 
+	// AutoSyncStorage triggers a background [SyncStorage] when a linked
+	// device requests a storage-manifest fetch-latest sync.
+	AutoSyncStorage bool
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -159,6 +163,15 @@ type Client struct {
 	groupRevMu           sync.Mutex
 	groupRevision        map[string]uint32 // hex master key → revision
 	autoSyncGroupUpdates bool
+
+	accountStore    account.Store
+	autoSyncStorage bool
+
+	// storageMu guards manifest version and cached contact/group lists.
+	storageMu              sync.RWMutex
+	storageManifestVersion uint64
+	storedContacts         []StoredContact
+	storedGroups           []StoredGroup
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -218,6 +231,8 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		groupDistStore:       opts.GroupDistributionStore,
 		groupEndorseStore:    opts.GroupEndorsementStore,
 		autoSyncGroupUpdates: opts.AutoSyncGroupUpdates,
+		accountStore:         opts.AccountStore,
+		autoSyncStorage:      opts.AutoSyncStorage,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{

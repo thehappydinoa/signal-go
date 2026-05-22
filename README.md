@@ -98,7 +98,8 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 | [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-done) | ✅ done | bundle fetch + session establish + encrypt + `PUT /v1/messages` + sealed-sender + auto-retry + multi-device + control messages + profile fetch / UAK auto-derive |
 | [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-planned) | ⏳ | zkgroup + sender keys + membership / admin surface |
 | [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-in-progress) | 🔧 in progress | OnText / OnRegex / OnCommand / OnReaction / OnEdit + DM/Group/From scopes + middleware + `Reply`/`React`/`Typing`/`MarkRead`; conversation state next |
-| [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | ⏳ | attachments, storage sync, CDSI, SQLite, backup, exec-stack warning |
+| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-done) | ✅ | dispatchers, middleware, wizard, group updates |
+| [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | ⏳ | storage sync ✅, CDSI, SQLite, backup |
 | [8 — Security audit](./ROADMAP.md#phase-8--security-audit-planned-required-before-v010) | ⏳ | internal + external review gates `v0.1.0` |
 
 ## Docs
