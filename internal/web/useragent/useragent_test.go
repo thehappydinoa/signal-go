@@ -28,6 +28,55 @@ func TestProfileFormat(t *testing.T) {
 	}
 }
 
+func TestUpstreamSourceMatchesFormat(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		profile useragent.Profile
+		wantSub []string
+	}{
+		{
+			useragent.Android,
+			[]string{"Signal-Android/", " Android/"},
+		},
+		{
+			useragent.IOS,
+			[]string{"Signal-iOS/", " iOS/"},
+		},
+		{
+			useragent.DesktopLinux,
+			[]string{"Signal-Desktop/", " Linux "},
+		},
+	}
+	for _, tc := range cases {
+		src, ok := tc.profile.UpstreamSource()
+		if !ok {
+			t.Fatalf("%s: missing upstream source", tc.profile)
+		}
+		if src.URL == "" || src.Repository == "" || src.File == "" {
+			t.Fatalf("%s: incomplete source: %+v", tc.profile, src)
+		}
+		got := tc.profile.Format(useragent.Options{
+			AppVersion: "1.2.3",
+			OSVersion:  "99",
+		})
+		for _, sub := range tc.wantSub {
+			if !strings.Contains(got, sub) {
+				t.Errorf("%s formatted %q missing %q", tc.profile, got, sub)
+			}
+		}
+		if !strings.Contains(got, "1.2.3") || !strings.Contains(got, "99") {
+			t.Errorf("%s formatted %q missing injected versions", tc.profile, got)
+		}
+	}
+}
+
+func TestSignalGoHasNoUpstreamSource(t *testing.T) {
+	t.Parallel()
+	if _, ok := useragent.SignalGo.UpstreamSource(); ok {
+		t.Fatal("signal-go should not claim an upstream source")
+	}
+}
+
 func TestResolveOverrideWins(t *testing.T) {
 	t.Parallel()
 	got := useragent.Resolve(useragent.Android, "custom-agent/1.0", useragent.Options{})
