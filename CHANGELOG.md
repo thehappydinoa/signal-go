@@ -10,6 +10,12 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
+### Added
+
+- Terminal QR for `signal-go link` via audited `github.com/skip2/go-qrcode`
+  ([ADR 0035](./docs/adr/0035-go-qrcode-cli-qr.md)); `-no-qr` and `NO_COLOR`
+  skip rendering.
+
 ### Fixed
 
 - **Create release tag** now dispatches **Release** after the tag push. Pushes

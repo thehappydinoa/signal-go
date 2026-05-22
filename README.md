@@ -43,8 +43,9 @@ task build      # → bin/signal-go
 ./bin/signal-go link -store ./.signal-data
 ```
 
-The CLI prompts for a passphrase, prints a `sgnl://linkdevice?...` URL to
-scan from your phone, and persists an AES-256-GCM-encrypted account.
+The CLI prompts for a passphrase, renders a **terminal QR** for the
+`sgnl://linkdevice?...` link URL (see [ADR 0035](./docs/adr/0035-go-qrcode-cli-qr.md)),
+and persists an AES-256-GCM-encrypted account.
 Full walkthrough: [`docs/guides/getting-started.md`](./docs/guides/getting-started.md).
 
 **Pre-built binaries** — [GitHub Releases](https://github.com/thehappydinoa/signal-go/releases)

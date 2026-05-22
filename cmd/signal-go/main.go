@@ -27,6 +27,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
+	"github.com/thehappydinoa/signal-go/internal/qrterminal"
 	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
 	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
@@ -96,6 +97,7 @@ func runLink(args []string) int {
 	storeDir := fs.String("store", ".signal-data", "directory where account state is persisted")
 	deviceName := fs.String("name", "", "device name shown in the user's linked devices list")
 	passphraseFile := fs.String("passphrase-file", "", "path to a file containing the passphrase (newline-trimmed); overrides interactive prompt")
+	noQR := fs.Bool("no-qr", false, "do not render a QR code in the terminal (URL is still printed)")
 	plaintext := fs.Bool("plaintext", false, "EXPERIMENTAL: do NOT encrypt the store on disk. Test-only.")
 	_ = fs.Parse(args)
 
@@ -143,9 +145,18 @@ func runLink(args []string) int {
 		DeviceName:    *deviceName,
 		OnURL: func(linkURL string) error {
 			fmt.Println("Open Signal on your phone → Settings → Linked devices → +")
-			fmt.Println("Scan the URL below as a QR code, or paste it manually:")
+			fmt.Println("Scan the QR code below (or use the URL if -no-qr / non-TTY):")
 			fmt.Println()
-			fmt.Println("  " + linkURL)
+			if err := qrterminal.Write(linkURL, qrterminal.Options{OptOut: *noQR}); err != nil {
+				if !errors.Is(err, qrterminal.ErrDisabled) {
+					fmt.Fprintf(os.Stderr, "qr render: %v\n", err)
+				}
+				fmt.Println("  " + linkURL)
+			} else {
+				fmt.Println()
+				fmt.Println("URL (fallback):")
+				fmt.Println("  " + linkURL)
+			}
 			fmt.Println()
 			fmt.Println("Waiting for you to approve the link…")
 			return nil

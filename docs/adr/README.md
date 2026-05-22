@@ -42,3 +42,4 @@ with a new ADR that links back to the one it replaces.
 | 0032 | Phase 8 internal security audit pass             | Accepted |
 | 0033 | Release pipeline (Linux, macOS, Windows)         | Accepted |
 | 0034 | Pin Signal private TLS root for *.signal.org     | Accepted |
+| 0035 | `go-qrcode` for CLI provisioning QR              | Accepted |

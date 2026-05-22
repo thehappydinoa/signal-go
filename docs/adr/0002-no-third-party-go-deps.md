@@ -25,11 +25,9 @@ Everything else is stdlib. Current allowlist:
 | `golang.org/x/crypto` | Go team's staging area for cryptographic primitives. No transitive non-stdlib deps. We use `argon2` for passphrase-based key derivation (ADR 0012). Effectively part of the standard library; same maintainers as `crypto/*`. |
 | `golang.org/x/crypto/x509roots/fallback` | Separate module (same maintainers) that embeds Mozilla NSS roots and calls `x509.SetFallbackRoots` at init. Linked via [`internal/tlsroots`](../../internal/tlsroots/) for empty OS stores on non-Signal hosts. Signal service TLS uses the vendored `signal-messenger.cer` root ([ADR 0034](./0034-signal-tls-root-pinning.md)), not this bundle. |
 | `modernc.org/sqlite` | Pure-Go SQLite driver for the Phase 7 `internal/store/sqlstore` backend ([ADR 0029](./0029-sqlite-backed-store.md)). Avoids a second cgo dependency alongside libsignal. Transitive deps audited in ADR 0029. |
+| `github.com/skip2/go-qrcode` | QR encoder for `signal-go link` terminal output ([ADR 0035](./0035-go-qrcode-cli-qr.md)). MIT; **zero external transitive deps**; used only via [`internal/qrterminal`](../../internal/qrterminal/). |
 
 - HTTP: `net/http`.
-- QR code rendering for the CLI demo: we'll print the `sgnl://` URL only
-  and let the user paste it; if a real QR is desired we'll print an ANSI QR
-  via a tiny hand-rolled encoder (no dep).
 
 `signalmeow` and `signal-cli` remain reference implementations we read while
 writing. We never compile their code into our binary.
