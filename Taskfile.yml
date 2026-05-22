@@ -52,10 +52,11 @@ tasks:
       - bash scripts/gen-proto.sh
 
   build:
-    desc: Build the library and demo CLI
+    desc: Build all packages and the demo CLI (binary at bin/signal-go)
     deps: [libsignal]
     cmds:
       - go build {{.GOFLAGS}} ./...
+      - go build {{.GOFLAGS}} -o bin/signal-go ./cmd/signal-go
 
   test:
     desc: Run unit tests

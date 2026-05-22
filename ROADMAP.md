@@ -242,6 +242,8 @@ below):
   - [x] `tls.MinVersion: VersionTLS12` explicit in `internal/web.New` and
         `internal/ws.Dial`
   - [x] opt-in CA pinning via `web.Options.PinnedRootCAs`
+  - [x] default `*.signal.org` trust via embedded `signal-messenger.cer`
+        ([ADR 0034](./docs/adr/0034-signal-tls-root-pinning.md))
   - [x] no credentials in URL query strings; `InsecureSkipVerify` panics
         against the production base URL
 - [x] Receive pipeline (Phase 3+) decrypt-error handling:

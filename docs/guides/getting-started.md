@@ -68,9 +68,14 @@ cp .env.example .env   # optional but recommended on Windows
 # One-time: build the pinned libsignal_ffi.a (~5–10 min on first run; cached after).
 task libsignal
 
-# Build the demo CLI.
+# Build the library and demo CLI → bin/signal-go
 task build
 ```
+
+`task build` also runs `go build ./...` for all packages. The CLI binary
+always lands at **`bin/signal-go`** (on Windows: `bin/signal-go.exe`).
+`go build ./cmd/signal-go` without `-o` writes under `cmd/signal-go/`
+instead — prefer `task build` or `-o bin/signal-go` for a stable path.
 
 Don't have `task`? `go install github.com/go-task/task/v3/cmd/task@latest`
 or read [`Taskfile.yml`](../../Taskfile.yml) and run the equivalent `go`
