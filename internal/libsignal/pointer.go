@@ -12,20 +12,20 @@ type handleWrapper struct {
 }
 
 // savePointer stores v for retrieval from a C async callback. The returned
-// uintptr is passed to C as context; the callback must call deletePointer.
-func savePointer(v any) uintptr {
+// pointer is passed to C as context; the callback must call deletePointer.
+func savePointer(v any) unsafe.Pointer {
 	w := &handleWrapper{h: cgo.NewHandle(v)}
 	w.pinner.Pin(w)
-	return uintptr(unsafe.Pointer(w))
+	return unsafe.Pointer(w)
 }
 
-func restorePointer(p uintptr) any {
-	w := (*handleWrapper)(unsafe.Pointer(p))
+func restorePointer(p unsafe.Pointer) any {
+	w := (*handleWrapper)(p)
 	return w.h.Value()
 }
 
-func deletePointer(p uintptr) {
-	w := (*handleWrapper)(unsafe.Pointer(p))
+func deletePointer(p unsafe.Pointer) {
+	w := (*handleWrapper)(p)
 	w.pinner.Unpin()
 	w.h.Delete()
 }

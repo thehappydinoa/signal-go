@@ -9,12 +9,12 @@ extern SignalFfiError *bridge_cdsi_lookup_new(
 	const char *username,
 	const char *password,
 	SignalConstPointerLookupRequest request,
-	uintptr_t ctx
+	void *ctx
 );
 extern SignalFfiError *bridge_cdsi_lookup_complete(
 	SignalConstPointerTokioAsyncContext async_runtime,
 	SignalConstPointerCdsiLookup lookup,
-	uintptr_t ctx
+	void *ctx
 );
 */
 import "C"
@@ -100,7 +100,7 @@ func cdsiLookupNew(
 		cUser,
 		cPass,
 		request.cPtr(),
-		C.uintptr_t(ctx),
+		ctx,
 	)); err != nil {
 		deletePointer(ctx)
 		return nil, err
@@ -124,7 +124,7 @@ func cdsiLookupComplete(tokio *TokioAsyncContext, lookup *C.SignalCdsiLookup) ([
 	if err := checkError(C.bridge_cdsi_lookup_complete(
 		tokio.cPtr(),
 		C.SignalConstPointerCdsiLookup{raw: lookup},
-		C.uintptr_t(ctx),
+		ctx,
 	)); err != nil {
 		deletePointer(ctx)
 		return nil, err
@@ -139,9 +139,9 @@ func cdsiLookupComplete(tokio *TokioAsyncContext, lookup *C.SignalCdsiLookup) ([
 }
 
 //export goCdsiLookupNewComplete
-func goCdsiLookupNewComplete(errp *C.SignalFfiError, result *C.SignalCdsiLookup, ctx C.uintptr_t) {
-	ch := restorePointer(uintptr(ctx)).(chan cdsiLookupHandleResult)
-	deletePointer(uintptr(ctx))
+func goCdsiLookupNewComplete(errp *C.SignalFfiError, result *C.SignalCdsiLookup, ctx unsafe.Pointer) {
+	ch := restorePointer(ctx).(chan cdsiLookupHandleResult)
+	deletePointer(ctx)
 	var r cdsiLookupHandleResult
 	if errp != nil {
 		r.err = checkError(errp)
@@ -152,9 +152,9 @@ func goCdsiLookupNewComplete(errp *C.SignalFfiError, result *C.SignalCdsiLookup,
 }
 
 //export goCdsiResponseComplete
-func goCdsiResponseComplete(errp *C.SignalFfiError, result *C.SignalFfiCdsiLookupResponse, ctx C.uintptr_t) {
-	ch := restorePointer(uintptr(ctx)).(chan cdsiLookupResponseResult)
-	deletePointer(uintptr(ctx))
+func goCdsiResponseComplete(errp *C.SignalFfiError, result *C.SignalFfiCdsiLookupResponse, ctx unsafe.Pointer) {
+	ch := restorePointer(ctx).(chan cdsiLookupResponseResult)
+	deletePointer(ctx)
 	var r cdsiLookupResponseResult
 	if errp != nil {
 		r.err = checkError(errp)
