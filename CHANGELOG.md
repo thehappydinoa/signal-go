@@ -11,6 +11,24 @@ A separate ADR — [`docs/adr/README.md`](./docs/adr/README.md) — tracks
 
 ## [Unreleased]
 
+### Fixed (release dry-run round 2)
+
+- macOS legs of `release.yml` failed Go compilation with
+  `cannot use cServiceID(...) (value of type *[17]_Ctype_uint8_t) as
+  *_Ctype_SignalServiceIdFixedWidthBinaryBytes value`. Root cause:
+  cgo's representation of `const SignalServiceIdFixedWidthBinaryBytes *`
+  parameters differs between GCC and clang DWARF. GCC unwraps the
+  array typedef; clang keeps the typedef name. Split the affected
+  helpers (`cServiceID`, `cServiceIDPtr`) into per-toolchain files —
+  `service_id_cgo_typedef_default.go` (`!darwin`, GCC-style) and
+  `service_id_cgo_typedef_darwin.go` (clang-style). Call sites are
+  now portable.
+- Windows leg of `release.yml` failed libsignal_ffi.a build with
+  `Could not find protoc` from the spqr crate's prost-build invocation.
+  Even though MSYS2's protoc was on PATH via `GITHUB_PATH`, the cargo
+  child-process lookup missed it. Set `PROTOC` env var explicitly on
+  the Windows leg (empty elsewhere so PATH-based lookup still works).
+
 ### Fixed
 
 - `release.yml` macOS legs now use a portable `sed` extractor for the

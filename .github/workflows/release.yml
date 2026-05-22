@@ -163,6 +163,14 @@ jobs:
           # On cloud VMs clang can fail to find -lstdc++; force gcc.
           CC: gcc
           CXX: g++
+          # libsignal's `spqr` crate uses prost-build, which invokes
+          # `which::which("protoc")`. On the GitHub Windows runner the
+          # MSYS2-installed protoc is on PATH via GITHUB_PATH, but the
+          # cargo child-process lookup can still miss it (different PATH
+          # semantics between bash and the Win32 process tree). Setting
+          # PROTOC explicitly is the upstream-documented escape hatch.
+          # Empty on linux/macOS so PATH-based lookup kicks in.
+          PROTOC: ${{ matrix.os_name == 'windows' && 'C:/msys64/mingw64/bin/protoc.exe' || '' }}
         run: bash scripts/build-libsignal.sh
 
       # ---------------- Go ----------------
