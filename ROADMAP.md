@@ -54,7 +54,8 @@ the "Link this device?" prompt; we won't yet complete the link).
       `PUT /v2/keys?identity={aci,pni}` after the link succeeds
 - [ ] **Phase 2-followup**: encrypted device name (libsignal
       `signal_device_name_*` FFI)
-- [ ] End-to-end test against a real phone (manual, gated by `SIGNAL_GO_E2E=1`)
+- [x] End-to-end tests against a real phone (manual, gated by `SIGNAL_GO_E2E=1`;
+      recv / send / group — see [`docs/guides/testing-e2e.md`](./docs/guides/testing-e2e.md))
 
 ## Phase 3 — Receive **(done)**
 

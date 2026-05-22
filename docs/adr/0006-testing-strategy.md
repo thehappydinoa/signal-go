@@ -41,7 +41,7 @@ Three concentric test rings:
 
 - Talk to real `chat.signal.org` with a throwaway linked-device session.
 - Gated behind `SIGNAL_GO_E2E=1` env var so they never run unintentionally.
-- Document the manual run in `docs/testing-e2e.md`.
+- Document the manual run in [`docs/guides/testing-e2e.md`](../guides/testing-e2e.md).
 
 ### Crypto / FFI specifics
 

@@ -12,6 +12,9 @@ is *what* changed and *when*.
 
 ### Added
 
+- E2e test suite (`go test -tags=e2e`, `task test:e2e`): open, recv, send,
+  and group management (`FetchGroup`, `SyncGroup`, optional `SendGroup`) against
+  a linked `sqlstore` directory. Guide: [`docs/guides/testing-e2e.md`](./docs/guides/testing-e2e.md).
 - Terminal QR for `signal-go link` via audited `github.com/skip2/go-qrcode`
   ([ADR 0035](./docs/adr/0035-go-qrcode-cli-qr.md)); `-no-qr` and `NO_COLOR`
   skip rendering.

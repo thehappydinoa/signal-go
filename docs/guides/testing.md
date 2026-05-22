@@ -41,18 +41,23 @@ golangci-lint run
 SIGNAL_GO_E2E=1 task test:e2e
 ```
 
-This is gated behind an environment variable so a casual `go test`
-never tries to pair against a real Signal account. The current e2e
-target is "perform a real link" — the receive/send tests land with
-Phases 3 / 4.
+Ring-3 tests use the `e2e` build tag plus `SIGNAL_GO_E2E=1` so a casual
+`go test ./...` never hits `chat.signal.org`. The suite in
+`pkg/signal/e2e_test.go` covers **open**, **recv**, **send**, and
+**group management** (`FetchGroup`, `SyncGroup`, optional `SendGroup`)
+against a pre-linked `sqlstore` directory.
 
-You'll need:
-- A spare phone or VoIP number with a Signal account (you'll be the
-  "primary device")
-- Network egress to `chat.signal.org`
-- 30 seconds of your attention to scan the QR
+Full setup, env vars, and a manual runbook:
+[`testing-e2e.md`](./testing-e2e.md).
 
-The harness prints the QR-link URL and waits.
+Quick checklist:
+
+- Linked store: `SIGNAL_E2E_STORE_DIR` (with `signal.db` from
+  `sqlstore.OpenWithPassphrase`)
+- Passphrase: `SIGNAL_E2E_PASSPHRASE` or `SIGNAL_E2E_PASSPHRASE_FILE`
+- 1:1 peer ACI: `SIGNAL_E2E_PEER_ACI` (your phone)
+- Recv: send a message from the peer, set `SIGNAL_E2E_RECV_CONTAINS`
+- Group: `SIGNAL_E2E_GROUP_MASTER_KEY` (64 hex chars)
 
 ## Adding tests for a new package
 
