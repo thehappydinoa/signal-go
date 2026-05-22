@@ -33,3 +33,4 @@ with a new ADR that links back to the one it replaces.
 | 0023 | Persistent GSE cache + invite-link join          | Accepted |
 | 0024 | Group log sync (snapshot-based)                  | Accepted |
 | 0025 | Inbound group update events + optional auto-sync | Accepted |
+| 0026 | Attachment cipher (classic AES-CBC + HMAC)       | Accepted |

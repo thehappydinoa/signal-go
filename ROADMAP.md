@@ -169,6 +169,8 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
 ## Phase 7 — Niceties **(planned, out of MVP)**
 
 - [ ] Attachments (CDN3 upload/download, attachment cipher via libsignal)
+      — classic AttachmentCipher in [`internal/attachment`](internal/attachment)
+      ([ADR 0026](docs/adr/0026-attachment-cipher.md)); CDN + incremental MAC deferred
 - [ ] Storage Service sync (contacts, group list)
 - [ ] CDSI contact discovery
 - [ ] SQLite-backed store
