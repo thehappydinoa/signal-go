@@ -21,6 +21,19 @@ import (
 // keyLen is the length of the symmetric key in bytes (AES-256).
 const keyLen = 32
 
+// KeyLen is the AES-256 key size for encrypted stores (ADR 0012).
+const KeyLen = keyLen
+
+// Seal encrypts plaintext with key using the ADR 0012 wire format.
+func Seal(key [KeyLen]byte, plaintext []byte) ([]byte, error) {
+	return seal(key, plaintext)
+}
+
+// Open decrypts a blob produced by [Seal].
+func Open(key [KeyLen]byte, blob []byte) ([]byte, error) {
+	return open(key, blob)
+}
+
 // formatVersion is the byte prefix of every encrypted blob; lets us evolve
 // the wire format without breaking existing stores.
 const formatVersion byte = 0x01

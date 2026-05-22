@@ -41,6 +41,16 @@ func NewRandomUUID() (string, error) {
 	return formatUUID(b), nil
 }
 
+// FormatRawUUID renders 16 raw UUID bytes as a canonical UUID string.
+// Returns empty string for an all-zero UUID.
+func FormatRawUUID(b [16]byte) string {
+	var zero [16]byte
+	if b == zero {
+		return ""
+	}
+	return formatUUID(b)
+}
+
 func uuidToC(id [16]byte) C.SignalUuid {
 	var u C.SignalUuid
 	for i := 0; i < 16; i++ {

@@ -172,6 +172,11 @@ type Client struct {
 	storageManifestVersion uint64
 	storedContacts         []StoredContact
 	storedGroups           []StoredGroup
+
+	// cdsiMu guards lazy CDSI tokio runtime + connection manager.
+	cdsiMu      sync.Mutex
+	cdsiTokio   *libsignal.TokioAsyncContext
+	cdsiConnMgr *libsignal.ConnectionManager
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -269,6 +274,7 @@ func (c *Client) Events() <-chan Event { return c.events }
 // Close shuts down the websocket connection and closes the [Events]
 // channel. Blocks until teardown completes.
 func (c *Client) Close() error {
+	c.closeCDSI()
 	err := c.conn.Close()
 	close(c.events)
 	return err

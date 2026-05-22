@@ -173,8 +173,8 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
       ([ADR 0026](docs/adr/0026-attachment-cipher.md))
 - [x] Storage Service sync (contacts, group list)
       ([ADR 0027](docs/adr/0027-storage-service-sync.md))
-- [ ] CDSI contact discovery
-- [ ] SQLite-backed store
+- [x] CDSI contact discovery ([ADR 0028](docs/adr/0028-cdsi-contact-discovery.md))
+- [x] SQLite-backed store ([ADR 0029](docs/adr/0029-sqlite-backed-store.md))
 - [ ] Backup/restore (linked-device "synchronized start")
 - [ ] **Suppress the `missing .note.GNU-stack section implies executable stack`
       linker warning** on every Go build that links libsignal_ffi.a. The

@@ -35,3 +35,5 @@ with a new ADR that links back to the one it replaces.
 | 0025 | Inbound group update events + optional auto-sync | Accepted |
 | 0026 | Attachment cipher (classic AES-CBC + HMAC)       | Accepted |
 | 0027 | Storage Service sync (pull-only v1)              | Accepted |
+| 0028 | CDSI contact discovery via libsignal-net         | Accepted |
+| 0029 | SQLite-backed store (`modernc.org/sqlite`)       | Accepted |
