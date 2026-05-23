@@ -9,7 +9,8 @@
 // Authentication is HTTP Basic with the credentials Signal expects for
 // each endpoint:
 //
-//   - /v1/devices/link        Basic(provisioningCode, password)
+//   - /v1/devices/link        Basic(provisioningCode, password); production
+//                             requires the provisioning websocket ([LinkDeviceWebSocket])
 //   - /v1/devices/...         Basic("{ACI}.{deviceID}", password)
 //   - /v2/keys, /v1/messages  same as above
 //

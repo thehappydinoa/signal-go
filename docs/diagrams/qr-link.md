@@ -25,8 +25,8 @@ sequenceDiagram
     Note over Bot: ECDH + HKDF + AES-CBC + HMAC<br/>=> ProvisionMessage
     Note over Bot: extract ACI/PNI identity keys,<br/>profile key, provisioning code
     Note over Bot: generate prekeys<br/>Curve25519 + ML-KEM 1024
-    Bot->>Server: PUT /v1/devices/link<br/>AccountAttributes + signed + Kyber prekeys
-    Server-->>Bot: uuid, deviceId, pni
+    Bot->>Server: REQUEST PUT /v1/devices/link<br/>(same provisioning WSS)<br/>AccountAttributes + signed + Kyber prekeys
+    Server-->>Bot: RESPONSE 200<br/>uuid, deviceId, pni
     Bot->>Server: PUT /v2/keys?identity=aci<br/>100 one-time + 100 Kyber prekeys
     Bot->>Server: PUT /v2/keys?identity=pni<br/>same shape
     Note over Bot: persist Account via Store<br/>AES-256-GCM at rest
@@ -44,9 +44,10 @@ sequenceDiagram
 - **Step 13 (prekey generation)** mints two namespaces' worth of keys:
   ACI and PNI. PQXDH is mandatory upstream, so the Kyber/ML-KEM last-
   resort prekey ships at link time.
-- **Steps 14–17** are three separate REST calls. The link succeeds at
-  the first; the next two populate the one-time prekey batches
-  recipients need to send us new messages.
+- **Step 14** registers the device over the **provisioning websocket**
+  (production returns HTTP 498 if you use REST). **Steps 15–16** are REST
+  `PUT /v2/keys` calls that populate one-time prekey batches recipients
+  need to send us new messages.
 - **The final persist** uses [the encrypted store](./encrypted-store.md)
   by default — `signal-go link` prompts for a passphrase.
 

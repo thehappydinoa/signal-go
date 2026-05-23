@@ -16,6 +16,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
 	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
+	"github.com/thehappydinoa/signal-go/internal/ws"
 )
 
 // LinkOptions configures [Link].
@@ -112,55 +113,34 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 		return nil, errors.New("signal.Link: LinkOptions.Store is required")
 	}
 
-	// Step 1: QR handshake (provisioning ws + decrypt envelope).
+	// Step 1: QR handshake (provisioning ws + decrypt envelope + register
+	// on the same socket before Signal closes it).
 	ua := resolveUserAgent(opts.ClientProfile, opts.UserAgent, opts.UserAgentOptions)
+	reg := &linkRegisterState{}
 	sess, err := provisioning.Link(ctx, provisioning.Options{
 		UserAgent:    ua,
 		URL:          opts.ProvisioningURL,
 		OnURL:        opts.OnURL,
 		Capabilities: opts.provisioningCapabilities(),
+		AfterDecrypt: func(ctx context.Context, conn *ws.Client, msg *provpb.ProvisionMessage) error {
+			return reg.register(ctx, conn, msg, opts)
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
+	defer sess.Conn.Close()
 	msg := sess.Message
-	if msg.GetAci() == "" || msg.GetNumber() == "" || msg.GetProvisioningCode() == "" {
-		return nil, errors.New("signal.Link: provisioning message missing required fields")
+	resp := reg.resp
+	password := reg.password
+	aciIdent := reg.aciIdent
+	pniIdent := reg.pniIdent
+	if resp == nil || resp.DeviceID == 0 {
+		return nil, errors.New("signal.Link: registration did not complete")
 	}
-
-	// Step 2: generate per-namespace identity-derived state (registration
-	// IDs, signed prekeys, last-resort Kyber prekeys).
-	aciIdent, err := buildIdentity(msg.GetAciIdentityKeyPublic(), msg.GetAciIdentityKeyPrivate())
-	if err != nil {
-		return nil, fmt.Errorf("signal.Link: ACI identity: %w", err)
-	}
-	pniIdent, err := buildIdentity(msg.GetPniIdentityKeyPublic(), msg.GetPniIdentityKeyPrivate())
-	if err != nil {
-		return nil, fmt.Errorf("signal.Link: PNI identity: %w", err)
-	}
-
-	// Step 3: account password (HTTP Basic credential for all post-link
-	// authenticated requests).
-	password, err := generatePassword()
-	if err != nil {
-		return nil, fmt.Errorf("signal.Link: generate password: %w", err)
-	}
-
-	// Step 4: assemble + send the link request.
 	webc := web.New(opts.APIBaseURL, ua)
-	req, err := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
-	if err != nil {
-		return nil, fmt.Errorf("signal.Link: build link request: %w", err)
-	}
-	resp, err := webc.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
-	if err != nil {
-		return nil, fmt.Errorf("signal.Link: register: %w", err)
-	}
-	if resp.DeviceID == 0 {
-		return nil, errors.New("signal.Link: server returned deviceId=0")
-	}
 
-	// Step 5: upload one-time prekey batches (ACI + PNI, EC + Kyber) so
+	// Step 2: upload one-time prekey batches (ACI + PNI, EC + Kyber) so
 	// recipients can establish sessions with us. Skipped if disabled.
 	count := opts.OneTimePreKeyCount
 	if count < 0 {
@@ -211,6 +191,47 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 		linked.Sync = syncResult
 	}
 	return linked, nil
+}
+
+type linkRegisterState struct {
+	resp     *web.LinkDeviceResponse
+	password string
+	aciIdent account.Identity
+	pniIdent account.Identity
+}
+
+func (s *linkRegisterState) register(ctx context.Context, conn *ws.Client, msg *provpb.ProvisionMessage, opts LinkOptions) error {
+	if msg.GetAci() == "" || msg.GetNumber() == "" || msg.GetProvisioningCode() == "" {
+		return errors.New("provisioning message missing required fields")
+	}
+	aciIdent, err := buildIdentity(msg.GetAciIdentityKeyPublic(), msg.GetAciIdentityKeyPrivate())
+	if err != nil {
+		return fmt.Errorf("ACI identity: %w", err)
+	}
+	pniIdent, err := buildIdentity(msg.GetPniIdentityKeyPublic(), msg.GetPniIdentityKeyPrivate())
+	if err != nil {
+		return fmt.Errorf("PNI identity: %w", err)
+	}
+	password, err := generatePassword()
+	if err != nil {
+		return fmt.Errorf("generate password: %w", err)
+	}
+	req, err := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
+	if err != nil {
+		return fmt.Errorf("build link request: %w", err)
+	}
+	resp, err := web.LinkDeviceWebSocket(ctx, conn, msg.GetProvisioningCode(), password, req)
+	if err != nil {
+		return err
+	}
+	if resp.DeviceID == 0 {
+		return errors.New("server returned deviceId=0")
+	}
+	s.resp = resp
+	s.password = password
+	s.aciIdent = aciIdent
+	s.pniIdent = pniIdent
+	return nil
 }
 
 func maybeSyncTransferArchive(

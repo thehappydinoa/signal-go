@@ -18,6 +18,10 @@ type AccountCapabilities struct {
 	VersionedExpirationTimer        bool `json:"versionedExpirationTimer"`
 	SSRE2                           bool `json:"ssre2"`
 	StorageServiceRecordKeyRotation bool `json:"storageServiceRecordKeyRotation"`
+	// SPQR and profiles_v2 are required for all new linked devices per
+	// Signal-Server DeviceCapability.CAPABILITIES_REQUIRED_FOR_NEW_DEVICES.
+	Spqr       bool `json:"spqr"`
+	ProfilesV2 bool `json:"profiles_v2"`
 }
 
 // DefaultCapabilities is the conservative capability set we advertise at
@@ -28,6 +32,8 @@ func DefaultCapabilities() AccountCapabilities {
 		VersionedExpirationTimer:        true,
 		SSRE2:                           true,
 		StorageServiceRecordKeyRotation: true,
+		Spqr:                            true,
+		ProfilesV2:                      true,
 	}
 }
 
