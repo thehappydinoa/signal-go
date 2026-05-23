@@ -14,6 +14,7 @@ import (
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/thehappydinoa/signal-go/internal/debugsession"
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
 	"github.com/thehappydinoa/signal-go/internal/tlsroots"
 )
@@ -163,6 +164,12 @@ func (c *Client) Send(ctx context.Context, verb, path string, headers []string, 
 		c.mu.Unlock()
 	}()
 
+	// #region agent log
+	debugsession.Log("H5", "ws/client.go:Send", "send start", map[string]any{
+		"verb": verb, "path": path, "closed": c.Closed(),
+	})
+	// #endregion
+
 	msgType := wspb.WebSocketMessage_REQUEST
 	out := &wspb.WebSocketMessage{
 		Type: &msgType,
@@ -180,6 +187,11 @@ func (c *Client) Send(ctx context.Context, verb, path string, headers []string, 
 	select {
 	case resp, ok := <-ch:
 		if !ok {
+			// #region agent log
+			debugsession.Log("H5", "ws/client.go:Send", "pending closed during send", map[string]any{
+				"verb": verb, "path": path, "closed": c.Closed(),
+			})
+			// #endregion
 			return nil, errors.New("ws.Client: closed during request")
 		}
 		return resp, nil
@@ -197,6 +209,13 @@ func (c *Client) Send(ctx context.Context, verb, path string, headers []string, 
 // hold the unauthenticated provisioning ws open while the user scans.
 func (c *Client) Ping(ctx context.Context) error {
 	return c.conn.Ping(ctx)
+}
+
+// Closed reports whether the client has been torn down.
+func (c *Client) Closed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closed
 }
 
 func (c *Client) writeMessage(ctx context.Context, msg *wspb.WebSocketMessage) error {
@@ -221,6 +240,9 @@ func (c *Client) readLoop() {
 		_, data, err := c.conn.Read(readCtx)
 		cancel()
 		if err != nil {
+			// #region agent log
+			debugsession.Log("H3", "ws/client.go:readLoop", "read loop exit", map[string]any{"err": err.Error()})
+			// #endregion
 			c.readErr.Store(&err)
 			c.failPending()
 			return
@@ -257,6 +279,13 @@ func (c *Client) dispatchRequest(req *wspb.WebSocketRequestMessage) {
 		if err != nil {
 			c.replyRequest(req, 500, err.Error(), nil)
 			return
+		}
+		if req.GetPath() == "/v1/message" {
+			// #region agent log
+			debugsession.Log("H4", "ws/client.go:dispatchRequest", "replying 200 to provision message", map[string]any{
+				"status": status, "closed": c.Closed(),
+			})
+			// #endregion
 		}
 		c.replyRequest(req, status, message, body)
 	}()

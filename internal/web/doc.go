@@ -10,7 +10,8 @@
 // each endpoint:
 //
 //   - /v1/devices/link        Basic(provisioningCode, password); production
-//                             requires the provisioning websocket ([LinkDeviceWebSocket])
+//                             requires the unauthenticated service websocket
+//                             ([LinkDeviceWebSocket], not the provisioning socket)
 //   - /v1/devices/...         Basic("{ACI}.{deviceID}", password)
 //   - /v2/keys, /v1/messages  same as above
 //

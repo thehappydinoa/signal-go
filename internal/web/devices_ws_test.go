@@ -13,8 +13,23 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
-	"github.com/thehappydinoa/signal-go/internal/ws"
 )
+
+func TestServiceWebSocketURL(t *testing.T) {
+	tests := []struct {
+		apiBase string
+		want    string
+	}{
+		{"", DefaultServiceWebSocketURL},
+		{"https://chat.signal.org", "wss://chat.signal.org/v1/websocket/"},
+		{"http://127.0.0.1:8080", "ws://127.0.0.1:8080/v1/websocket/"},
+	}
+	for _, tc := range tests {
+		if got := ServiceWebSocketURL(tc.apiBase); got != tc.want {
+			t.Errorf("ServiceWebSocketURL(%q) = %q, want %q", tc.apiBase, got, tc.want)
+		}
+	}
+}
 
 func TestLinkDeviceWebSocket(t *testing.T) {
 	var gotReq LinkDeviceRequest
@@ -68,13 +83,8 @@ func TestLinkDeviceWebSocket(t *testing.T) {
 	wsURL := "ws://" + strings.TrimPrefix(srv.URL, "http://")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cli, err := ws.Dial(ctx, wsURL, nil)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
-	defer cli.Close()
 
-	got, err := LinkDeviceWebSocket(ctx, cli, "code-xyz", "passw0rd", LinkDeviceRequest{VerificationCode: "code-xyz"})
+	got, err := LinkDeviceWebSocket(ctx, wsURL, "test-ua", "code-xyz", "passw0rd", LinkDeviceRequest{VerificationCode: "code-xyz"})
 	if err != nil {
 		t.Fatalf("LinkDeviceWebSocket: %v", err)
 	}

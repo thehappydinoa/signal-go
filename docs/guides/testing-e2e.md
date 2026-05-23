@@ -167,18 +167,23 @@ server rejected the upgrade.
 ### `register: ... ws.Client: closed during request`
 
 Signal closes the provisioning websocket shortly after delivering the link
-envelope. Registration (`PUT /v1/devices/link`) must finish **on that same
-socket before we ACK** `PUT /v1/message` with HTTP 200 — rebuild with a current
-signal-go if you still see this after pulling the fix.
+envelope. Registration uses a **separate** unauthenticated service websocket;
+rebuild with a current signal-go if you still see this after pulling the fix.
 
 While waiting for you to scan the QR, the client sends periodic WebSocket pings
 to reduce idle timeouts.
+
+### `register: web: HTTP 404 Not Found` on link
+
+Registration was sent on the **provisioning** websocket, which does not route
+`/v1/devices/link`. Rebuild — link must use `wss://chat.signal.org/v1/websocket/`.
 
 ### `register: web: HTTP 498 : {"message":"use websockets"}`
 
 Provisioning succeeded (you saw the QR) but registration still used HTTP.
 Rebuild after updating signal-go — `PUT /v1/devices/link` must run on the
-**same provisioning websocket**, not `https://chat.signal.org/v1/devices/link`.
+**service websocket** (`/v1/websocket/`), not the provisioning socket and not
+`https://chat.signal.org/v1/devices/link` REST.
 
 ```sh
 task build

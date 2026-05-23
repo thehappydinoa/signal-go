@@ -25,7 +25,7 @@ sequenceDiagram
     Note over Bot: ECDH + HKDF + AES-CBC + HMAC<br/>=> ProvisionMessage
     Note over Bot: extract ACI/PNI identity keys,<br/>profile key, provisioning code
     Note over Bot: generate prekeys<br/>Curve25519 + ML-KEM 1024
-    Bot->>Server: REQUEST PUT /v1/devices/link<br/>(same provisioning WSS)<br/>AccountAttributes + signed + Kyber prekeys
+    Bot->>Server: REQUEST PUT /v1/devices/link<br/>(unauthenticated service WSS)<br/>AccountAttributes + signed + Kyber prekeys
     Server-->>Bot: RESPONSE 200<br/>uuid, deviceId, pni
     Bot->>Server: PUT /v2/keys?identity=aci<br/>100 one-time + 100 Kyber prekeys
     Bot->>Server: PUT /v2/keys?identity=pni<br/>same shape
@@ -44,8 +44,9 @@ sequenceDiagram
 - **Step 13 (prekey generation)** mints two namespaces' worth of keys:
   ACI and PNI. PQXDH is mandatory upstream, so the Kyber/ML-KEM last-
   resort prekey ships at link time.
-- **Step 14** registers the device over the **provisioning websocket**
-  (production returns HTTP 498 if you use REST). **Steps 15–16** are REST
+- **Step 14** registers the device over the **unauthenticated service
+  websocket** (production returns HTTP 498 on REST, HTTP 404 on the
+  provisioning socket). **Steps 15–16** are REST
   `PUT /v2/keys` calls that populate one-time prekey batches recipients
   need to send us new messages.
 - **The final persist** uses [the encrypted store](./encrypted-store.md)

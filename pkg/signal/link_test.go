@@ -69,6 +69,9 @@ func (f *fakeSignal) Close() {
 func (f *fakeSignal) ProvisioningURL() string {
 	return "ws://" + strings.TrimPrefix(f.wsSrv.URL, "http://")
 }
+func (f *fakeSignal) ServiceWebSocketURL() string {
+	return f.ProvisioningURL()
+}
 func (f *fakeSignal) APIBaseURL() string { return f.httpSrv.URL }
 
 func (f *fakeSignal) handleHTTP(w http.ResponseWriter, r *http.Request) {
@@ -241,8 +244,9 @@ func TestLinkHappyPath(t *testing.T) {
 	// channel.
 	var onceURL sync.Once
 	opts := LinkOptions{
-		ProvisioningURL:    fake.ProvisioningURL(),
-		APIBaseURL:         fake.APIBaseURL(),
+		ProvisioningURL:       fake.ProvisioningURL(),
+		ServiceWebSocketURL:   fake.ServiceWebSocketURL(),
+		APIBaseURL:            fake.APIBaseURL(),
 		Store:              memstore.New(),
 		OneTimePreKeyCount: 4, // small batch to keep test fast
 		OnURL: func(linkURL string) error {
@@ -348,6 +352,7 @@ func TestLinkEncryptsDeviceName(t *testing.T) {
 	var onceURL sync.Once
 	opts := LinkOptions{
 		ProvisioningURL:      fake.ProvisioningURL(),
+		ServiceWebSocketURL:  fake.ServiceWebSocketURL(),
 		APIBaseURL:           fake.APIBaseURL(),
 		Store:                memstore.New(),
 		OneTimePreKeyCount:   0,
@@ -417,8 +422,9 @@ func TestLinkSurfacesRegistrationError(t *testing.T) {
 	}))
 
 	opts := LinkOptions{
-		ProvisioningURL: fake.ProvisioningURL(),
-		APIBaseURL:      fake.httpSrv.URL,
+		ProvisioningURL:     fake.ProvisioningURL(),
+		ServiceWebSocketURL: fake.ServiceWebSocketURL(),
+		APIBaseURL:          fake.httpSrv.URL,
 		Store:           memstore.New(),
 		OnURL: func(linkURL string) error {
 			u, _ := url.Parse(linkURL)
