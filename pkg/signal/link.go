@@ -229,7 +229,7 @@ func (s *linkRegisterState) register(ctx context.Context, msg *provpb.ProvisionM
 		"serviceWSURL": opts.serviceWebSocketURL(),
 	})
 	// #endregion
-	resp, err := web.LinkDeviceWebSocket(ctx, opts.serviceWebSocketURL(), userAgent, msg.GetProvisioningCode(), password, req)
+	resp, err := web.LinkDeviceWebSocket(ctx, opts.serviceWebSocketURL(), userAgent, msg.GetNumber(), password, req)
 	if err != nil {
 		// #region agent log
 		debugsession.Log("H6", "pkg/signal/link.go:register", "LinkDeviceWebSocket failed", map[string]any{

@@ -178,6 +178,18 @@ to reduce idle timeouts.
 Registration was sent on the **provisioning** websocket, which does not route
 `/v1/devices/link`. Rebuild — link must use `wss://chat.signal.org/v1/websocket/`.
 
+### `register: web: HTTP 401 Unauthorized` on link
+
+Provisioning succeeded (you saw the QR and got a provision envelope), but
+`PUT /v1/devices/link` rejected the request. Signal expects HTTP Basic auth
+with **username = the account phone number** (E.164 from the provision message)
+and **password = the new device password** you generate locally. The signed
+link token from the primary belongs only in the JSON `verificationCode` field
+(`ProvisionMessage.provisioningCode`), not in the Basic username. Using the
+token as the username fails (tokens contain `:`) and returns 401.
+
+Rebuild with a current signal-go if you still see this after pulling the fix.
+
 ### `register: web: HTTP 498 : {"message":"use websockets"}`
 
 Provisioning succeeded (you saw the QR) but registration still used HTTP.

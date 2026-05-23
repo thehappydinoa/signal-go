@@ -296,6 +296,15 @@ func TestLinkHappyPath(t *testing.T) {
 	if !strings.HasPrefix(fake.lastLinkAuth, "Basic ") {
 		t.Errorf("auth header = %q", fake.lastLinkAuth)
 	}
+	const wantNumber = "+15558675309"
+	if raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(fake.lastLinkAuth, "Basic ")); err != nil {
+		t.Errorf("decode auth: %v", err)
+	} else {
+		user, _, ok := strings.Cut(string(raw), ":")
+		if !ok || user != wantNumber {
+			t.Errorf("basic auth username = %q, want %q", user, wantNumber)
+		}
+	}
 
 	// Verify the account was persisted in the store.
 	got, err := opts.Store.LoadAccount()

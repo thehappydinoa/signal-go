@@ -84,7 +84,7 @@ func TestLinkDeviceWebSocket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	got, err := LinkDeviceWebSocket(ctx, wsURL, "test-ua", "code-xyz", "passw0rd", LinkDeviceRequest{VerificationCode: "code-xyz"})
+	got, err := LinkDeviceWebSocket(ctx, wsURL, "test-ua", "+15551234567", "passw0rd", LinkDeviceRequest{VerificationCode: "code-xyz"})
 	if err != nil {
 		t.Fatalf("LinkDeviceWebSocket: %v", err)
 	}

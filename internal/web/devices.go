@@ -84,23 +84,26 @@ type LinkDeviceResponse struct {
 // LinkDevice issues PUT /v1/devices/link.
 //
 // Per upstream's HTTP-auth convention, this call is Basic-authenticated
-// with username = the provisioning code from the ProvisionMessage and
-// password = our chosen account password. Signal validates the
-// provisioning code and stores the password for all subsequent device
-// authentication.
-func (c *Client) LinkDevice(ctx context.Context, provisioningCode, password string, req LinkDeviceRequest) (*LinkDeviceResponse, error) {
-	if provisioningCode == "" {
-		return nil, errors.New("web.LinkDevice: missing provisioning code")
+// with username = the account phone number (E.164) from the ProvisionMessage
+// and password = the new device's account password. The signed link token
+// goes in req.VerificationCode (ProvisionMessage.provisioningCode); Signal
+// validates that token and stores the password for subsequent auth.
+func (c *Client) LinkDevice(ctx context.Context, number, password string, req LinkDeviceRequest) (*LinkDeviceResponse, error) {
+	if number == "" {
+		return nil, errors.New("web.LinkDevice: missing phone number")
 	}
 	if password == "" {
 		return nil, errors.New("web.LinkDevice: missing password")
+	}
+	if req.VerificationCode == "" {
+		return nil, errors.New("web.LinkDevice: missing verification code in request")
 	}
 	var resp LinkDeviceResponse
 	if err := c.Do(ctx, Request{
 		Method: http.MethodPut,
 		Path:   "/v1/devices/link",
 		Credentials: Credentials{
-			Username: provisioningCode,
+			Username: number,
 			Password: password,
 		},
 		Body: req,

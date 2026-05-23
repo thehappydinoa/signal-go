@@ -36,15 +36,18 @@ func ServiceWebSocketURL(apiBase string) string {
 // service websocket. Signal's production server rejects REST with HTTP 498
 // ("use websockets") and returns 404 if the request is sent on the
 // provisioning websocket (/v1/websocket/provisioning/).
-func LinkDeviceWebSocket(ctx context.Context, serviceWSURL, userAgent, provisioningCode, password string, req LinkDeviceRequest) (*LinkDeviceResponse, error) {
+func LinkDeviceWebSocket(ctx context.Context, serviceWSURL, userAgent, number, password string, req LinkDeviceRequest) (*LinkDeviceResponse, error) {
 	if serviceWSURL == "" {
 		serviceWSURL = DefaultServiceWebSocketURL
 	}
-	if provisioningCode == "" {
-		return nil, errors.New("web.LinkDeviceWebSocket: missing provisioning code")
+	if number == "" {
+		return nil, errors.New("web.LinkDeviceWebSocket: missing phone number")
 	}
 	if password == "" {
 		return nil, errors.New("web.LinkDeviceWebSocket: missing password")
+	}
+	if req.VerificationCode == "" {
+		return nil, errors.New("web.LinkDeviceWebSocket: missing verification code in request")
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -68,7 +71,7 @@ func LinkDeviceWebSocket(ctx context.Context, serviceWSURL, userAgent, provision
 
 	reqHdr := http.Header{}
 	reqHdr.Set("Content-Type", "application/json")
-	if h := (Credentials{Username: provisioningCode, Password: password}).Header(); h != "" {
+	if h := (Credentials{Username: number, Password: password}).Header(); h != "" {
 		reqHdr.Set("Authorization", h)
 	}
 	resp, err := conn.Send(ctx, http.MethodPut, "/v1/devices/link", ws.HeaderPairs(reqHdr), body)
