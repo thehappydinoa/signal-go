@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/thehappydinoa/signal-go/internal/devicename"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	provpb "github.com/thehappydinoa/signal-go/internal/proto/gen/provisioningpb"
 	wspb "github.com/thehappydinoa/signal-go/internal/proto/gen/websocketpb"
@@ -307,6 +308,73 @@ func TestLinkHappyPath(t *testing.T) {
 	// Persisted state should reflect the bumped next-id counters.
 	if got.ACIIdentity.NextPreKeyID != 2+4 || got.PNIIdentity.NextKyberPreKeyID != 2+4 {
 		t.Errorf("next-id counters not bumped: %+v / %+v", got.ACIIdentity, got.PNIIdentity)
+	}
+}
+
+func TestLinkEncryptsDeviceName(t *testing.T) {
+	fake := newFakeSignal(t, "addr-uuid")
+	defer fake.Close()
+
+	var onceURL sync.Once
+	opts := LinkOptions{
+		ProvisioningURL:      fake.ProvisioningURL(),
+		APIBaseURL:           fake.APIBaseURL(),
+		Store:                memstore.New(),
+		OneTimePreKeyCount:   0,
+		DeviceName:           "my-signal-go-box",
+		testSkipPreKeyUpload: true,
+		OnURL: func(linkURL string) error {
+			onceURL.Do(func() {
+				u, err := url.Parse(linkURL)
+				if err != nil {
+					t.Errorf("link URL parse: %v", err)
+					return
+				}
+				pubBytes, err := base64.URLEncoding.DecodeString(u.Query().Get("pub_key"))
+				if err != nil {
+					t.Errorf("decode pub_key: %v", err)
+					return
+				}
+				secondaryPub, err := libsignal.DeserializePublicKey(pubBytes)
+				if err != nil {
+					t.Errorf("DeserializePublicKey: %v", err)
+					return
+				}
+				env := fullProvisionMessage(t, secondaryPub)
+				fake.envelopeCh <- env
+			})
+			return nil
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := Link(ctx, opts); err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	name := fake.lastLinkReq.AccountAttributes.Name
+	if name == "" || name == "my-signal-go-box" {
+		t.Fatalf("expected encrypted name, got %q", name)
+	}
+
+	got, err := opts.Store.LoadAccount()
+	if err != nil {
+		t.Fatalf("LoadAccount: %v", err)
+	}
+	idPriv, err := libsignal.DeserializePrivateKey(got.ACIIdentity.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idPub, err := libsignal.DeserializePublicKey(got.ACIIdentity.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := devicename.Decrypt(name, &libsignal.IdentityKeyPair{Private: idPriv, Public: idPub})
+	if err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	if plain != "my-signal-go-box" {
+		t.Fatalf("device name = %q", plain)
 	}
 }
 

@@ -159,5 +159,7 @@ device-cache — for no observable API gain.
   closed on group threads; the bot dispatchers themselves accept
   inbound reactions/edits in groups (the wire-level decode works
   today).
-- Edit-message *send* is left for a follow-up. `EditMessageEvent`
-  unblocks bots that just need to react to inbound edits.
+- 1:1 edit-message *send* is implemented as `signal.Client.SendEdit`
+  (`Content.editMessage` with `targetSentTimestamp` + nested
+  `DataMessage`). Group edit-send remains out of scope until a
+  dedicated group wire path exists.

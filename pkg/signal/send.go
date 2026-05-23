@@ -42,6 +42,33 @@ func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, 
 	return c.sendContent(ctx, recipientACI, contentBytes, ts, deliveryOpts{Urgent: true})
 }
 
+// SendEdit sends an edit to a previously delivered 1:1 text message. The
+// recipient must have received the original message at targetSentTimestamp
+// (the sender-side millisecond timestamp from the original [Receipt] or
+// [MessageEvent]).
+func (c *Client) SendEdit(
+	ctx context.Context,
+	recipientACI string,
+	newText string,
+	targetSentTimestamp time.Time,
+) (Receipt, error) {
+	if recipientACI == "" {
+		return Receipt{}, errors.New("signal.SendEdit: empty recipient")
+	}
+	if newText == "" {
+		return Receipt{}, errors.New("signal.SendEdit: empty body")
+	}
+	if targetSentTimestamp.IsZero() {
+		return Receipt{}, errors.New("signal.SendEdit: zero target timestamp")
+	}
+	ts := uint64(time.Now().UnixMilli())
+	contentBytes, err := buildEditMessageContent(newText, ts, uint64(targetSentTimestamp.UnixMilli()))
+	if err != nil {
+		return Receipt{}, err
+	}
+	return c.sendContent(ctx, recipientACI, contentBytes, ts, deliveryOpts{Urgent: true})
+}
+
 // SendReceipt sends a receipt (delivery, read, or viewed) for one or
 // more previously-received messages identified by their sender-side
 // timestamps.
@@ -130,7 +157,7 @@ type deliveryOpts struct {
 }
 
 // sendContent is the shared payload-delivery pipeline used by Send,
-// SendReceipt, SendTyping, and SendReaction. It handles device
+// SendEdit, SendReceipt, SendTyping, and SendReaction. It handles device
 // discovery, session establishment, sealed-sender selection,
 // 409/410 retry, and basic-auth fallback.
 func (c *Client) sendContent(
@@ -603,6 +630,23 @@ func buildDataMessageContent(text string, tsMillis uint64) ([]byte, error) {
 				Timestamp: &timestamp,
 			},
 		},
+	}
+	return proto.Marshal(content)
+}
+
+func buildEditMessageContent(newText string, editTSMillis, targetSentMillis uint64) ([]byte, error) {
+	body := newText
+	ts := editTSMillis
+	targetTS := targetSentMillis
+	em := &sspb.EditMessage{
+		TargetSentTimestamp: &targetTS,
+		DataMessage: &sspb.DataMessage{
+			Body:      &body,
+			Timestamp: &ts,
+		},
+	}
+	content := &sspb.Content{
+		Content: &sspb.Content_EditMessage{EditMessage: em},
 	}
 	return proto.Marshal(content)
 }

@@ -43,3 +43,4 @@ with a new ADR that links back to the one it replaces.
 | 0033 | Release pipeline (Linux, macOS, Windows)         | Accepted |
 | 0034 | Pin Signal private TLS root for *.signal.org     | Accepted |
 | 0035 | `go-qrcode` for CLI provisioning QR              | Accepted |
+| 0036 | Linked-device name cipher (Android-compatible)   | Accepted |

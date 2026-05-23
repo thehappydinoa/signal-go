@@ -35,8 +35,12 @@ live traffic after link.
    - **Contacts:** ACI/PNI/E164, profile key, display names, blocked flag;
      contact `identityKey` → [`store.IdentityStore`].
    - **Groups:** 32-byte master key, title from snapshot, blocked flag.
-   - **Deferred:** `ChatItem` message history (no message store),
-     `AccountData` settings merge, sticker packs, distribution lists.
+   - **`ChatItem` frames:** optional per-frame callback
+     ([`backup.ImportTarget.OnChatItem`](../../internal/backup/import.go))
+     receives protobuf bytes; durable message history / query path remains
+     deferred.
+   - **Still deferred:** `AccountData` settings merge, sticker packs,
+     distribution lists.
 
 4. **`store.BackupImportStore`** — new interface for durable contact/group list
    entries (implemented by `sqlstore`; in-memory test double in `memstore`).
@@ -45,7 +49,8 @@ live traffic after link.
    - [`signal.ImportTransferArchive`](../../pkg/signal/backup_import.go) for
      standalone import after validation.
    - [`LinkOptions.ImportTransferArchive`](../../pkg/signal/link.go) (default
-     `true` when `LinkAndSync` and stores are set) runs import inside
+     `true` when `LinkAndSync` and any import sink — stores or
+     `OnChatItem` — is set) runs import inside
      [`SyncTransferArchive`](../../pkg/signal/link_sync.go) after validation.
    - [`OpenOptions.BackupImportStore`](../../pkg/signal/client.go) loads
      imported profile keys into the client on open.
@@ -57,8 +62,8 @@ live traffic after link.
 
 - Linked devices with link-and-sync restore contact identity keys and group
   master keys locally without storage-service sync.
-- Full chat history parity requires a future message store and `ChatItem`
-  import path.
+- Full chat history parity still requires a future message store and typed
+  `ChatItem` materialization; the callback is an escape hatch for exporters.
 - `backup.proto` must be re-vendored when bumping the libsignal pin if the
   schema changes.
 - Import runs after account persistence during link; partial import failures
@@ -68,7 +73,9 @@ live traffic after link.
 
 - **Wait for libsignal JSON export FFI:** `BackupJsonExporter` exists in Rust
   but is not exposed to cgo; rejected to avoid blocking on upstream.
-- **Import everything including ChatItems into JSON files:** no query path for
-  bots; rejected.
+- **Import everything including ChatItems into JSON files:** rejected as the
+  *only* path (no query path for bots), but an optional `OnChatItem` callback
+  lets integrators stream frames to JSON or another store without blocking
+  sqlstore defaults.
 - **Only return parsed frames to callers:** pushes persistence burden to every
   integrator; rejected for CLI/sqlstore users.

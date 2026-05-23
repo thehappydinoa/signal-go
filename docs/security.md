@@ -53,6 +53,11 @@ or instantiate `fsstore.NewWithKey([32]byte)` directly from your own
 code and source the key from an OS keyring, HSM, or whatever your
 threat model demands.
 
+Non-empty `-name` / [`LinkOptions.DeviceName`](../../pkg/signal/link.go)
+is encrypted for the ACI identity public key (X25519 + HMAC-SHA256 +
+AES-256-CTR, [ADR 0036](./adr/0036-linked-device-name-cipher.md)) before
+JSON encoding on `PUT /v1/devices/link`.
+
 For details: [encrypted-store diagram](./diagrams/encrypted-store.md)
 and [ADR 0012](./adr/0012-encrypted-store.md).
 

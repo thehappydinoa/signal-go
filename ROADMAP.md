@@ -52,8 +52,8 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Upload one-time prekeys (Curve25519 + Kyber, batch size configurable
       via `LinkOptions.OneTimePreKeyCount`, default 100) via
       `PUT /v2/keys?identity={aci,pni}` after the link succeeds
-- [ ] **Phase 2-followup**: encrypted device name (libsignal
-      `signal_device_name_*` FFI)
+- [x] **Phase 2-followup**: encrypted device name at link time (Go port of
+      Signal Android `DeviceNameCipher`, [ADR 0036](./docs/adr/0036-linked-device-name-cipher.md))
 - [x] End-to-end tests against a real phone (manual, gated by `SIGNAL_GO_E2E=1`;
       recv / send / group — see [`docs/guides/testing-e2e.md`](./docs/guides/testing-e2e.md))
 
@@ -101,6 +101,8 @@ the "Link this device?" prompt; we won't yet complete the link).
 - [x] Read/delivery receipts (`Client.SendReceipt`; also `SendTyping`,
       `SendReaction`). Inbound receipts continue to surface as
       `*ReceiptEvent` from the existing receive pipeline.
+- [x] 1:1 outbound message edits (`Client.SendEdit`, `Content.editMessage`;
+      group edit-send still out of scope)
 
 ## Phase 5 — Groups v2 **(done)**
 
@@ -176,7 +178,7 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
       ([ADR 0027](docs/adr/0027-storage-service-sync.md))
 - [x] CDSI contact discovery ([ADR 0028](docs/adr/0028-cdsi-contact-discovery.md))
 - [x] SQLite-backed store ([ADR 0029](docs/adr/0029-sqlite-backed-store.md))
-	// Backup/restore (linked-device "synchronized start") — receive, validate, and import v1 ([ADR 0030](docs/adr/0030-linked-device-transfer-archive.md), [ADR 0031](docs/adr/0031-transfer-archive-frame-import.md)); ChatItem message history deferred
+- [x] Backup/restore (linked-device "synchronized start") — receive, validate, and import v1 ([ADR 0030](docs/adr/0030-linked-device-transfer-archive.md), [ADR 0031](docs/adr/0031-transfer-archive-frame-import.md)); optional `OnChatItem` stream for `ChatItem` protobuf frames; durable in-app message history still deferred
 - [x] **Suppress the `missing .note.GNU-stack section implies executable stack`
       linker warning** on every Go build that links libsignal_ffi.a. The
       warning comes from a BoringSSL assembly object inside libsignal's
