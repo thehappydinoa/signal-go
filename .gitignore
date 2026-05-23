@@ -47,3 +47,6 @@ go.work.sum
 
 # Local account state created by the demo CLI
 /.signal-data/
+
+# e2e test store
+/.signal-e2e/
