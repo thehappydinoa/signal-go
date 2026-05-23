@@ -17,6 +17,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
 	"github.com/thehappydinoa/signal-go/internal/ws"
+	"github.com/thehappydinoa/signal-go/internal/debugsession"
 )
 
 // LinkOptions configures [Link].
@@ -72,6 +73,9 @@ type LinkOptions struct {
 
 	// ProvisioningURL overrides the websocket endpoint. Default: production.
 	ProvisioningURL string
+	// ServiceWebSocketURL overrides the unauthenticated service websocket
+	// used for PUT /v1/devices/link. Default: derived from [APIBaseURL].
+	ServiceWebSocketURL string
 	// APIBaseURL overrides chat.signal.org for the REST call.
 	APIBaseURL string
 
@@ -123,7 +127,7 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 		OnURL:        opts.OnURL,
 		Capabilities: opts.provisioningCapabilities(),
 		AfterDecrypt: func(ctx context.Context, conn *ws.Client, msg *provpb.ProvisionMessage) error {
-			return reg.register(ctx, conn, msg, opts)
+			return reg.register(ctx, msg, opts, ua)
 		},
 	})
 	if err != nil {
@@ -200,7 +204,7 @@ type linkRegisterState struct {
 	pniIdent account.Identity
 }
 
-func (s *linkRegisterState) register(ctx context.Context, conn *ws.Client, msg *provpb.ProvisionMessage, opts LinkOptions) error {
+func (s *linkRegisterState) register(ctx context.Context, msg *provpb.ProvisionMessage, opts LinkOptions, userAgent string) error {
 	if msg.GetAci() == "" || msg.GetNumber() == "" || msg.GetProvisioningCode() == "" {
 		return errors.New("provisioning message missing required fields")
 	}
@@ -220,8 +224,18 @@ func (s *linkRegisterState) register(ctx context.Context, conn *ws.Client, msg *
 	if err != nil {
 		return fmt.Errorf("build link request: %w", err)
 	}
-	resp, err := web.LinkDeviceWebSocket(ctx, conn, msg.GetProvisioningCode(), password, req)
+	// #region agent log
+	debugsession.Log("H2", "pkg/signal/link.go:register", "calling LinkDeviceWebSocket", map[string]any{
+		"serviceWSURL": opts.serviceWebSocketURL(),
+	})
+	// #endregion
+	resp, err := web.LinkDeviceWebSocket(ctx, opts.serviceWebSocketURL(), userAgent, msg.GetProvisioningCode(), password, req)
 	if err != nil {
+		// #region agent log
+		debugsession.Log("H6", "pkg/signal/link.go:register", "LinkDeviceWebSocket failed", map[string]any{
+			"err": err.Error(), "runId": "post-fix",
+		})
+		// #endregion
 		return err
 	}
 	if resp.DeviceID == 0 {
@@ -268,6 +282,13 @@ func maybeSyncTransferArchive(
 // without changing the public API. Set by link_test.go.
 func (o LinkOptions) skipOneTimePreKeys() bool {
 	return o.testSkipPreKeyUpload
+}
+
+func (o LinkOptions) serviceWebSocketURL() string {
+	if o.ServiceWebSocketURL != "" {
+		return o.ServiceWebSocketURL
+	}
+	return web.ServiceWebSocketURL(o.APIBaseURL)
 }
 
 func (o LinkOptions) provisioningCapabilities() []string {
