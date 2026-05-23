@@ -24,6 +24,8 @@ type ImportTransferArchiveOptions struct {
 	Identities store.IdentityStore
 	// BackupImport receives imported contact/group list entries.
 	BackupImport store.BackupImportStore
+	// OnChatItem receives each ChatItem frame as protobuf bytes (optional).
+	OnChatItem func(serializedChatItem []byte) error
 }
 
 // ImportTransferArchive decrypts and imports transfer-archive frames into the
@@ -38,7 +40,7 @@ func ImportTransferArchive(opts ImportTransferArchiveOptions) (*backup.ImportSta
 	if opts.ACI == "" {
 		return nil, errors.New("signal.ImportTransferArchive: ACI required")
 	}
-	if opts.Identities == nil && opts.BackupImport == nil {
+	if opts.Identities == nil && opts.BackupImport == nil && opts.OnChatItem == nil {
 		return nil, errors.New("signal.ImportTransferArchive: at least one import target required")
 	}
 
@@ -57,6 +59,7 @@ func ImportTransferArchive(opts ImportTransferArchiveOptions) (*backup.ImportSta
 	stats, err := backup.ImportArchive(msgKey, opts.ArchiveBytes, purpose, backup.ImportTarget{
 		Identities:   opts.Identities,
 		BackupImport: opts.BackupImport,
+		OnChatItem:   opts.OnChatItem,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("signal.ImportTransferArchive: %w", err)

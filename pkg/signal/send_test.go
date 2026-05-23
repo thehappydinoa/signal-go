@@ -727,6 +727,30 @@ func bobDecryptPreKey(t *testing.T, bob *recipientFixture, senderACI string, sen
 	return plain
 }
 
+func TestBuildEditMessageContent(t *testing.T) {
+	b, err := buildEditMessageContent("edited", 2000, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c sspb.Content
+	if err := proto.Unmarshal(b, &c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	em := c.GetEditMessage()
+	if em == nil {
+		t.Fatal("missing EditMessage")
+	}
+	if em.GetTargetSentTimestamp() != 1000 {
+		t.Fatalf("target ts = %d", em.GetTargetSentTimestamp())
+	}
+	if em.GetDataMessage().GetTimestamp() != 2000 {
+		t.Fatalf("data ts = %d", em.GetDataMessage().GetTimestamp())
+	}
+	if em.GetDataMessage().GetBody() != "edited" {
+		t.Fatalf("body = %q", em.GetDataMessage().GetBody())
+	}
+}
+
 // Compile-time guard: stress an obvious pitfall — the addr used during
 // encrypt is also the one used to look up the resulting session.
 var _ = store.Address{ServiceID: "x", DeviceID: 1}

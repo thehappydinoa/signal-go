@@ -127,7 +127,9 @@ if linked.Sync != nil && linked.Sync.Imported {
 ```
 
 Import covers contact identity keys, profile keys, and group master keys.
-Full chat history (`ChatItem` frames) is not imported yet — see
+Optional [`signal.LinkOptions.OnChatItem`](../../pkg/signal/link.go) receives
+each `ChatItem` backup frame as raw protobuf bytes (for export, indexing, or
+a custom store). Full in-database chat history is not wired yet — see
 [ADR 0031](../adr/0031-transfer-archive-frame-import.md).
 
 The primary may respond with `CONTINUE_WITHOUT_UPLOAD` (link proceeds
@@ -233,7 +235,9 @@ ls -l ./.signal-data
 ```
 
 Open the Signal app → *Linked devices* and you should see "signal-go"
-listed (or whatever you passed to `-name`).
+listed (or whatever you passed to `-name`). Non-empty names are sent
+encrypted for your ACI identity key (same scheme as Signal Android); see
+[ADR 0036](../adr/0036-linked-device-name-cipher.md).
 
 ## Send and profile fetch (library API)
 
@@ -249,7 +253,11 @@ if err == nil {
     fmt.Println(prof.DisplayName())
 }
 
-_, err = client.Send(ctx, recipientACI, "hello")
+receipt, err := client.Send(ctx, recipientACI, "hello")
+if err != nil {
+    return err
+}
+_, err = client.SendEdit(ctx, recipientACI, "hello (edited)", receipt.Timestamp)
 ```
 
 See [ADR 0017](../adr/0017-profile-fetch.md) for the UAK derivation and

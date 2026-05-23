@@ -22,6 +22,9 @@ type ImportPurpose = libsignal.BackupPurpose
 type ImportTarget struct {
 	Identities   store.IdentityStore
 	BackupImport store.BackupImportStore
+	// OnChatItem receives the protobuf encoding of each signal.backup.ChatItem
+	// frame. Optional.
+	OnChatItem func(serializedChatItem []byte) error
 }
 
 // ImportStats summarizes a successful import.
@@ -30,6 +33,7 @@ type ImportStats struct {
 	GroupsImported     int
 	IdentitiesImported int
 	FramesProcessed    int
+	ChatItemsProcessed int
 }
 
 // ImportArchive decrypts ciphertext, validates frames, and writes importable
@@ -104,6 +108,19 @@ func importFrame(frameBytes []byte, target ImportTarget, stats *ImportStats) err
 	var frame backuppbg.Frame
 	if err := proto.Unmarshal(frameBytes, &frame); err != nil {
 		return fmt.Errorf("backup.ImportArchive: unmarshal frame: %w", err)
+	}
+	if ci := frame.GetChatItem(); ci != nil {
+		if target.OnChatItem != nil {
+			itemWire, err := proto.Marshal(ci)
+			if err != nil {
+				return fmt.Errorf("backup.ImportArchive: marshal chat item: %w", err)
+			}
+			if err := target.OnChatItem(itemWire); err != nil {
+				return fmt.Errorf("backup.ImportArchive: on chat item: %w", err)
+			}
+		}
+		stats.ChatItemsProcessed++
+		return nil
 	}
 	recipient := frame.GetRecipient()
 	if recipient == nil {

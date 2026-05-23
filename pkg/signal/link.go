@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
+	"github.com/thehappydinoa/signal-go/internal/devicename"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/prekeymaint"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
@@ -33,13 +34,18 @@ type LinkOptions struct {
 	LinkAndSync bool
 	// ImportTransferArchive imports validated backup frames into
 	// SignalStores / BackupImportStore after link-and-sync. When nil,
-	// defaults to true if either store is set.
+	// defaults to true if any import sink (stores or OnChatItem) is set.
 	ImportTransferArchive *bool
 	// SignalStores receives imported contact identity keys during
 	// link-and-sync import.
 	SignalStores store.SignalStores
 	// BackupImportStore receives imported contact/group list entries.
 	BackupImportStore store.BackupImportStore
+	// OnChatItem receives each validated transfer-archive ChatItem frame as
+	// protobuf bytes (signal.backup.ChatItem). When set with
+	// [LinkOptions.SignalStores] or [LinkOptions.BackupImportStore], it
+	// participates in the default "should import" decision for link-and-sync.
+	OnChatItem func(serializedChatItem []byte) error
 
 	// ClientProfile selects a realistic User-Agent preset when UserAgent is
 	// empty. Default: [UserAgentSignalGo].
@@ -52,7 +58,8 @@ type LinkOptions struct {
 
 	// DeviceName is shown in the user's "Linked devices" list. If empty,
 	// the device appears unnamed until a SyncMessage updates it.
-	// (Encrypted device names land in Phase 3.)
+	// Non-empty values are encrypted for the ACI identity key (same scheme
+	// as Signal Android's DeviceNameCipher) before JSON encoding.
 	DeviceName string
 
 	// OneTimePreKeyCount is the size of each one-time prekey batch
@@ -141,7 +148,10 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 
 	// Step 4: assemble + send the link request.
 	webc := web.New(opts.APIBaseURL, ua)
-	req := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
+	req, err := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: build link request: %w", err)
+	}
 	resp, err := webc.LinkDevice(ctx, msg.GetProvisioningCode(), password, req)
 	if err != nil {
 		return nil, fmt.Errorf("signal.Link: register: %w", err)
@@ -225,6 +235,7 @@ func maybeSyncTransferArchive(
 		Import:             opts.shouldImportTransferArchive(),
 		Identities:         opts.SignalStores,
 		BackupImport:       opts.BackupImportStore,
+		OnChatItem:         opts.OnChatItem,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("signal.Link: sync transfer archive: %w", err)
@@ -249,7 +260,7 @@ func (o LinkOptions) shouldImportTransferArchive() bool {
 	if o.ImportTransferArchive != nil {
 		return *o.ImportTransferArchive
 	}
-	return o.SignalStores != nil || o.BackupImportStore != nil
+	return o.SignalStores != nil || o.BackupImportStore != nil || o.OnChatItem != nil
 }
 
 func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int) (account.Identity, error) {
@@ -310,14 +321,26 @@ func buildIdentity(pubBytes, privBytes []byte) (account.Identity, error) {
 // The readReceipts flag from the ProvisionMessage is persisted on the
 // Account but is not part of the registration request; the server
 // learns it later via SyncMessage.
-func buildLinkRequest(provisioningCode string, profileKey []byte, aci, pni account.Identity, deviceName string) web.LinkDeviceRequest {
+func buildLinkRequest(provisioningCode string, profileKey []byte, aci, pni account.Identity, deviceName string) (web.LinkDeviceRequest, error) {
+	name := ""
+	if deviceName != "" {
+		aciPub, err := libsignal.DeserializePublicKey(aci.PublicKey)
+		if err != nil {
+			return web.LinkDeviceRequest{}, fmt.Errorf("signal.Link: ACI identity public key: %w", err)
+		}
+		enc, err := encryptDeviceNameForLink(deviceName, aciPub)
+		if err != nil {
+			return web.LinkDeviceRequest{}, err
+		}
+		name = enc
+	}
 	return web.LinkDeviceRequest{
 		VerificationCode: provisioningCode,
 		AccountAttributes: web.AccountAttributes{
 			FetchesMessages:           true,
 			RegistrationID:            aci.RegistrationID,
 			PNIRegistrationID:         pni.RegistrationID,
-			Name:                      deviceName,
+			Name:                      name,
 			Capabilities:              web.DefaultCapabilities(),
 			UnidentifiedAccessKey:     deriveUDKey(profileKey),
 			DiscoverableByPhoneNumber: true,
@@ -326,18 +349,24 @@ func buildLinkRequest(provisioningCode string, profileKey []byte, aci, pni accou
 		PNISignedPreKey:       web.SignedECPreKeyFrom(pni.SignedPreKey),
 		ACIPqLastResortPreKey: web.SignedKEMPreKeyFrom(aci.LastResortKyberPreKey),
 		PNIPqLastResortPreKey: web.SignedKEMPreKeyFrom(pni.LastResortKyberPreKey),
-	}
+	}, nil
 }
 
-// deriveUDKey produces the 16-byte unidentified-access key that Signal
-// expects in AccountAttributes.
-//
-// Phase 2 placeholder: we send 16 zero bytes (server accepts this at link
-// time; sealed-sender will not work until we plug in the proper AES-GCM-SIV
-// derivation in Phase 4). See ROADMAP.md.
+// deriveUDKey returns the unidentified-access key field for AccountAttributes
+// at link time. Signal accepts an all-zero placeholder during registration;
+// sealed-sender send uses the profile-key-derived UAK from inbound traffic
+// (see ADR 0017), not this registration-time value.
 func deriveUDKey(profileKey []byte) string {
 	_ = profileKey
 	return base64.StdEncoding.EncodeToString(make([]byte, 16))
+}
+
+func encryptDeviceNameForLink(deviceName string, aciIdentityPublic *libsignal.PublicKey) (string, error) {
+	s, err := devicename.Encrypt(deviceName, aciIdentityPublic)
+	if err != nil {
+		return "", fmt.Errorf("signal.Link: encrypt device name: %w", err)
+	}
+	return s, nil
 }
 
 // generatePassword returns a random 18-byte password as a base64 string.

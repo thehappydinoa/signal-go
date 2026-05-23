@@ -42,12 +42,14 @@ type SyncTransferArchiveOptions struct {
 	// [web.DefaultTransferArchiveTimeout].
 	Timeout time.Duration
 	// Import runs frame import after validation when true and a target store
-	// is configured.
+	// or OnChatItem callback is configured.
 	Import bool
 	// Identities receives imported contact identity keys.
 	Identities store.IdentityStore
 	// BackupImport receives imported contact/group list entries.
 	BackupImport store.BackupImportStore
+	// OnChatItem receives each ChatItem frame as protobuf bytes (optional).
+	OnChatItem func(serializedChatItem []byte) error
 }
 
 // SyncTransferArchive polls for a transfer archive from the primary device,
@@ -117,10 +119,11 @@ func SyncTransferArchive(
 		Validated:    true,
 		ArchiveBytes: ciphertext,
 	}
-	if opts.Import && (opts.Identities != nil || opts.BackupImport != nil) {
+	if opts.Import && (opts.Identities != nil || opts.BackupImport != nil || opts.OnChatItem != nil) {
 		stats, err := backup.ImportArchive(msgKey, ciphertext, libsignal.BackupPurposeDeviceTransfer, backup.ImportTarget{
 			Identities:   opts.Identities,
 			BackupImport: opts.BackupImport,
+			OnChatItem:   opts.OnChatItem,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("signal.SyncTransferArchive: import: %w", err)

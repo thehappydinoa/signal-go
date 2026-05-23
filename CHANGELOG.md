@@ -12,6 +12,11 @@ is *what* changed and *when*.
 
 ### Added
 
+- `signal.Client.SendEdit` for 1:1 outbound edits (`Content.editMessage`).
+- Encrypted linked-device display name at `PUT /v1/devices/link` (Android-compatible
+  cipher; [ADR 0036](./docs/adr/0036-linked-device-name-cipher.md)).
+- Optional `OnChatItem` on link-and-sync / `ImportTransferArchive` to stream
+  transfer-archive `ChatItem` frames as protobuf bytes ([ADR 0031](./docs/adr/0031-transfer-archive-frame-import.md)).
 - E2e test suite (`go test -tags=e2e`, `task test:e2e`): open, recv, send,
   and group management (`FetchGroup`, `SyncGroup`, optional `SendGroup`) against
   a linked `sqlstore` directory. Guide: [`docs/guides/testing-e2e.md`](./docs/guides/testing-e2e.md).

@@ -20,6 +20,7 @@ flowchart TB
 
     subgraph crypto [Cryptography]
         ls[internal/libsignal<br/>cgo wrapper]
+        dn[internal/devicename<br/>linked-device name at link]
         ffi[(libsignal_ffi.a)]
     end
 
@@ -36,8 +37,10 @@ flowchart TB
     sig --> web
     sig --> account
     sig --> prekeys
+    sig --> dn
     prov --> ws
     prov --> ls
+    dn --> ls
     chat --> ws
     web --> account
     ls --> ffi
@@ -52,7 +55,7 @@ flowchart TB
     classDef per fill:#f5d6e8,stroke:#a13a78,color:#000;
     class bot,sig pub;
     class prov,chat,web,ws,prekeys proto;
-    class ls,ffi cry;
+    class ls,dn,ffi cry;
     class store,fs,mem,account per;
 ```
 
@@ -61,8 +64,11 @@ flowchart TB
 - **Dashed lines** are "satisfies the interface", not "imports". The
   store layer is plug-in: `fsstore` and `memstore` both implement
   `internal/store` and `account.Store`.
-- The cgo seam is exactly one package — `internal/libsignal`. Anyone
-  auditing the crypto trust story only has to read it.
+- The cgo seam for **Curve25519 / sessions / sealed sender** is exactly
+  one package — `internal/libsignal`. Anyone auditing that trust story
+  starts there. `internal/devicename` adds a small Android-compatible
+  AES/HMAC layer on top of `libsignal.Agree` for the linked-device name
+  field only ([ADR 0036](../adr/0036-linked-device-name-cipher.md)).
 - `pkg/signal` is what library consumers depend on. Nothing above it
   (your bot, your bridge, `pkg/bot` itself) needs to know about cgo or
   Signal's wire protocol.
