@@ -85,7 +85,7 @@ func DefaultVersionSource(profile Profile) (repo, file, url string, ok bool) {
 	case DesktopLinux, DesktopMacOS, DesktopWindows:
 		return "signalapp/Signal-Desktop",
 			"package.json (version field on a release tag)",
-			"https://github.com/signalapp/Signal-Desktop/blob/v7.47.0/package.json#L3",
+			"https://github.com/signalapp/Signal-Desktop/blob/v8.10.0/package.json#L3",
 			true
 	default:
 		return "", "", "", false

@@ -10,17 +10,76 @@ See also [Testing](./testing.md) and [ADR 0006](../adr/0006-testing-strategy.md)
 
 - Network egress to `chat.signal.org` (TLS uses the pinned Signal root;
   see [ADR 0034](../adr/0034-signal-tls-root-pinning.md)).
-- `libsignal_ffi.a` built (`task libsignal`).
+- `libsignal_ffi.a` built and CLI built (`task libsignal`, `task build`).
 - A **linked** device store under a dedicated directory (recommended:
   `internal/store/sqlstore`, not the CLI’s `fsstore`-only link path).
 - A **peer** for 1:1 tests: usually your phone’s ACI (primary account).
 - For group tests: a **64-character hex** group master key for a group
   your linked device is already in.
 
-## One-time setup (sqlstore + link)
+## Build (first time)
 
-Link from library code or the CLI, but persist sessions in SQLite so
-`Open` can decrypt traffic:
+From the repo root:
+
+```sh
+cd signal-go
+source scripts/dev-env.sh   # Windows: after copying .env.example → .env
+task libsignal
+task build
+```
+
+On Windows use **Git Bash** (or MSYS2) so `source scripts/dev-env.sh` picks up
+MinGW, `CGO_ENABLED=1`, and writable `TMP`/`TEMP` from `.env`. See
+[Getting started](./getting-started.md#windows-git-bash--msys2).
+
+`task build` writes the CLI to **`bin/signal-go`** (`bin/signal-go.exe` on Windows).
+
+## One-time setup: link a device
+
+Use a dedicated directory (for example `./.signal-e2e`). This creates a
+**throwaway linked device** — remove it from Signal → Settings → Linked
+devices when you are done.
+
+```sh
+mkdir -p ./.signal-e2e
+./bin/signal-go link \
+  -store ./.signal-e2e \
+  -name "signal-go e2e" \
+  -client desktop-linux \
+  -timeout 10m
+```
+
+The command prompts for a **store passphrase** (encrypts credentials at rest).
+Remember it — you need the same passphrase for any later `link`/`open` against
+that directory.
+
+Scan the QR code (or open the printed URL) from the phone:
+**Signal → Settings → Linked devices → +**.
+
+`-client desktop-linux` sends a Desktop-style `User-Agent`. If linking fails
+with **HTTP 499**, the preset version may be too old for Signal’s servers — see
+[Troubleshooting](#expected-handshake-response-status-code-101-but-got-499) below,
+or omit `-client` to use the default `signal-go` identity.
+
+### CLI link vs e2e test store
+
+`signal-go link -store` uses **fsstore** (JSON files under the directory).
+That is enough to verify linking and to use the CLI.
+
+The **`TestE2E_*` harness expects sqlstore** — a `signal.db` under
+`SIGNAL_E2E_STORE_DIR`. To run `task test:e2e`, link into sqlstore instead:
+
+**Option A — interactive link test** (logs the URL; no QR in terminal):
+
+```sh
+export SIGNAL_E2E_STORE_DIR=./.signal-e2e
+export SIGNAL_E2E_PASSPHRASE='same-passphrase-as-above'
+
+SIGNAL_GO_E2E=1 SIGNAL_E2E_LINK=1 \
+  go test -tags=e2e -timeout=15m -run TestE2E_Link ./pkg/signal/...
+```
+
+**Option B — library link** (QR via your own `OnURL` handler):
 
 ```go
 db, _ := sqlstore.OpenWithPassphrase("./.signal-e2e", passphrase)
@@ -31,9 +90,8 @@ _, err := signal.Link(ctx, signal.LinkOptions{
 })
 ```
 
-Or link with `signal-go` into a directory, then migrate / use a fresh
-sqlstore directory and link again with the snippet above. The e2e
-harness expects `SIGNAL_E2E_STORE_DIR` to contain `signal.db`.
+If you already linked with the CLI into `./.signal-e2e`, use a **fresh directory**
+for sqlstore (or delete the fsstore files) and link again with option A or B.
 
 ## Running the suite
 
@@ -83,6 +141,34 @@ Common optional variables:
    message’s `GroupID` or your backup import; run
    `TestE2E_GroupManagement`. Set `SIGNAL_E2E_GROUP_SEND=1` only if you
    want an extra test message in that chat.
+
+## Troubleshooting
+
+### `expected handshake response status code 101 but got 499`
+
+Signal returns **HTTP 499** when the client looks like an **expired upstream app**
+(see Signal Desktop’s `AppExpired` handling). This often happens if you linked with
+`-client desktop-windows` (or another desktop/android/ios preset) while the preset’s
+**snapshot version** in [`internal/web/useragent`](../../internal/web/useragent/useragent.go)
+is older than the minimum version Signal accepts.
+
+**Fix (pick one):**
+
+1. **Use the default client identity** — omit `-client` so `User-Agent` / `X-Signal-Agent`
+   are `signal-go` (recommended for development and e2e).
+2. **Override the version** — e.g.
+   `signal-go link -store ./.signal-e2e -client desktop-windows -user-agent 'Signal-Desktop/8.10.0 Windows 10'`
+3. **Bump the preset** in-tree if you maintain the snapshots (same file as above).
+
+TLS to `chat.signal.org` must succeed first (pinned Signal root; see
+[ADR 0034](../adr/0034-signal-tls-root-pinning.md)). A 499 means TLS worked but the
+server rejected the upgrade.
+
+### E2e store must be sqlstore
+
+See [CLI link vs e2e test store](#cli-link-vs-e2e-test-store) above. The fsstore
+from `signal-go link -store` is not read by `TestE2E_*`; use `TestE2E_Link` or
+library `sqlstore` link into the same (empty) directory.
 
 ## Security
 

@@ -200,7 +200,7 @@ func TestE2E_Link(t *testing.T) {
 		t.Fatalf("store %s already has signal.db; use a fresh directory or link via signal-go link", dir)
 	}
 
-	db := openE2EDB(t)
+	db := openE2EStore(t)
 	t.Cleanup(func() { _ = db.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
@@ -238,7 +238,8 @@ func requireEnv(t *testing.T, key string) string {
 	return v
 }
 
-func openE2EDB(t *testing.T) *sqlstore.DB {
+// openE2EStore opens the e2e sqlstore directory without requiring a linked account.
+func openE2EStore(t *testing.T) *sqlstore.DB {
 	t.Helper()
 	dir := requireEnv(t, "SIGNAL_E2E_STORE_DIR")
 	abs, err := filepath.Abs(dir)
@@ -259,9 +260,14 @@ func openE2EDB(t *testing.T) *sqlstore.DB {
 	if err != nil {
 		t.Fatalf("open store %s: %v", abs, err)
 	}
+	return db
+}
 
+func openE2EDB(t *testing.T) *sqlstore.DB {
+	t.Helper()
+	db := openE2EStore(t)
 	if _, err := db.LoadAccount(); errors.Is(err, account.ErrNotLinked) {
-		t.Fatalf("store %s is not linked; run signal-go link or TestE2E_Link with SIGNAL_E2E_LINK=1", abs)
+		t.Fatalf("store is not linked; run TestE2E_Link with SIGNAL_E2E_LINK=1 or link into %s first", os.Getenv("SIGNAL_E2E_STORE_DIR"))
 	} else if err != nil {
 		t.Fatalf("LoadAccount: %v", err)
 	}

@@ -33,7 +33,7 @@ const (
 	DefaultAndroidSDK         = "35"     // example API level (Android 15)
 	DefaultIOSAppVersion      = "8.13"   // Signal-iOS CFBundleShortVersionString at authoring time
 	DefaultIOSSystemVersion   = "18.2"   // example UIDevice.systemVersion
-	DefaultDesktopAppVersion  = "7.47.0" // Signal-Desktop v7.47.0 release tag
+	DefaultDesktopAppVersion  = "8.10.0" // Signal-Desktop v8.10.0 release tag (stale → HTTP 499)
 	DefaultLinuxKernelRelease = "6.1.0"  // example os.release() prefix on Linux
 	DefaultMacOSRelease       = "14.7.0" // example os.release() on macOS
 	DefaultWindowsRelease     = "10"     // example os.release() major on Windows

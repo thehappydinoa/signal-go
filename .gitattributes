@@ -1,0 +1,15 @@
+# Enforce LF in the repository so gofumpt (via golangci-lint) passes on all platforms.
+# On Windows, set `git config core.autocrlf input` (or false) to avoid reintroducing CRLF.
+* text=auto eol=lf
+
+# Binary assets
+*.a binary
+*.cer binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
