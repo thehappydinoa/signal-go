@@ -164,6 +164,27 @@ TLS to `chat.signal.org` must succeed first (pinned Signal root; see
 [ADR 0034](../adr/0034-signal-tls-root-pinning.md)). A 499 means TLS worked but the
 server rejected the upgrade.
 
+### `register: ... ws.Client: closed during request`
+
+Signal closes the provisioning websocket shortly after delivering the link
+envelope. Registration (`PUT /v1/devices/link`) must finish **on that same
+socket before we ACK** `PUT /v1/message` with HTTP 200 — rebuild with a current
+signal-go if you still see this after pulling the fix.
+
+While waiting for you to scan the QR, the client sends periodic WebSocket pings
+to reduce idle timeouts.
+
+### `register: web: HTTP 498 : {"message":"use websockets"}`
+
+Provisioning succeeded (you saw the QR) but registration still used HTTP.
+Rebuild after updating signal-go — `PUT /v1/devices/link` must run on the
+**same provisioning websocket**, not `https://chat.signal.org/v1/devices/link`.
+
+```sh
+task build
+./bin/signal-go link -store ./.signal-e2e ...
+```
+
 ### E2e store must be sqlstore
 
 See [CLI link vs e2e test store](#cli-link-vs-e2e-test-store) above. The fsstore

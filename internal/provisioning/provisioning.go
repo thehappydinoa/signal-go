@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -42,6 +43,11 @@ type Options struct {
 	// OnURL is called once the linking URL is ready. Typical implementations
 	// print it or render an ANSI QR code. Required.
 	OnURL func(linkURL string) error
+	// AfterDecrypt, if set, runs on the open provisioning websocket
+	// immediately after the envelope is decrypted. Production link flows
+	// should register via PUT /v1/devices/link here — Signal closes the
+	// provisioning socket shortly after the envelope is delivered.
+	AfterDecrypt func(ctx context.Context, conn *ws.Client, msg *provpb.ProvisionMessage) error
 }
 
 // Session is the result of [Link]: a successful pairing handshake that
@@ -53,6 +59,9 @@ type Session struct {
 	// Message holds the decoded ProvisionMessage with the linked account's
 	// ACI/PNI identity keys, UUIDs, number, and provisioning code.
 	Message *provpb.ProvisionMessage
+	// Conn is the open provisioning websocket. Callers must [ws.Client.Close]
+	// it after finishing registration (e.g. PUT /v1/devices/link on this conn).
+	Conn *ws.Client
 }
 
 // Link runs the provisioning handshake to completion and returns a Session.
@@ -143,7 +152,6 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provisioning.Link: dial: %w", err)
 	}
-	defer client.Close()
 
 	// Watch the read loop for premature death.
 	go func() {
@@ -174,6 +182,11 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("provisioning.Link: OnURL: %w", err)
 	}
 
+	// Hold the provisioning socket open while the user scans (can take minutes).
+	pingCtx, stopPing := context.WithCancel(ctx)
+	defer stopPing()
+	go keepAlive(pingCtx, client)
+
 	// Wait for the encrypted envelope, or for the user to abort, or for the
 	// ws to die under us.
 	var env *provpb.ProvisionEnvelope
@@ -188,7 +201,29 @@ func Link(ctx context.Context, opts Options) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provisioning.Link: decrypt: %w", err)
 	}
-	return &Session{EphemeralKey: ephemeral, Message: msg}, nil
+	if opts.AfterDecrypt != nil {
+		if err := opts.AfterDecrypt(ctx, client, msg); err != nil {
+			return nil, fmt.Errorf("provisioning.Link: after decrypt: %w", err)
+		}
+	}
+	return &Session{EphemeralKey: ephemeral, Message: msg, Conn: client}, nil
+}
+
+const provisioningKeepAliveInterval = 30 * time.Second
+
+func keepAlive(ctx context.Context, client *ws.Client) {
+	ticker := time.NewTicker(provisioningKeepAliveInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := client.Ping(ctx); err != nil {
+				return
+			}
+		}
+	}
 }
 
 // buildLinkURL returns the sgnl://linkdevice URL that the Signal mobile
