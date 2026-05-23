@@ -12,6 +12,7 @@ requires Go 1.25+, Rust/Cargo, gcc/g++, nasm, and protoc as system deps.
 | Build all | `task build` or `go build -trimpath ./...` |
 | Unit tests | `task test` or `go test -race -count=1 ./...` |
 | Lint | `task lint` or `golangci-lint run ./...` |
+| Format | `task fmt` or `golangci-lint fmt ./...` (gofumpt + goimports; LF only) |
 | Vet | `go vet ./...` |
 | Component tests | `task test:component` |
 | Build CLI | `task build` → `bin/signal-go`, or `go build -trimpath -o bin/signal-go ./cmd/signal-go` |

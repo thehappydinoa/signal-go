@@ -127,10 +127,10 @@ tasks:
         done
 
   fmt:
-    desc: Format Go code (ignores the libsignal build cache under .build/)
+    desc: Format Go code (gofumpt + goimports via golangci-lint; requires LF line endings)
+    deps: [setup]
     cmds:
-      - gofmt -s -w $(go list -f '{{.Dir}}' ./...)
-      - test -x "$(go env GOPATH)/bin/goimports" && "$(go env GOPATH)/bin/goimports" -w -local github.com/thehappydinoa/signal-go $(go list -f '{{.Dir}}' ./...) || true
+      - golangci-lint fmt ./...
 
   tidy:
     desc: go mod tidy

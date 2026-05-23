@@ -157,10 +157,11 @@ Note: Signal Desktop sends `X-Signal-Agent: OWD` separately from
 signal-go currently uses the same string for both headers.
 
 ```sh
-# Linux desktop linked device (recommended on servers/VMs)
-./bin/signal-go link -store ./.signal-data -client desktop-linux
+# Default (recommended): honest signal-go identity; avoids stale preset versions (HTTP 499).
+./bin/signal-go link -store ./.signal-data
 
-# Other presets: android, ios, desktop-macos, desktop-windows
+# Mimic upstream clients (snapshot versions in useragent presets; override if you get HTTP 499):
+./bin/signal-go link -store ./.signal-data -client desktop-linux
 ./bin/signal-go link -client android -store ./.signal-data
 ```
 
@@ -561,6 +562,11 @@ To ship a new `v*` tag and draft GitHub Release binaries, see
   `scripts/build-libsignal.sh`. Run `task libsignal` again (or
   `FORCE=1 task libsignal`); the script appends portable ADX fallbacks
   for COFF linkers.
+- *pre-push / `golangci-lint`: `File is not properly formatted (gofumpt)` on
+  every `.go` file* — Git checked out **CRLF** line endings on Windows.
+  Run `task fmt` (or `golangci-lint fmt ./...`), then push again. The repo
+  ships [`.gitattributes`](../../.gitattributes) with `eol=lf`; set
+  `git config core.autocrlf input` so new checkouts stay LF.
 - *Browser or `curl` shows an untrusted cert for `https://chat.signal.org`* —
   expected if Signal's private root is not in your OS trust store. The
   official apps pin that CA; `signal-go` does too ([ADR 0034](../adr/0034-signal-tls-root-pinning.md)).

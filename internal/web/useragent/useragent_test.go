@@ -16,9 +16,9 @@ func TestProfileFormat(t *testing.T) {
 		{useragent.SignalGo, "signal-go"},
 		{useragent.Android, "Signal-Android/8.12.1 Android/35"},
 		{useragent.IOS, "Signal-iOS/8.13 iOS/18.2"},
-		{useragent.DesktopLinux, "Signal-Desktop/7.47.0 Linux 6.1.0"},
-		{useragent.DesktopMacOS, "Signal-Desktop/7.47.0 macOS 14.7.0"},
-		{useragent.DesktopWindows, "Signal-Desktop/7.47.0 Windows 10"},
+		{useragent.DesktopLinux, "Signal-Desktop/8.10.0 Linux 6.1.0"},
+		{useragent.DesktopMacOS, "Signal-Desktop/8.10.0 macOS 14.7.0"},
+		{useragent.DesktopWindows, "Signal-Desktop/8.10.0 Windows 10"},
 	}
 	for _, tc := range tests {
 		got := tc.profile.Format(useragent.Options{})
