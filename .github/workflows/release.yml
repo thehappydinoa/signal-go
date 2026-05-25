@@ -283,7 +283,7 @@ jobs:
       - name: Attest build provenance
         if: ${{ startsWith(github.ref, 'refs/tags/v') && vars.ENABLE_BUILD_PROVENANCE == 'true' }}
         continue-on-error: true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ steps.package.outputs.archive_path }}
 
