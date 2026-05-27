@@ -6,6 +6,16 @@ agent reads files of this name automatically, but everything in it is
 addressed at *any* contributor — agent or human. Following it keeps the
 project consistent and reviewable.
 
+## Source of truth
+
+`CLAUDE.md` is the canonical, shared policy document for contributor and
+agent behavior.
+
+`AGENTS.md` is a thin compatibility/entry-point document for tools that
+auto-read that filename (for example Cursor/Copilot). Keep shared policy
+here; keep `AGENTS.md` focused on environment-specific addenda and links
+back to this file.
+
 ## Three rules that override everything else
 
 1. **Always file an ADR when making a decision that future contributors
