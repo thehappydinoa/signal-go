@@ -286,6 +286,10 @@ b.OnText("ping").DM().Do(func(ctx context.Context, m *bot.Message, _ []string) e
 return b.Run(ctx)
 ```
 
+If you want a fully working, end-to-end “hello world” to validate your
+environment (link → websocket receive → reply), see the `echo-bot` example:
+[`examples/echo-bot/`](../../examples/echo-bot/).
+
 ### Conversation state
 
 Each conversation (sender ACI + optional group ID) has a small
