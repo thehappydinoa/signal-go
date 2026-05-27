@@ -155,7 +155,7 @@ When an agent prepares a PR, include:
 GitHub Actions workflows under [`.github/workflows/`](./.github/workflows/)
 ([ADR 0013](./docs/adr/0013-ci-github-actions.md)):
 
-- **`ci.yml`** runs on every push to `main` and every PR, but heavy
+- **`ci.yml`** runs on pushes/PRs to `main` except markdown-only changes (`**/*.md`), and heavy
    jobs run only when CI-relevant paths change (`cmd/`, `internal/`,
    `pkg/`, `proto/`, `scripts/`, `go.mod`, `go.sum`, `Taskfile.yml`,
    `.golangci.yml`, and `.github/workflows/ci.yml`):

@@ -1,6 +1,7 @@
 # signal-go
 
 [![CI](https://github.com/thehappydinoa/signal-go/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](./LICENSE)
 [![Go version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](./go.mod)
 [![libsignal](https://img.shields.io/badge/libsignal-v0.94.1-orange)](./scripts/build-libsignal.sh)
@@ -119,18 +120,11 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 
 ## Roadmap snapshot
 
-| Phase | Status | Scope |
-|-------|--------|--------|
-| [1 — Foundation](./ROADMAP.md#phase-1--foundation-done) | ✅ | cgo, ws, QR-link handshake |
-| [2 — Link](./ROADMAP.md#phase-2--complete-the-link-done-except-where-noted) | ✅ | Provisioning, prekeys, REST registration |
-| [3 — Receive](./ROADMAP.md#phase-3--receive-done) | ✅ | Chat ws, decrypt, typed events |
-| [4 — Send 1:1](./ROADMAP.md#phase-4--send-11-done) | ✅ | Sessions, sealed sender, control messages |
-| [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-done) | ✅ | zkgroup, sender keys, membership |
-| [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-done) | ✅ | Dispatchers, middleware, group helpers |
-| [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | 🔧 | CDSI ✅, SQLite ✅, backup polish |
-| [8 — Security audit](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-targeted-for-v01x-not-a-hard-gate-for-v010) | ⏳ | Internal pass ✅; external review follow-up in v0.1.x |
+To avoid stale duplicate status, the roadmap lives in one place:
+[`ROADMAP.md`](./ROADMAP.md).
 
-Detail and tick-boxes: [`ROADMAP.md`](./ROADMAP.md).
+For current phase details and tick-box progress, see:
+[Phase 8 in ROADMAP](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-targeted-for-v01x-not-a-hard-gate-for-v010).
 
 ## Documentation
 
