@@ -53,6 +53,30 @@ The command prompts for a **store passphrase** (encrypts credentials at rest).
 Remember it — you need the same passphrase for any later `link`/`open` against
 that directory.
 
+### Create a passphrase file (skip the prompt)
+
+To script linking and the e2e suite, write the passphrase to a file once and
+point both the CLI and the test harness at it. The `/.signal-e2e/` directory is
+gitignored, so a file there is never committed:
+
+```sh
+# One line, no leading/trailing spaces; a trailing newline is fine.
+printf '%s\n' 'correct horse battery staple' > ./.signal-e2e/passphrase
+chmod 600 ./.signal-e2e/passphrase
+```
+
+Use it from the CLI (replaces the interactive prompt) and from the harness:
+
+```sh
+./bin/signal-go link -store ./.signal-e2e -passphrase-file ./.signal-e2e/passphrase ...
+export SIGNAL_E2E_PASSPHRASE_FILE="$PWD/.signal-e2e/passphrase"
+```
+
+The CLI (`-passphrase-file`) trims only trailing newlines/CR; the harness
+(`SIGNAL_E2E_PASSPHRASE_FILE`) trims all surrounding whitespace. Keeping the
+file to a single trimmed line makes the same file work for both. Never commit
+it; keep it `chmod 600` and inside `/.signal-e2e/` (or outside the repo).
+
 Scan the QR code (or open the printed URL) from the phone:
 **Signal → Settings → Linked devices → +**.
 
