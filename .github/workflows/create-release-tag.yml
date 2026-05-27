@@ -108,11 +108,24 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a '${{ steps.meta.outputs.tag }}' -m "Release ${{ steps.meta.outputs.tag }}"
 
+      # secrets.* cannot be used in step/job if: (GitHub rejects the workflow).
+      # Record whether the optional PAT is configured for later conditionals.
+      - name: Detect RELEASE_TAG_PUSH_TOKEN
+        id: push_token
+        env:
+          RELEASE_TAG_PUSH_TOKEN: ${{ secrets.RELEASE_TAG_PUSH_TOKEN }}
+        run: |
+          if [ -n "${RELEASE_TAG_PUSH_TOKEN}" ]; then
+            echo "has_pat=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pat=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Push tag to origin
         run: git push origin '${{ steps.meta.outputs.tag }}'
 
       - name: Trigger Release workflow
-        if: ${{ secrets.RELEASE_TAG_PUSH_TOKEN == '' }}
+        if: steps.push_token.outputs.has_pat == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -133,7 +146,7 @@ jobs:
             echo "- **Ref:** \`${{ inputs.ref }}\`"
             echo "- **Version:** \`${{ steps.meta.outputs.version }}\`"
             echo ""
-            if [ -n "${{ secrets.RELEASE_TAG_PUSH_TOKEN }}" ]; then
+            if [ "${{ steps.push_token.outputs.has_pat }}" = "true" ]; then
               echo "Release should start automatically (tag pushed with RELEASE_TAG_PUSH_TOKEN)."
             else
               echo "Release was dispatched via workflow_dispatch (GITHUB_TOKEN tag pushes do not trigger other workflows)."
