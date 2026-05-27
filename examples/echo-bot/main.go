@@ -160,6 +160,7 @@ func runBot(args []string) int {
 	clientProfile := fs.String("client", string(useragent.SignalGo), "client User-Agent preset: signal-go, android, ios, desktop-linux, desktop-macos, desktop-windows")
 	userAgent := fs.String("user-agent", "", "override User-Agent / X-Signal-Agent (disables -client preset)")
 	replyPrefix := fs.String("reply-prefix", "echo: ", "prefix added to replies")
+	basicAuth := fs.Bool("basic-auth", false, "send replies with basic auth (not sealed sender); use if the peer never receives echoes")
 	_ = fs.Parse(args)
 
 	profile, err := useragent.Parse(*clientProfile)
@@ -203,7 +204,11 @@ func runBot(args []string) int {
 	}
 	defer func() { _ = client.Close() }()
 
-	log.Printf("connected (aci=%s device_id=%d go=%s)", client.Account().ACI, client.Account().DeviceID, runtime.Version())
+	selfACI := client.Account().ACI
+	log.Printf("connected (aci=%s device_id=%d go=%s)", selfACI, client.Account().DeviceID, runtime.Version())
+	if *basicAuth {
+		log.Printf("basic-auth mode: replies use identifiable send (not sealed sender)")
+	}
 	log.Printf("listening for inbound messages; Ctrl+C to stop")
 
 	for {
@@ -228,18 +233,37 @@ func runBot(args []string) int {
 					log.Printf("skip group message (group_id=%s sender=%s)", e.GroupID, e.Sender)
 					continue
 				}
+				if e.Sender == selfACI {
+					log.Printf("skip: sender is this linked device’s own ACI (%s); message the bot number from another account", selfACI)
+					continue
+				}
 				reply := *replyPrefix + e.Body
-				log.Printf("recv msg sender=%s body=%q", e.Sender, truncate(e.Body, 160))
-				if _, err := client.Send(ctx, e.Sender, reply); err != nil {
+				log.Printf("recv msg sender=%s device=%d body=%q", e.Sender, e.SenderDevice, truncate(e.Body, 160))
+				if err := sendReply(ctx, client, e.Sender, reply, *basicAuth); err != nil {
 					log.Printf("send failed recipient=%s err=%v", e.Sender, err)
-				} else {
-					log.Printf("replied recipient=%s body=%q", e.Sender, truncate(reply, 160))
 				}
 			case *sg.DecryptionErrorEvent:
 				log.Printf("decrypt error sender=%s err=%v", e.Sender, e.Err)
 			}
 		}
 	}
+}
+
+// sendReply delivers text to recipientACI. Unless basicAuth is set, it tries
+// FetchProfile once so pkg/signal can use sealed sender only when the peer allows it.
+func sendReply(ctx context.Context, client *sg.Client, recipientACI, text string, basicAuth bool) error {
+	if basicAuth {
+		client.SetRecipientProfileKey(recipientACI, nil)
+	} else if _, err := client.FetchProfile(ctx, recipientACI, nil); err != nil {
+		log.Printf("fetch profile for %s: %v (send uses basic auth until profile is known)", recipientACI, err)
+	}
+
+	receipt, err := client.Send(ctx, recipientACI, text)
+	if err != nil {
+		return err
+	}
+	log.Printf("replied recipient=%s ts=%s body=%q", recipientACI, receipt.Timestamp.Format(time.RFC3339), truncate(text, 160))
+	return nil
 }
 
 func openDB(dir, passphraseFile string, plaintext bool) (*sqlstore.DB, error) {
