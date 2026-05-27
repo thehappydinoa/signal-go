@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // KeyLen is the AES-256 key size for encrypted stores (ADR 0012).
@@ -46,7 +47,14 @@ func seal(key [KeyLen]byte, plaintext []byte) ([]byte, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, fmt.Errorf("seal: read nonce: %w", err)
 	}
-	out := make([]byte, 0, 1+nonceLen+len(plaintext)+gcm.Overhead())
+
+	base := 1 + nonceLen + gcm.Overhead()
+	if len(plaintext) > math.MaxInt-base {
+		return nil, errors.New("seal: plaintext too large")
+	}
+	capHint := base + len(plaintext)
+
+	out := make([]byte, 0, capHint)
 	out = append(out, formatVersion)
 	out = append(out, nonce...)
 	out = gcm.Seal(out, nonce, plaintext, nil)
