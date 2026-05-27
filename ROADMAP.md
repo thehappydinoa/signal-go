@@ -221,10 +221,11 @@ below):
   - [x] We link only the release `libsignal_ffi.a`; no `*-testing*`
         variant reaches production (`scripts/build-libsignal.sh` pins
         `cargo build --release`).
-  - [ ] Long-running receive `-memprofile` bake (`examples/echo-bot run` is a
-        convenient soak harness). Methodology recorded in
-        [`docs/security/threat-model.md`](./docs/security/threat-model.md);
-        bake gated on maintainer bandwidth.
+  - [x] Long-running receive `-memprofile` bake (2026-05-27). Methodology and
+        results: [`docs/guides/profiling.md` § Phase 8 bake](./docs/guides/profiling.md#phase-8-long-running-receive-bake-recorded).
+        Windows `echo-bot` + `sqlstore`: ~6 MB steady-state heap after ~20 min;
+        no receive-path leak; CPU mostly idle (session SQLite fsync when
+        libsignal persists state).
   - [ ] `valgrind --tool=memcheck` or `-fsanitize=address` sweep of a
         cgo-linked test binary. Same note as above.
 - [x] `internal/provisioning` cipher review:
