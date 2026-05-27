@@ -1,5 +1,13 @@
 # AGENTS.md
 
+## Source of truth
+
+Shared contributor/agent policy lives in [CLAUDE.md](./CLAUDE.md).
+
+Treat this file as a tool-specific companion for Cursor/Copilot runtime
+notes and environment quirks. If guidance here conflicts with
+`CLAUDE.md`, follow `CLAUDE.md` and then update this file to match.
+
 ## Cursor Cloud specific instructions
 
 This is a Go + cgo project that statically links Rust's `libsignal_ffi.a`. The build
