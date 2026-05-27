@@ -142,9 +142,10 @@ type Client struct {
 
 	// mu guards knownDevices, knownUAKs, knownProfileKeys, and allowSealedSender.
 	mu               sync.Mutex
-	knownDevices     map[string][]uint32 // recipientACI → device ID set
-	knownUAKs        map[string][]byte   // recipientACI → 16-byte unidentified access key
-	knownProfileKeys map[string][]byte   // recipientACI → 32-byte profile key
+	knownDevices     map[string][]uint32  // recipientACI → device ID set
+	knownUAKs        map[string][]byte    // recipientACI → 16-byte unidentified access key
+	knownProfileKeys map[string][]byte    // recipientACI → 32-byte profile key
+	keysRateLimit    map[string]time.Time // recipientACI → next allowed /v2/keys fetch time
 	// allowSealedSender is true only after [Client.FetchProfile] confirms
 	// unrestricted unidentified access for that ACI.
 	allowSealedSender map[string]bool

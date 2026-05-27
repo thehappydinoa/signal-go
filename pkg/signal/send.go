@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
 	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
+)
+
+const (
+	defaultKeysRateLimitBackoff = 2 * time.Second
+	maxKeysRateLimitBackoff     = 5 * time.Minute
 )
 
 // Send delivers a 1:1 text message to the recipient identified by their
@@ -288,7 +294,7 @@ func (c *Client) discoverAndEnsureSessions(ctx context.Context, creds web.Creden
 
 	if deviceIDs == nil {
 		// First send to this recipient: discover the full device set.
-		resp, err := c.webc.FetchPreKeyBundle(ctx, creds, recipientACI, "*")
+		resp, err := c.fetchPreKeyBundleDefensive(ctx, creds, recipientACI, "*")
 		if err != nil {
 			return nil, fmt.Errorf("signal.Send: discover devices: %w", err)
 		}
@@ -397,7 +403,7 @@ func (c *Client) handleSendError(
 // fetchAndProcessBundle fetches a single device's prekey bundle and
 // processes it to establish a Double Ratchet session.
 func (c *Client) fetchAndProcessBundle(ctx context.Context, creds web.Credentials, recipientACI string, devID uint32) error {
-	resp, err := c.webc.FetchPreKeyBundle(ctx, creds, recipientACI, strconv.FormatUint(uint64(devID), 10))
+	resp, err := c.fetchPreKeyBundleDefensive(ctx, creds, recipientACI, strconv.FormatUint(uint64(devID), 10))
 	if err != nil {
 		return fmt.Errorf("fetch bundle for device %d: %w", devID, err)
 	}
@@ -405,6 +411,79 @@ func (c *Client) fetchAndProcessBundle(ctx context.Context, creds web.Credential
 		return fmt.Errorf("no bundle returned for device %d", devID)
 	}
 	return c.processBundle(resp.IdentityKey, resp.Devices[0], store.Address{ServiceID: recipientACI, DeviceID: devID})
+}
+
+func (c *Client) fetchPreKeyBundleDefensive(ctx context.Context, creds web.Credentials, recipientACI, device string) (web.FetchPreKeyResponse, error) {
+	if err := c.keysRateLimitGate(recipientACI); err != nil {
+		return web.FetchPreKeyResponse{}, err
+	}
+	resp, err := c.webc.FetchPreKeyBundle(ctx, creds, recipientACI, device)
+	if err != nil {
+		if backoff, ok := keysRateLimitBackoff(err); ok {
+			c.setKeysRateLimit(recipientACI, backoff)
+		}
+		return web.FetchPreKeyResponse{}, err
+	}
+	c.clearKeysRateLimit(recipientACI)
+	return *resp, nil
+}
+
+func (c *Client) keysRateLimitGate(recipientACI string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.keysRateLimit == nil {
+		return nil
+	}
+	until := c.keysRateLimit[recipientACI]
+	if until.IsZero() {
+		return nil
+	}
+	remaining := time.Until(until)
+	if remaining <= 0 {
+		delete(c.keysRateLimit, recipientACI)
+		return nil
+	}
+	return &web.Error{
+		StatusCode: http.StatusTooManyRequests,
+		Status:     "429 Too Many Requests",
+		Body:       []byte("local rate-limit cooldown for /v2/keys"),
+		RetryAfter: remaining,
+	}
+}
+
+func (c *Client) setKeysRateLimit(recipientACI string, backoff time.Duration) {
+	if backoff <= 0 {
+		backoff = defaultKeysRateLimitBackoff
+	}
+	if backoff > maxKeysRateLimitBackoff {
+		backoff = maxKeysRateLimitBackoff
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.keysRateLimit == nil {
+		c.keysRateLimit = make(map[string]time.Time)
+	}
+	c.keysRateLimit[recipientACI] = time.Now().Add(backoff)
+}
+
+func (c *Client) clearKeysRateLimit(recipientACI string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.keysRateLimit == nil {
+		return
+	}
+	delete(c.keysRateLimit, recipientACI)
+}
+
+func keysRateLimitBackoff(err error) (time.Duration, bool) {
+	var werr *web.Error
+	if !errors.As(err, &werr) || werr.StatusCode != http.StatusTooManyRequests {
+		return 0, false
+	}
+	if werr.RetryAfter > 0 {
+		return werr.RetryAfter, true
+	}
+	return defaultKeysRateLimitBackoff, true
 }
 
 // processBundle converts a wire-format prekey bundle into a libsignal

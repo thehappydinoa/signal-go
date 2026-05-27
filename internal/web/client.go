@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/tlsroots"
@@ -157,6 +158,7 @@ type Error struct {
 	StatusCode int
 	Status     string
 	Body       []byte
+	RetryAfter time.Duration
 }
 
 func (e *Error) Error() string {
@@ -215,7 +217,12 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 		return fmt.Errorf("web: read body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &Error{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+		return &Error{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       body,
+			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+		}
 	}
 	if req.RawOut != nil {
 		*req.RawOut = append((*req.RawOut)[:0], body...)
@@ -228,6 +235,24 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 		return fmt.Errorf("web: decode response: %w", err)
 	}
 	return nil
+}
+
+func parseRetryAfter(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(value); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	when, err := http.ParseTime(value)
+	if err != nil {
+		return 0
+	}
+	d := time.Until(when)
+	if d < 0 {
+		return 0
+	}
+	return d
 }
 
 // DoAbsolute executes an HTTP request against an absolute URL (CDN uploads,

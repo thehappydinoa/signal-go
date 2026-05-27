@@ -27,6 +27,13 @@
 // Returning nil from a handler stops dispatch for that event; returning
 // [ErrPass] continues to the next handler.
 //
+// # Humanized helper replies (optional)
+//
+// Set [Options.AutoTypingIndicators] and/or [Options.SendDelay] to make
+// [Message.Reply] and [Message.ReplyAttachment] feel less instantaneous.
+// With typing indicators enabled, helper replies send TypingStarted before
+// work and TypingStopped after send/abort.
+//
 // # Conversation state
 //
 // Each conversation (sender ACI plus optional group ID) has a small

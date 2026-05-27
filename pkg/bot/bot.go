@@ -43,6 +43,16 @@ type Options struct {
 	// AutoSyncStorage passes through to [signal.OpenOptions] so linked
 	// devices requesting storage-manifest sync trigger background pull.
 	AutoSyncStorage bool
+
+	// AutoTypingIndicators sends TypingStarted before helper replies and
+	// TypingStopped after send/abort in [Message.Reply] and
+	// [Message.ReplyAttachment]. Default: false.
+	AutoTypingIndicators bool
+
+	// SendDelay waits before helper replies in [Message.Reply] and
+	// [Message.ReplyAttachment]. Useful for more human-like pacing.
+	// Default: 0 (disabled).
+	SendDelay time.Duration
 }
 
 // ErrPass tells the dispatcher "I didn't really handle this event; try
@@ -88,6 +98,9 @@ type Bot struct {
 	log   *slog.Logger
 	convo *Conversations
 
+	autoTypingIndicators bool
+	sendDelay            time.Duration
+
 	mu                  sync.RWMutex
 	middleware          []MiddlewareFunc
 	textHandlers        []textHandler
@@ -127,20 +140,22 @@ func Open(ctx context.Context, opts Options) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bot.Open: %w", err)
 	}
-	return wrap(cli, log, opts.ConvoStore), nil
+	return wrap(cli, log, opts.ConvoStore, opts.AutoTypingIndicators, opts.SendDelay), nil
 }
 
 // Wrap returns a Bot driving an existing [Client]. Useful for tests
 // that already constructed a client (or want to use a stub). The
 // returned Bot uses an in-memory [ConvoStore]; supply a custom one via
 // [WrapWithOptions] if persistence is needed.
-func Wrap(cli Client) *Bot { return wrap(cli, slog.Default(), nil) }
+func Wrap(cli Client) *Bot { return wrap(cli, slog.Default(), nil, false, 0) }
 
 // WrapOptions tweaks the [Bot] returned by [WrapWithOptions]. All
 // fields are optional.
 type WrapOptions struct {
-	Logger     *slog.Logger
-	ConvoStore ConvoStore
+	Logger               *slog.Logger
+	ConvoStore           ConvoStore
+	AutoTypingIndicators bool
+	SendDelay            time.Duration
 }
 
 // WrapWithOptions returns a Bot driving an existing [Client] with
@@ -151,14 +166,20 @@ func WrapWithOptions(cli Client, opts WrapOptions) *Bot {
 	if log == nil {
 		log = slog.Default()
 	}
-	return wrap(cli, log, opts.ConvoStore)
+	return wrap(cli, log, opts.ConvoStore, opts.AutoTypingIndicators, opts.SendDelay)
 }
 
-func wrap(cli Client, log *slog.Logger, cs ConvoStore) *Bot {
+func wrap(cli Client, log *slog.Logger, cs ConvoStore, autoTypingIndicators bool, sendDelay time.Duration) *Bot {
 	if cs == nil {
 		cs = NewMemoryConvoStore()
 	}
-	return &Bot{cli: cli, log: log, convo: &Conversations{store: cs}}
+	return &Bot{
+		cli:                  cli,
+		log:                  log,
+		convo:                &Conversations{store: cs},
+		autoTypingIndicators: autoTypingIndicators,
+		sendDelay:            sendDelay,
+	}
 }
 
 // Use registers a global middleware that wraps every handler. Middleware

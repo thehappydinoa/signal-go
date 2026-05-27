@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thehappydinoa/signal-go/internal/web"
 	"github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -21,11 +22,14 @@ type fakeClient struct {
 
 	mu             sync.Mutex
 	sends          []sentMessage
+	sendErrs       []error
 	groupSends     []sentGroupMessage
+	groupSendErrs  []error
 	groupReactions []sentGroupReaction
 	groupTypings   []sentGroupTyping
 	receipts       []sentReceipt
 	typings        []sentTyping
+	typingErrs     []error
 	reactions      []sentReaction
 	attachments    []sentAttachment
 }
@@ -81,6 +85,13 @@ func (f *fakeClient) Events() <-chan signal.Event { return f.events }
 func (f *fakeClient) Send(_ context.Context, to, text string) (signal.Receipt, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(f.sendErrs) > 0 {
+		err := f.sendErrs[0]
+		f.sendErrs = f.sendErrs[1:]
+		if err != nil {
+			return signal.Receipt{}, err
+		}
+	}
 	f.sends = append(f.sends, sentMessage{to: to, text: text})
 	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
 }
@@ -88,6 +99,13 @@ func (f *fakeClient) Send(_ context.Context, to, text string) (signal.Receipt, e
 func (f *fakeClient) SendGroup(_ context.Context, masterKey []byte, text string) (signal.Receipt, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(f.groupSendErrs) > 0 {
+		err := f.groupSendErrs[0]
+		f.groupSendErrs = f.groupSendErrs[1:]
+		if err != nil {
+			return signal.Receipt{}, err
+		}
+	}
 	f.groupSends = append(f.groupSends, sentGroupMessage{groupIDHex: fmt.Sprintf("%x", masterKey), text: text})
 	return signal.Receipt{Timestamp: time.Now()}, nil
 }
@@ -123,6 +141,13 @@ func (f *fakeClient) SendReceipt(_ context.Context, to string, kind signal.Recei
 func (f *fakeClient) SendTyping(_ context.Context, to string, action signal.TypingAction) (signal.Receipt, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(f.typingErrs) > 0 {
+		err := f.typingErrs[0]
+		f.typingErrs = f.typingErrs[1:]
+		if err != nil {
+			return signal.Receipt{}, err
+		}
+	}
 	f.typings = append(f.typings, sentTyping{to: to, action: action})
 	return signal.Receipt{Timestamp: time.Now(), RecipientACI: to}, nil
 }
@@ -961,6 +986,127 @@ func TestMessageTypingSendsTyping(t *testing.T) {
 	}
 }
 
+func TestReplyHumanizedSendsTypingAndDelaysDM(t *testing.T) {
+	fc := newFakeClient()
+	b := WrapWithOptions(fc, WrapOptions{
+		AutoTypingIndicators: true,
+		SendDelay:            25 * time.Millisecond,
+	})
+
+	var done sync.WaitGroup
+	done.Add(1)
+	var elapsed time.Duration
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		start := time.Now()
+		err := m.Reply(ctx, "hello")
+		elapsed = time.Since(start)
+		return err
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	done.Wait()
+	cancel()
+	_ = wait()
+
+	if len(fc.Sends()) != 1 || fc.Sends()[0].text != "hello" {
+		t.Fatalf("sends = %+v", fc.Sends())
+	}
+	typings := fc.Typings()
+	if len(typings) != 2 || typings[0].action != signal.TypingStarted || typings[1].action != signal.TypingStopped {
+		t.Fatalf("typings = %+v", typings)
+	}
+	if elapsed < 20*time.Millisecond {
+		t.Fatalf("elapsed = %v, expected delayed reply", elapsed)
+	}
+}
+
+func TestReplyHumanizedSendsGroupTyping(t *testing.T) {
+	fc := newFakeClient()
+	b := WrapWithOptions(fc, WrapOptions{AutoTypingIndicators: true})
+
+	var done sync.WaitGroup
+	done.Add(1)
+	groupID := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		return m.Reply(ctx, "hello-group")
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- groupMsgEv(groupID)
+	done.Wait()
+	cancel()
+	_ = wait()
+
+	if len(fc.GroupTypings()) != 2 || fc.GroupTypings()[0].action != signal.TypingStarted || fc.GroupTypings()[1].action != signal.TypingStopped {
+		t.Fatalf("groupTypings = %+v", fc.GroupTypings())
+	}
+	if len(fc.Typings()) != 0 {
+		t.Fatalf("unexpected DM typings = %+v", fc.Typings())
+	}
+	if len(fc.Sends()) != 0 || len(fc.groupSends) != 1 {
+		t.Fatalf("dm sends = %+v group sends = %+v", fc.Sends(), fc.groupSends)
+	}
+}
+
+func TestReplyRetriesOnceOnHTTP429(t *testing.T) {
+	fc := newFakeClient()
+	fc.sendErrs = []error{errors.New("signal.Send: discover devices: web: HTTP 429 Too Many Requests")}
+	b := Wrap(fc)
+
+	var done sync.WaitGroup
+	done.Add(1)
+	var gotErr error
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		gotErr = m.Reply(ctx, "hello")
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	done.Wait()
+	cancel()
+	_ = wait()
+
+	if gotErr != nil {
+		t.Fatalf("reply error = %v", gotErr)
+	}
+	if len(fc.Sends()) != 1 || fc.Sends()[0].text != "hello" {
+		t.Fatalf("sends = %+v", fc.Sends())
+	}
+}
+
+func TestReplyTypingStartErrorDoesNotBlockSend(t *testing.T) {
+	fc := newFakeClient()
+	fc.typingErrs = []error{errors.New("signal.SendTyping: web: HTTP 429 Too Many Requests")}
+	b := WrapWithOptions(fc, WrapOptions{AutoTypingIndicators: true})
+
+	var done sync.WaitGroup
+	done.Add(1)
+	var gotErr error
+	b.OnText("hi").Do(func(ctx context.Context, m *Message, _ []string) error {
+		defer done.Done()
+		gotErr = m.Reply(ctx, "hello")
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	done.Wait()
+	cancel()
+	_ = wait()
+
+	if gotErr != nil {
+		t.Fatalf("reply error = %v", gotErr)
+	}
+	if len(fc.Sends()) != 1 || fc.Sends()[0].text != "hello" {
+		t.Fatalf("sends = %+v", fc.Sends())
+	}
+}
+
 func TestReactionScopeFromFiltersOtherSenders(t *testing.T) {
 	fc := newFakeClient()
 	b := Wrap(fc)
@@ -1002,4 +1148,62 @@ func TestMiddlewareErrPassFallsThrough(t *testing.T) {
 	wg.Wait()
 	cancel()
 	_ = wait()
+}
+
+func TestRateLimitRetryMiddlewareRetriesOnce(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.Use(RateLimitRetryMiddleware(RateLimitRetryOptions{
+		MaxRetries:   1,
+		DefaultDelay: 1 * time.Millisecond,
+	}))
+
+	var (
+		attempts int
+		wg       sync.WaitGroup
+	)
+	wg.Add(1)
+	b.OnText("hi").Do(func(_ context.Context, _ *Message, _ []string) error {
+		attempts++
+		if attempts == 1 {
+			return &web.Error{StatusCode: 429, Status: "429 Too Many Requests", RetryAfter: 1 * time.Millisecond}
+		}
+		wg.Done()
+		return nil
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	wg.Wait()
+	cancel()
+	_ = wait()
+
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+}
+
+func TestRateLimitRetryMiddlewareDoesNotRetryNon429(t *testing.T) {
+	fc := newFakeClient()
+	b := Wrap(fc)
+	b.Use(RateLimitRetryMiddleware(RateLimitRetryOptions{
+		MaxRetries:   1,
+		DefaultDelay: 1 * time.Millisecond,
+	}))
+
+	var attempts int
+	b.OnText("hi").Do(func(_ context.Context, _ *Message, _ []string) error {
+		attempts++
+		return errors.New("boom")
+	})
+
+	cancel, wait := runBot(t, b)
+	fc.events <- msgEv("alice", "hi")
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = wait()
+
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
@@ -42,21 +43,45 @@ func (m *Message) GroupID() string { return m.event.GroupID }
 // Reply sends a text message back to the sender (1:1) or to the group
 // thread (Groups v2 via [signal.Client.SendGroup]).
 func (m *Message) Reply(ctx context.Context, text string) error {
+	cleanup, err := m.prepareHelperReply(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	if m.IsGroup() {
 		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
 		if err != nil {
 			return err
 		}
 		_, err = m.bot.cli.SendGroup(ctx, masterKey, text)
+		if err != nil && isRateLimitedError(err) {
+			if waitErr := waitForRateLimitRetry(ctx); waitErr != nil {
+				return waitErr
+			}
+			_, err = m.bot.cli.SendGroup(ctx, masterKey, text)
+		}
 		return err
 	}
-	_, err := m.bot.cli.Send(ctx, m.event.Sender, text)
+	_, err = m.bot.cli.Send(ctx, m.event.Sender, text)
+	if err != nil && isRateLimitedError(err) {
+		if waitErr := waitForRateLimitRetry(ctx); waitErr != nil {
+			return waitErr
+		}
+		_, err = m.bot.cli.Send(ctx, m.event.Sender, text)
+	}
 	return err
 }
 
 // ReplyAttachment sends a file attachment back to the sender (1:1) or group
 // thread (Groups v2).
 func (m *Message) ReplyAttachment(ctx context.Context, r io.Reader, contentType string) error {
+	cleanup, err := m.prepareHelperReply(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	opts := signal.SendAttachmentOptions{ContentType: contentType}
 	if m.IsGroup() {
 		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
@@ -66,7 +91,7 @@ func (m *Message) ReplyAttachment(ctx context.Context, r io.Reader, contentType 
 		_, err = m.bot.cli.SendGroupAttachment(ctx, masterKey, r, opts)
 		return err
 	}
-	_, err := m.bot.cli.SendAttachment(ctx, m.event.Sender, r, opts)
+	_, err = m.bot.cli.SendAttachment(ctx, m.event.Sender, r, opts)
 	return err
 }
 
@@ -151,6 +176,68 @@ func (m *Message) ConvoKey() ConvoKey {
 // b.Convo().For(m.ConvoKey()).
 func (m *Message) Convo() *Convo {
 	return m.bot.convo.For(m.ConvoKey())
+}
+
+func (m *Message) prepareHelperReply(ctx context.Context) (func(), error) {
+	if m.bot.autoTypingIndicators {
+		// Typing is UX sugar only; do not block the real reply path.
+		_ = m.sendTypingForThread(ctx, signal.TypingStarted)
+	}
+
+	cleanup := func() {
+		if !m.bot.autoTypingIndicators {
+			return
+		}
+		// Best effort: stop typing even if the original context was canceled.
+		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = m.sendTypingForThread(stopCtx, signal.TypingStopped)
+	}
+
+	if m.bot.sendDelay > 0 {
+		timer := time.NewTimer(m.bot.sendDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			cleanup()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	return cleanup, nil
+}
+
+func waitForRateLimitRetry(ctx context.Context) error {
+	t := time.NewTimer(1500 * time.Millisecond)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+func isRateLimitedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "http 429") || strings.Contains(msg, "too many requests")
+}
+
+func (m *Message) sendTypingForThread(ctx context.Context, action signal.TypingAction) error {
+	if m.IsGroup() {
+		masterKey, err := decodeGroupMasterKey(m.event.GroupID)
+		if err != nil {
+			return err
+		}
+		_, err = m.bot.cli.SendGroupTyping(ctx, masterKey, action)
+		return err
+	}
+	_, err := m.bot.cli.SendTyping(ctx, m.event.Sender, action)
+	return err
 }
 
 func decodeGroupMasterKey(groupIDHex string) ([]byte, error) {

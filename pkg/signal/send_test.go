@@ -701,6 +701,56 @@ func TestSendPropagatesMismatchedDevicesErrorAfterRetry(t *testing.T) {
 	}
 }
 
+func TestSendDeviceDiscoveryRateLimitCooldown(t *testing.T) {
+	bob := newRecipient(t)
+
+	var (
+		mu      sync.Mutex
+		getHits int
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/keys/"+bob.aci+"/*":
+			mu.Lock()
+			getHits++
+			mu.Unlock()
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte("rate limited"))
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	alice := newSenderClient(t, srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err1 := alice.Send(ctx, bob.aci, "first")
+	if err1 == nil {
+		t.Fatal("expected first send to fail with rate limit")
+	}
+	_, err2 := alice.Send(ctx, bob.aci, "second")
+	if err2 == nil {
+		t.Fatal("expected second send to fail during local cooldown")
+	}
+
+	var werr *web.Error
+	if !errors.As(err2, &werr) || werr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("second err = %v, want *web.Error 429", err2)
+	}
+	if werr.RetryAfter <= 0 {
+		t.Fatalf("second err RetryAfter = %v, want > 0", werr.RetryAfter)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if getHits != 1 {
+		t.Fatalf("GET /v2/keys hits = %d, want 1 due to local cooldown", getHits)
+	}
+}
+
 // bobDecryptPreKey runs libsignal's prekey-message decrypt path with
 // Bob's stores + identity. The resulting plaintext is the
 // padded-Content bytes.
