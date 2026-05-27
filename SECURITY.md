@@ -43,17 +43,16 @@ Whichever channel you use, include:
 
 ## Supported versions
 
-`signal-go` is pre-alpha. There are no supported versions yet; all
-reports go against the `main` branch HEAD until we cut `v0.1.0`. After
-`v0.1.0` lands we will publish a support matrix here listing the active
-minor branches and their EOL dates.
+`signal-go` is in the early `v0.x` lifecycle. Security reports should
+target the latest `v0.1.x` release when possible, or `main` if the issue
+is not yet released.
 
 ## Scope
 
 In scope: anything in this repository — our Go code, our cgo boundary,
 our wire-protocol implementation, the build pipeline, the on-disk
 storage format. The internal-review checklist that defines "in scope"
-operationally is [ROADMAP § Phase 8](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010).
+operationally is [ROADMAP § Phase 8](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-targeted-for-v01x-not-a-hard-gate-for-v010).
 
 Out of scope (please report directly to upstream):
 
