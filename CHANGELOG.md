@@ -10,6 +10,10 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] - 2026-05-27
+
 ### Added
 
 - `internal/profile` and `echo-bot run -memprofile` / `-cpuprofile` for long-running
@@ -102,6 +106,7 @@ support, and TLS trust fixes for Signal's private CA.
   ([`SECURITY.md`](./SECURITY.md)).
 - ROADMAP: Phase B/C CI and release pipeline items marked done.
 
-[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0-rc2...HEAD
+[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0
 [0.1.0-rc2]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc2
 [0.1.0-rc1]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc1
