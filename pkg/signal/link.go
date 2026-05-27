@@ -178,11 +178,11 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 			Password: password,
 		}
 		var err error
-		aciIdent, err = uploadOneTimePreKeys(ctx, webc, creds, web.IdentityACI, aciIdent, count)
+		aciIdent, err = uploadOneTimePreKeys(ctx, webc, creds, web.IdentityACI, aciIdent, count, opts.SignalStores)
 		if err != nil {
 			return nil, fmt.Errorf("signal.Link: upload ACI prekeys: %w", err)
 		}
-		pniIdent, err = uploadOneTimePreKeys(ctx, webc, creds, web.IdentityPNI, pniIdent, count)
+		pniIdent, err = uploadOneTimePreKeys(ctx, webc, creds, web.IdentityPNI, pniIdent, count, nil)
 		if err != nil {
 			return nil, fmt.Errorf("signal.Link: upload PNI prekeys: %w", err)
 		}
@@ -203,6 +203,9 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	}
 	if err := opts.Store.SaveAccount(acct); err != nil {
 		return nil, fmt.Errorf("signal.Link: persist account: %w", err)
+	}
+	if err := persistSignalStoreKeys(opts.SignalStores, aciIdent, pniIdent); err != nil {
+		return nil, err
 	}
 
 	linked := &LinkedAccount{
@@ -266,14 +269,14 @@ func (o LinkOptions) shouldImportTransferArchive() bool {
 	return o.SignalStores != nil || o.BackupImportStore != nil || o.OnChatItem != nil
 }
 
-func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int) (account.Identity, error) {
+func uploadOneTimePreKeys(ctx context.Context, webc *web.Client, creds web.Credentials, kind web.IdentityType, ident account.Identity, count int, stores store.SignalStores) (account.Identity, error) {
 	upload := prekeymaint.UploadIdentity{
 		PublicKey:         ident.PublicKey,
 		PrivateKey:        ident.PrivateKey,
 		NextPreKeyID:      ident.NextPreKeyID,
 		NextKyberPreKeyID: ident.NextKyberPreKeyID,
 	}
-	upload, err := prekeymaint.UploadOneTimeBatch(ctx, webc, creds, kind, upload, count, nil)
+	upload, err := prekeymaint.UploadOneTimeBatch(ctx, webc, creds, kind, upload, count, stores)
 	if err != nil {
 		return ident, err
 	}
@@ -381,4 +384,38 @@ func generatePassword() (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(b[:]), nil
+}
+
+// persistSignalStoreKeys writes the signed prekeys and last-resort Kyber
+// prekeys from both identity namespaces into stores so inbound decryption
+// can look them up by ID. No-op when stores is nil.
+func persistSignalStoreKeys(stores store.SignalStores, aciIdent, pniIdent account.Identity) error {
+	if stores == nil {
+		return nil
+	}
+	// Only persist ACI prekeys: the receive path (EnvelopeDecryptor) uses the
+	// ACI SignalStores instance. PNI receive is handled separately and shares
+	// no prekey IDs with the ACI namespace.
+	ts := uint64(0) // timestamp is informational; 0 is accepted by libsignal
+	pub, err := libsignal.DeserializePublicKey(aciIdent.SignedPreKey.PublicKey)
+	if err != nil {
+		return fmt.Errorf("signal.Link: persist signed prekey pub: %w", err)
+	}
+	priv, err := libsignal.DeserializePrivateKey(aciIdent.SignedPreKey.PrivateKey)
+	if err != nil {
+		return fmt.Errorf("signal.Link: persist signed prekey priv: %w", err)
+	}
+	spkBlob, err := libsignal.NewSignedPreKeyRecordBlob(aciIdent.SignedPreKey.ID, ts, pub, priv, aciIdent.SignedPreKey.Signature)
+	if err != nil {
+		return fmt.Errorf("signal.Link: serialize signed prekey: %w", err)
+	}
+	if err := stores.StoreSignedPreKey(aciIdent.SignedPreKey.ID, spkBlob); err != nil {
+		return fmt.Errorf("signal.Link: store signed prekey: %w", err)
+	}
+	if len(aciIdent.LastResortKyberPreKey.RecordBlob) > 0 {
+		if err := stores.StoreKyberPreKey(aciIdent.LastResortKyberPreKey.ID, aciIdent.LastResortKyberPreKey.RecordBlob); err != nil {
+			return fmt.Errorf("signal.Link: store kyber prekey: %w", err)
+		}
+	}
+	return nil
 }

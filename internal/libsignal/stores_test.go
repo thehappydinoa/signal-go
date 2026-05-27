@@ -41,12 +41,13 @@ func newInlineSignalStores() *inlineSignalStores {
 	}
 }
 
-func (s *inlineSignalStores) SetLocalIdentity(pub, priv []byte, regID uint32) {
+func (s *inlineSignalStores) SetLocalIdentity(pub, priv []byte, regID uint32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.identityPub = append([]byte(nil), pub...)
 	s.identityPriv = append([]byte(nil), priv...)
 	s.regID = regID
+	return nil
 }
 
 func (s *inlineSignalStores) LocalIdentityKey() ([]byte, []byte, error) {
@@ -264,7 +265,7 @@ func TestIdentityImpls(t *testing.T) {
 	privBytes, _ := kp.Private.Serialize()
 
 	s := newInlineSignalStores()
-	s.SetLocalIdentity(pubBytes, privBytes, 4242)
+	_ = s.SetLocalIdentity(pubBytes, privBytes, 4242)
 
 	gotRegID, err := getLocalRegistrationIDImpl(s)
 	if err != nil {

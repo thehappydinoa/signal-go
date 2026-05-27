@@ -20,7 +20,9 @@ func TestSignalStoresLocalIdentity(t *testing.T) {
 	}
 	pub := bytes.Repeat([]byte{0x05}, 33)
 	priv := bytes.Repeat([]byte{0xAB}, 32)
-	s.SetLocalIdentity(pub, priv, 1234)
+	if err := s.SetLocalIdentity(pub, priv, 1234); err != nil {
+		t.Fatalf("SetLocalIdentity: %v", err)
+	}
 	gotPub, gotPriv, err := s.LocalIdentityKey()
 	if err != nil {
 		t.Fatalf("LocalIdentityKey: %v", err)

@@ -116,7 +116,7 @@ func newRecipient(t *testing.T) *recipientFixture {
 	ss := memstore.NewSignalStores()
 	idPubBytes, _ := ident.Public.Serialize()
 	idPrivBytes, _ := ident.Private.Serialize()
-	ss.SetLocalIdentity(idPubBytes, idPrivBytes, regID)
+	_ = ss.SetLocalIdentity(idPubBytes, idPrivBytes, regID)
 
 	// Persist the signed + kyber prekey blobs in Bob's stores so
 	// libsignal can find them by id when Alice's PreKeySignalMessage
@@ -209,7 +209,7 @@ func newRecipientWithIdentity(t *testing.T, aci string, devID, regID uint32, ide
 	ss := memstore.NewSignalStores()
 	idPubBytes, _ := ident.Public.Serialize()
 	idPrivBytes, _ := ident.Private.Serialize()
-	ss.SetLocalIdentity(idPubBytes, idPrivBytes, regID)
+	_ = ss.SetLocalIdentity(idPubBytes, idPrivBytes, regID)
 
 	const epochTS = uint64(0)
 	spkBlob, err := libsignal.NewSignedPreKeyRecordBlob(1, epochTS, spkPub, spkPriv, spkSig)
@@ -310,7 +310,7 @@ func newSenderClient(t *testing.T, baseURL string) *Client {
 	ss := memstore.NewSignalStores()
 	idPub, _ := ident.Public.Serialize()
 	idPriv, _ := ident.Private.Serialize()
-	ss.SetLocalIdentity(idPub, idPriv, 12345)
+	_ = ss.SetLocalIdentity(idPub, idPriv, 12345)
 	acct := &account.Account{
 		ACI: aci, PNI: "pni-" + aci, Number: "+15550000001",
 		DeviceID: devID, Password: "alice-password",

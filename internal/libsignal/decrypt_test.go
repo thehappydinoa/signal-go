@@ -31,8 +31,8 @@ func TestDecryptRoundTripPreKeyThenWhisper(t *testing.T) {
 	bobPriv, _ := bobID.Private.Serialize()
 
 	const aliceReg, bobReg uint32 = 4242, 4343
-	aliceStore.SetLocalIdentity(alicePub, alicePriv, aliceReg)
-	bobStore.SetLocalIdentity(bobPub, bobPriv, bobReg)
+	_ = aliceStore.SetLocalIdentity(alicePub, alicePriv, aliceReg)
+	_ = bobStore.SetLocalIdentity(bobPub, bobPriv, bobReg)
 
 	bobSPKPriv, err := GeneratePrivateKey()
 	if err != nil {

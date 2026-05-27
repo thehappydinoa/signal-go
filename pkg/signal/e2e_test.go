@@ -15,6 +15,7 @@ import (
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
+	"github.com/thehappydinoa/signal-go/internal/qrterminal"
 	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
 	"github.com/thehappydinoa/signal-go/pkg/signal"
 )
@@ -114,6 +115,7 @@ func TestE2E_Recv(t *testing.T) {
 			}
 			msg, ok := ev.(*signal.MessageEvent)
 			if !ok {
+				t.Logf("non-message event: %T %+v", ev, ev)
 				continue
 			}
 			if msg.Body == "" {
@@ -211,8 +213,10 @@ func TestE2E_Link(t *testing.T) {
 		SignalStores:      db.SignalStores(),
 		BackupImportStore: db,
 		OnURL: func(linkURL string) error {
-			t.Log("scan this URL from Signal → Settings → Linked devices → +")
-			t.Log(linkURL)
+			fmt.Fprintln(os.Stderr, "Signal → Settings → Linked devices → + (scan QR or use URL below)")
+			if err := qrterminal.Write(linkURL, qrterminal.Options{Writer: os.Stderr}); err != nil {
+				fmt.Fprintln(os.Stderr, linkURL)
+			}
 			return nil
 		},
 	})

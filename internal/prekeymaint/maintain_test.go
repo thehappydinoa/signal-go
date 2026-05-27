@@ -141,6 +141,6 @@ func testMaintainFixtures(t *testing.T) (*account.Account, *memstore.SignalStore
 		PNIIdentity: ident,
 	}
 	stores := memstore.NewSignalStores()
-	stores.SetLocalIdentity(pub, priv, regID)
+	_ = stores.SetLocalIdentity(pub, priv, regID)
 	return acct, stores
 }

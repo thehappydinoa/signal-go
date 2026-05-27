@@ -14,9 +14,9 @@ import (
 )
 
 // LocalIdentitySetter is implemented by stores that accept a one-time
-// injection of the linked device's identity keys (e.g. [memstore.SignalStores]).
+// injection of the linked device's identity keys.
 type LocalIdentitySetter interface {
-	SetLocalIdentity(pub, priv []byte, regID uint32)
+	SetLocalIdentity(pub, priv []byte, regID uint32) error
 }
 
 // EnvelopeDecryptor decrypts inbound [sspb.Envelope] payloads via libsignal.
@@ -38,7 +38,9 @@ func NewEnvelopeDecryptor(acct *account.Account, stores store.SignalStores) (*En
 	if stores == nil {
 		return nil, errors.New("cipher.NewEnvelopeDecryptor: nil stores")
 	}
-	bootstrapStores(acct, stores)
+	if err := bootstrapStores(acct, stores); err != nil {
+		return nil, err
+	}
 	roots, err := libsignal.ProductionTrustRoots()
 	if err != nil {
 		return nil, fmt.Errorf("cipher.NewEnvelopeDecryptor: %w", err)
@@ -60,19 +62,22 @@ func (d *EnvelopeDecryptor) SetPreKeyMaintainer(m *prekeymaint.Maintainer) {
 	d.preKeyMaint = m
 }
 
-func bootstrapStores(acct *account.Account, s store.SignalStores) {
+func bootstrapStores(acct *account.Account, s store.SignalStores) error {
 	setter, ok := s.(LocalIdentitySetter)
 	if !ok {
-		return
+		return nil
 	}
 	if _, _, err := s.LocalIdentityKey(); err == nil {
-		return
+		return nil
 	}
-	setter.SetLocalIdentity(
+	if err := setter.SetLocalIdentity(
 		acct.ACIIdentity.PublicKey,
 		acct.ACIIdentity.PrivateKey,
 		acct.ACIIdentity.RegistrationID,
-	)
+	); err != nil {
+		return fmt.Errorf("cipher: bootstrap local identity: %w", err)
+	}
+	return nil
 }
 
 // Decrypt implements [signal.Decryptor].

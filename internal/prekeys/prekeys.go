@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 )
@@ -32,6 +33,10 @@ type LastResortKyberPreKey struct {
 	PublicKey []byte
 	SecretKey []byte
 	Signature []byte
+	// RecordBlob is the pre-serialized libsignal KyberPreKeyRecord, computed
+	// at generation time while the KyberKeyPair is in scope. Stored so the
+	// record can be written to SignalStores without reconstructing the pair.
+	RecordBlob []byte `json:"recordBlob,omitempty"`
 }
 
 // PreKey is a single-use Curve25519 prekey, unsigned.
@@ -114,11 +119,16 @@ func GenerateLastResortKyberPreKey(identityPriv *libsignal.PrivateKey, id uint32
 	if err != nil {
 		return nil, fmt.Errorf("prekeys: sign kyber: %w", err)
 	}
+	blob, err := libsignal.NewKyberPreKeyRecordBlob(id, uint64(time.Now().UnixMilli()), kp, sig)
+	if err != nil {
+		return nil, fmt.Errorf("prekeys: serialize kyber: %w", err)
+	}
 	return &LastResortKyberPreKey{
-		ID:        id,
-		PublicKey: pubBytes,
-		SecretKey: secBytes,
-		Signature: sig,
+		ID:         id,
+		PublicKey:  pubBytes,
+		SecretKey:  secBytes,
+		Signature:  sig,
+		RecordBlob: blob,
 	}, nil
 }
 

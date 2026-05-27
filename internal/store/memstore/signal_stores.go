@@ -50,12 +50,13 @@ func NewSignalStores() *SignalStores {
 
 // SetLocalIdentity initialises the local identity key + registration ID.
 // Call this once before exercising any callback that needs them.
-func (s *SignalStores) SetLocalIdentity(pub, priv []byte, regID uint32) {
+func (s *SignalStores) SetLocalIdentity(pub, priv []byte, regID uint32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.identityPub = append([]byte(nil), pub...)
 	s.identityPriv = append([]byte(nil), priv...)
 	s.regID = regID
+	return nil
 }
 
 // LocalIdentityKey implements [store.IdentityStore].
