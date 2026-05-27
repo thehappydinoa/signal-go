@@ -18,6 +18,14 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/tlsroots"
 )
 
+// Default read/keepalive tuning for long-lived Signal websockets (chat,
+// provisioning). The chat service may be silent for long stretches; a
+// short read deadline causes spurious disconnects.
+const (
+	defaultReadIdleTimeout   = 10 * time.Minute
+	defaultKeepaliveInterval = 30 * time.Second
+)
+
 // DialOptions configures [Dial].
 type DialOptions struct {
 	// HTTPClient is used for the upgrade handshake. nil uses http.DefaultClient.
@@ -31,6 +39,13 @@ type DialOptions struct {
 	// Handler handles inbound REQUEST messages pushed by the server.
 	// May be nil if the endpoint never sends server-initiated requests.
 	Handler RequestHandler
+
+	// ReadIdleTimeout is the maximum time to wait for the next inbound data
+	// frame before the read loop exits. Zero uses [defaultReadIdleTimeout].
+	ReadIdleTimeout time.Duration
+	// KeepaliveInterval is how often to send WebSocket pings while connected.
+	// Zero uses [defaultKeepaliveInterval]. Negative disables keepalive pings.
+	KeepaliveInterval time.Duration
 }
 
 // MinTLSVersion is the minimum TLS version this package ever negotiates.
@@ -70,7 +85,7 @@ func Dial(ctx context.Context, rawURL string, opts *DialOptions) (*Client, error
 	// Signal sends ~1 MiB messages at the high end (group keys, syncs);
 	// raise the per-message limit accordingly.
 	conn.SetReadLimit(8 << 20)
-	return newClient(conn, opts.Handler), nil
+	return newClient(conn, opts), nil
 }
 
 // RequestHandler handles inbound [wspb.WebSocketRequestMessage]s pushed by
@@ -94,6 +109,9 @@ type Client struct {
 	conn    *websocket.Conn
 	handler RequestHandler
 
+	readIdle  time.Duration
+	keepalive time.Duration
+
 	nextID atomic.Uint64
 
 	mu      sync.Mutex
@@ -104,14 +122,30 @@ type Client struct {
 	done    chan struct{}
 }
 
-func newClient(conn *websocket.Conn, handler RequestHandler) *Client {
+func newClient(conn *websocket.Conn, opts *DialOptions) *Client {
+	if opts == nil {
+		opts = &DialOptions{}
+	}
+	readIdle := opts.ReadIdleTimeout
+	if readIdle == 0 {
+		readIdle = defaultReadIdleTimeout
+	}
+	keepalive := opts.KeepaliveInterval
+	if keepalive == 0 {
+		keepalive = defaultKeepaliveInterval
+	}
 	c := &Client{
-		conn:    conn,
-		handler: handler,
-		pending: make(map[uint64]chan *wspb.WebSocketResponseMessage),
-		done:    make(chan struct{}),
+		conn:      conn,
+		handler:   opts.Handler,
+		readIdle:  readIdle,
+		keepalive: keepalive,
+		pending:   make(map[uint64]chan *wspb.WebSocketResponseMessage),
+		done:      make(chan struct{}),
 	}
 	go c.readLoop()
+	if keepalive > 0 {
+		go c.keepaliveLoop()
+	}
 	return c
 }
 
@@ -211,13 +245,29 @@ func (c *Client) writeMessage(ctx context.Context, msg *wspb.WebSocketMessage) e
 	return nil
 }
 
+func (c *Client) keepaliveLoop() {
+	ticker := time.NewTicker(c.keepalive)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			err := c.conn.Ping(ctx)
+			cancel()
+			if err != nil {
+				_ = c.conn.Close(websocket.StatusGoingAway, "keepalive ping failed")
+				return
+			}
+		}
+	}
+}
+
 func (c *Client) readLoop() {
 	defer close(c.done)
 	for {
-		// Use a generous per-read deadline so reads don't hang forever if the
-		// peer goes silent; coder/websocket sends keepalive pings on its own
-		// once we call Conn.Ping or set it up via cancellation.
-		readCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		readCtx, cancel := context.WithTimeout(context.Background(), c.readIdle)
 		_, data, err := c.conn.Read(readCtx)
 		cancel()
 		if err != nil {

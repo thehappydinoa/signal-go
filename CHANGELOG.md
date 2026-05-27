@@ -10,19 +10,6 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
-### Changed
-
-- **Breaking:** removed `internal/store/fsstore`. All on-disk persistence
-  uses `internal/store/sqlstore` (`signal.db` + optional `kdf.json`).
-  Account encryption lives in `internal/store/seal` (same ADR 0012 wire format).
-- `signal-go link` opens sqlstore and passes `SignalStores` into [Link].
-- `signal.Client` ignores `SERVER_DELIVERY_RECEIPT` envelopes (no decrypt noise).
-- `FetchProfile` tolerates undecryptable optional name/about fields (logs at debug).
-
-### Removed
-
-- `internal/store/fsstore` and its JSON sidecar files (`account.enc`, group JSON).
-
 ### Added
 
 - `signal.Client.SendEdit` for 1:1 outbound edits (`Content.editMessage`).
@@ -41,6 +28,9 @@ is *what* changed and *when*.
 
 ### Fixed
 
+- Idle chat/provisioning websockets no longer disconnect every ~60s: the read
+  loop uses a 10-minute idle timeout and sends keepalive pings every 30s
+  (`internal/ws`).
 - Device linking now authenticates `PUT /v1/devices/link` with the account's
   e164 number as the HTTP Basic username (the provisioning code travels only in
   `verificationCode`), matching signal-cli / libsignal-service-java. Previously
