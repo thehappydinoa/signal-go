@@ -29,7 +29,20 @@ go vet ./... || { echo "pre-push: go vet failed" >&2; exit 1; }
 echo "pre-push: golangci-lint..."
 golangci-lint run ./... || { echo "pre-push: lint failed" >&2; exit 1; }
 
-echo "pre-push: go test -race..."
-go test -race -count=1 ./... || { echo "pre-push: tests failed" >&2; exit 1; }
+goos="$(go env GOOS)"
+race_flag="-race"
+if [[ "$goos" == "windows" ]]; then
+  # ThreadSanitizer runtime cannot reliably allocate shadow memory on
+  # windows/amd64 in this setup (error code 87), so run non-race tests.
+  race_flag=""
+fi
+
+if [[ -n "$race_flag" ]]; then
+  echo "pre-push: go test $race_flag..."
+  go test "$race_flag" -count=1 ./... || { echo "pre-push: tests failed" >&2; exit 1; }
+else
+  echo "pre-push: go test (race disabled on $goos)..."
+  go test -count=1 ./... || { echo "pre-push: tests failed" >&2; exit 1; }
+fi
 
 echo "pre-push: all checks passed."
