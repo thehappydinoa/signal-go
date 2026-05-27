@@ -144,11 +144,8 @@ func Decrypt(nameCipher string, identity *libsignal.IdentityKeyPair) (string, er
 }
 
 func computeSyntheticIV(masterSecret, plaintext []byte) ([]byte, error) {
-	key1, err := hmacSHA256(masterSecret, []byte("auth"))
-	if err != nil {
-		return nil, err
-	}
-	full, err := hmacSHA256(key1, plaintext)
+	// Signal Android DeviceNameCipher: HMAC(key=masterSecret, msg="auth"||plaintext)
+	full, err := hmacSHA256concat(masterSecret, []byte("auth"), plaintext)
 	if err != nil {
 		return nil, err
 	}
@@ -159,17 +156,18 @@ func computeSyntheticIV(masterSecret, plaintext []byte) ([]byte, error) {
 }
 
 func computeCipherKey(masterSecret, syntheticIV []byte) ([]byte, error) {
-	key1, err := hmacSHA256(masterSecret, []byte("cipher"))
-	if err != nil {
-		return nil, err
-	}
-	return hmacSHA256(key1, syntheticIV)
+	// Signal Android DeviceNameCipher: HMAC(key=masterSecret, msg="cipher"||syntheticIV)
+	return hmacSHA256concat(masterSecret, []byte("cipher"), syntheticIV)
 }
 
-func hmacSHA256(key, data []byte) ([]byte, error) {
+// hmacSHA256concat computes HMAC-SHA256(key, parts...) where all parts are
+// written sequentially into the MAC (equivalent to HMAC(key, concat(parts))).
+func hmacSHA256concat(key []byte, parts ...[]byte) ([]byte, error) {
 	m := hmac.New(sha256.New, key)
-	if _, err := m.Write(data); err != nil {
-		return nil, fmt.Errorf("devicename: hmac: %w", err)
+	for _, p := range parts {
+		if _, err := m.Write(p); err != nil {
+			return nil, fmt.Errorf("devicename: hmac: %w", err)
+		}
 	}
 	return m.Sum(nil), nil
 }
@@ -189,18 +187,14 @@ func aesCTR(key, in []byte) ([]byte, error) {
 }
 
 func verifySyntheticIV(masterSecret, plaintext, syntheticIV []byte) error {
-	part1, err := hmacSHA256(masterSecret, []byte("auth"))
+	full, err := hmacSHA256concat(masterSecret, []byte("auth"), plaintext)
 	if err != nil {
 		return err
 	}
-	part2, err := hmacSHA256(part1, plaintext)
-	if err != nil {
-		return err
-	}
-	if len(part2) < syntheticIVLen {
+	if len(full) < syntheticIVLen {
 		return errors.New("devicename: verification IV too short")
 	}
-	our := part2[:syntheticIVLen]
+	our := full[:syntheticIVLen]
 	if subtle.ConstantTimeCompare(our, syntheticIV) != 1 {
 		return errors.New("devicename: synthetic IV mismatch")
 	}

@@ -305,10 +305,15 @@ func TestE2E_Link(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
+	deviceName := os.Getenv("SIGNAL_E2E_DEVICE_NAME")
+	if deviceName == "" {
+		deviceName = "signal-go e2e"
+	}
 	linked, err := signal.Link(ctx, signal.LinkOptions{
 		Store:             db,
 		SignalStores:      db.SignalStores(),
 		BackupImportStore: db,
+		DeviceName:        deviceName,
 		OnURL: func(linkURL string) error {
 			fmt.Fprintln(os.Stderr, "Signal → Settings → Linked devices → + (scan QR or use URL below)")
 			if err := qrterminal.Write(linkURL, qrterminal.Options{Writer: os.Stderr}); err != nil {
