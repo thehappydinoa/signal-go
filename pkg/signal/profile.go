@@ -90,34 +90,41 @@ func (c *Client) FetchProfile(ctx context.Context, recipientACI string, profileK
 	}
 
 	if nameBytes, err := web.DecodeBase64Field(wire.Name); err != nil {
-		return nil, fmt.Errorf("signal.FetchProfile: name: %w", err)
+		c.log.Debug("profile name field decode failed", "aci", recipientACI, "err", err)
 	} else if len(nameBytes) > 0 {
 		given, family, err := profile.DecryptName(cipher, nameBytes)
 		if err != nil {
-			return nil, fmt.Errorf("signal.FetchProfile: decrypt name: %w", err)
+			c.log.Debug("profile name decrypt failed", "aci", recipientACI, "err", err)
+		} else {
+			out.GivenName, out.FamilyName = given, family
 		}
-		out.GivenName, out.FamilyName = given, family
 	}
 
 	if aboutBytes, err := web.DecodeBase64Field(wire.About); err != nil {
-		return nil, fmt.Errorf("signal.FetchProfile: about: %w", err)
+		c.log.Debug("profile about field decode failed", "aci", recipientACI, "err", err)
 	} else if len(aboutBytes) > 0 {
 		out.About, err = cipher.DecryptString(aboutBytes)
 		if err != nil {
-			return nil, fmt.Errorf("signal.FetchProfile: decrypt about: %w", err)
+			c.log.Debug("profile about decrypt failed", "aci", recipientACI, "err", err)
 		}
 	}
 
 	if emojiBytes, err := web.DecodeBase64Field(wire.AboutEmoji); err != nil {
-		return nil, fmt.Errorf("signal.FetchProfile: aboutEmoji: %w", err)
+		c.log.Debug("profile aboutEmoji field decode failed", "aci", recipientACI, "err", err)
 	} else if len(emojiBytes) > 0 {
 		out.AboutEmoji, err = cipher.DecryptString(emojiBytes)
 		if err != nil {
-			return nil, fmt.Errorf("signal.FetchProfile: decrypt aboutEmoji: %w", err)
+			c.log.Debug("profile aboutEmoji decrypt failed", "aci", recipientACI, "err", err)
 		}
 	}
 
 	c.storeRecipientProfileKey(recipientACI, profileKey)
+	c.mu.Lock()
+	if c.allowSealedSender == nil {
+		c.allowSealedSender = make(map[string]bool)
+	}
+	c.allowSealedSender[recipientACI] = wire.UnrestrictedUnidentifiedAccess
+	c.mu.Unlock()
 	return out, nil
 }
 
@@ -129,7 +136,6 @@ func (c *Client) SetRecipientProfileKey(aci string, profileKey []byte) {
 		c.mu.Lock()
 		delete(c.knownProfileKeys, aci)
 		delete(c.knownUAKs, aci)
-		delete(c.allowSealedSender, aci)
 		c.mu.Unlock()
 		return
 	}

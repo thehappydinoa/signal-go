@@ -116,7 +116,7 @@ flowchart TB
     bot[pkg/bot<br/><i>OnText / OnRegex / OnCommand</i>]:::pub
     proto["Protocol layer<br/>(provisioning · web · ws · prekeys · chat)"]:::proto
     crypto[internal/libsignal<br/><i>cgo + libsignal_ffi.a</i>]:::crypto
-    store["Persistence<br/>(account · store · fsstore · sqlstore)"]:::store
+    store["Persistence<br/>(account · store · sqlstore · seal)"]:::store
 
     bot --> pub
     pub --> proto

@@ -1,4 +1,4 @@
-package fsstore
+package seal
 
 import (
 	"os"
@@ -7,9 +7,7 @@ import (
 )
 
 // AssertFileMode0600 checks that path is owner-read/write only. Skipped on
-// Windows: NTFS does not reflect Unix permission bits from os.Chmod, so
-// production still calls Chmod(0o600) but Mode().Perm() stays 0666 there.
-// Linux and macOS CI continue to enforce the contract from ADR 0012.
+// Windows where NTFS does not reflect Unix permission bits from os.Chmod.
 func AssertFileMode0600(t *testing.T, path string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

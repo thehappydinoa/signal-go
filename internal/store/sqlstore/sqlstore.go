@@ -2,7 +2,7 @@
 //
 // It implements [account.Store], [store.SignalStores], and the optional
 // group distribution / endorsement stores in one file. Account material
-// uses the same AES-256-GCM + Argon2id wire format as [fsstore] (ADR 0012).
+// uses [seal] for AES-256-GCM + Argon2id at rest (ADR 0012).
 //
 // Open via [Open], [OpenWithKey], or [OpenWithPassphrase]. The database
 // file is created with mode 0600 inside a 0700 directory.

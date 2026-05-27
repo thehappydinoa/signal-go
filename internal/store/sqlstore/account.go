@@ -6,14 +6,14 @@ import (
 	"fmt"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
-	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
+	"github.com/thehappydinoa/signal-go/internal/store/seal"
 )
 
 // ErrWrongPassphrase is returned when account decryption fails.
-var ErrWrongPassphrase = fsstore.ErrWrongPassphrase
+var ErrWrongPassphrase = seal.ErrWrongPassphrase
 
 // OpenWithKey opens an encrypted SQLite store using a raw 32-byte key.
-func OpenWithKey(dir string, key [fsstore.KeyLen]byte) (*DB, error) {
+func OpenWithKey(dir string, key [seal.KeyLen]byte) (*DB, error) {
 	s, err := Open(dir)
 	if err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func OpenWithKey(dir string, key [fsstore.KeyLen]byte) (*DB, error) {
 
 // OpenWithPassphrase opens an encrypted SQLite store whose key is derived
 // from passphrase via Argon2id. KDF metadata is stored in dir/kdf.json
-// (shared wire format with [fsstore]).
+// (shared wire format with [seal] / ADR 0012).
 func OpenWithPassphrase(dir, passphrase string) (*DB, error) {
 	if passphrase == "" {
 		return nil, errors.New("sqlstore: passphrase is required")
@@ -49,7 +49,7 @@ func (s *DB) LoadAccount() (*account.Account, error) {
 	}
 	if s.encrypted {
 		var err error
-		data, err = fsstore.Open(s.key, data)
+		data, err = seal.Open(s.key, data)
 		if err != nil {
 			return nil, err
 		}
@@ -71,7 +71,7 @@ func (s *DB) SaveAccount(acct *account.Account) error {
 		return fmt.Errorf("sqlstore: marshal account: %w", err)
 	}
 	if s.encrypted {
-		data, err = fsstore.Seal(s.key, data)
+		data, err = seal.Seal(s.key, data)
 		if err != nil {
 			return err
 		}
