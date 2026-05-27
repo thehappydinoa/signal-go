@@ -153,3 +153,12 @@ func TestNewWithOptionsPanicsOnProdInsecure(t *testing.T) {
 	}()
 	_ = NewWithOptions(DefaultBaseURL, "test", Options{InsecureSkipVerify: true})
 }
+
+func TestNewWithOptionsPanicsOnProdEquivalentInsecure(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when InsecureSkipVerify is set against equivalent prod base URL")
+		}
+	}()
+	_ = NewWithOptions("https://chat.signal.org/", "test", Options{InsecureSkipVerify: true})
+}

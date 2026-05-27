@@ -165,7 +165,8 @@ Items currently satisfied:
       rename, encrypted-by-default, no secret-bearing field is ever
       passed to `slog`.
 - [x] `internal/web` TLS posture — explicit `MinVersion: TLS 1.2`,
-      opt-in CA pinning, `InsecureSkipVerify` panics on prod base URL.
+      opt-in CA pinning, `InsecureSkipVerify` panics on any prod
+      `chat.signal.org` base URL.
 - [x] Sealed-sender certificate validation — fixed production trust root
       and per-message validate via libsignal.
 - [x] zkgroup credential cache eviction hook — `InvalidateGroupAuthCache`.
