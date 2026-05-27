@@ -16,8 +16,6 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/provisioning"
 	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
-	"github.com/thehappydinoa/signal-go/internal/ws"
-	"github.com/thehappydinoa/signal-go/internal/debugsession"
 )
 
 // LinkOptions configures [Link].
@@ -73,9 +71,6 @@ type LinkOptions struct {
 
 	// ProvisioningURL overrides the websocket endpoint. Default: production.
 	ProvisioningURL string
-	// ServiceWebSocketURL overrides the unauthenticated service websocket
-	// used for PUT /v1/devices/link. Default: derived from [APIBaseURL].
-	ServiceWebSocketURL string
 	// APIBaseURL overrides chat.signal.org for the REST call.
 	APIBaseURL string
 
@@ -117,34 +112,58 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 		return nil, errors.New("signal.Link: LinkOptions.Store is required")
 	}
 
-	// Step 1: QR handshake (provisioning ws + decrypt envelope + register
-	// on the same socket before Signal closes it).
+	// Step 1: QR handshake (provisioning ws + decrypt envelope).
 	ua := resolveUserAgent(opts.ClientProfile, opts.UserAgent, opts.UserAgentOptions)
-	reg := &linkRegisterState{}
 	sess, err := provisioning.Link(ctx, provisioning.Options{
 		UserAgent:    ua,
 		URL:          opts.ProvisioningURL,
 		OnURL:        opts.OnURL,
 		Capabilities: opts.provisioningCapabilities(),
-		AfterDecrypt: func(ctx context.Context, conn *ws.Client, msg *provpb.ProvisionMessage) error {
-			return reg.register(ctx, msg, opts, ua)
-		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	defer sess.Conn.Close()
 	msg := sess.Message
-	resp := reg.resp
-	password := reg.password
-	aciIdent := reg.aciIdent
-	pniIdent := reg.pniIdent
-	if resp == nil || resp.DeviceID == 0 {
-		return nil, errors.New("signal.Link: registration did not complete")
+	if msg.GetAci() == "" || msg.GetNumber() == "" || msg.GetProvisioningCode() == "" {
+		return nil, errors.New("signal.Link: provisioning message missing required fields")
 	}
-	webc := web.New(opts.APIBaseURL, ua)
 
-	// Step 2: upload one-time prekey batches (ACI + PNI, EC + Kyber) so
+	// Step 2: generate per-namespace identity-derived state (registration
+	// IDs, signed prekeys, last-resort Kyber prekeys).
+	aciIdent, err := buildIdentity(msg.GetAciIdentityKeyPublic(), msg.GetAciIdentityKeyPrivate())
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: ACI identity: %w", err)
+	}
+	pniIdent, err := buildIdentity(msg.GetPniIdentityKeyPublic(), msg.GetPniIdentityKeyPrivate())
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: PNI identity: %w", err)
+	}
+
+	// Step 3: account password (HTTP Basic credential for all post-link
+	// authenticated requests).
+	password, err := generatePassword()
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: generate password: %w", err)
+	}
+
+	// Step 4: assemble + send the link request.
+	webc := web.New(opts.APIBaseURL, ua)
+	req, err := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: build link request: %w", err)
+	}
+	// Authenticate the link request with the e164 number (not the
+	// provisioning code); the code travels in req.VerificationCode. This
+	// matches signal-cli / libsignal-service-java.
+	resp, err := webc.LinkDevice(ctx, msg.GetNumber(), password, req)
+	if err != nil {
+		return nil, fmt.Errorf("signal.Link: register: %w", err)
+	}
+	if resp.DeviceID == 0 {
+		return nil, errors.New("signal.Link: server returned deviceId=0")
+	}
+
+	// Step 5: upload one-time prekey batches (ACI + PNI, EC + Kyber) so
 	// recipients can establish sessions with us. Skipped if disabled.
 	count := opts.OneTimePreKeyCount
 	if count < 0 {
@@ -197,57 +216,6 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	return linked, nil
 }
 
-type linkRegisterState struct {
-	resp     *web.LinkDeviceResponse
-	password string
-	aciIdent account.Identity
-	pniIdent account.Identity
-}
-
-func (s *linkRegisterState) register(ctx context.Context, msg *provpb.ProvisionMessage, opts LinkOptions, userAgent string) error {
-	if msg.GetAci() == "" || msg.GetNumber() == "" || msg.GetProvisioningCode() == "" {
-		return errors.New("provisioning message missing required fields")
-	}
-	aciIdent, err := buildIdentity(msg.GetAciIdentityKeyPublic(), msg.GetAciIdentityKeyPrivate())
-	if err != nil {
-		return fmt.Errorf("ACI identity: %w", err)
-	}
-	pniIdent, err := buildIdentity(msg.GetPniIdentityKeyPublic(), msg.GetPniIdentityKeyPrivate())
-	if err != nil {
-		return fmt.Errorf("PNI identity: %w", err)
-	}
-	password, err := generatePassword()
-	if err != nil {
-		return fmt.Errorf("generate password: %w", err)
-	}
-	req, err := buildLinkRequest(msg.GetProvisioningCode(), msg.GetProfileKey(), aciIdent, pniIdent, opts.DeviceName)
-	if err != nil {
-		return fmt.Errorf("build link request: %w", err)
-	}
-	// #region agent log
-	debugsession.Log("H2", "pkg/signal/link.go:register", "calling LinkDeviceWebSocket", map[string]any{
-		"serviceWSURL": opts.serviceWebSocketURL(),
-	})
-	// #endregion
-	resp, err := web.LinkDeviceWebSocket(ctx, opts.serviceWebSocketURL(), userAgent, msg.GetProvisioningCode(), password, req)
-	if err != nil {
-		// #region agent log
-		debugsession.Log("H6", "pkg/signal/link.go:register", "LinkDeviceWebSocket failed", map[string]any{
-			"err": err.Error(), "runId": "post-fix",
-		})
-		// #endregion
-		return err
-	}
-	if resp.DeviceID == 0 {
-		return errors.New("server returned deviceId=0")
-	}
-	s.resp = resp
-	s.password = password
-	s.aciIdent = aciIdent
-	s.pniIdent = pniIdent
-	return nil
-}
-
 func maybeSyncTransferArchive(
 	ctx context.Context,
 	opts LinkOptions,
@@ -282,13 +250,6 @@ func maybeSyncTransferArchive(
 // without changing the public API. Set by link_test.go.
 func (o LinkOptions) skipOneTimePreKeys() bool {
 	return o.testSkipPreKeyUpload
-}
-
-func (o LinkOptions) serviceWebSocketURL() string {
-	if o.ServiceWebSocketURL != "" {
-		return o.ServiceWebSocketURL
-	}
-	return web.ServiceWebSocketURL(o.APIBaseURL)
 }
 
 func (o LinkOptions) provisioningCapabilities() []string {

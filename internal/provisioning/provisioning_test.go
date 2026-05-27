@@ -196,10 +196,6 @@ func TestLinkHappyPath(t *testing.T) {
 	if sess.Message.GetAci() != aci || sess.Message.GetNumber() != num || sess.Message.GetProvisioningCode() != code {
 		t.Errorf("decoded message mismatch: %+v", sess.Message)
 	}
-	if sess.Conn == nil {
-		t.Fatal("nil Conn in session")
-	}
-	_ = sess.Conn.Close()
 
 	select {
 	case linkURL := <-gotURLCh:
