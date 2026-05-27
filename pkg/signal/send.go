@@ -615,7 +615,17 @@ func (c *Client) encryptForDevice(addr store.Address, padded []byte) ([]byte, we
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	return body, web.CiphertextType(typ), regID, nil
+	return body, libsignalToWireType(typ), regID, nil
+}
+
+// libsignalToWireType translates libsignal's CiphertextMessageType to the
+// type field Signal's HTTP API expects. The only mismatch is Whisper:
+// libsignal uses 2 but the wire protocol uses 1.
+func libsignalToWireType(t libsignal.CiphertextMessageType) web.CiphertextType {
+	if t == libsignal.CiphertextWhisper {
+		return web.CiphertextTypeWhisper // 1, not libsignal's 2
+	}
+	return web.CiphertextType(t)
 }
 
 // buildDataMessageContent wraps text + ts in a signalservice.Content
