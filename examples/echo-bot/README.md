@@ -7,9 +7,9 @@ This folder contains a tiny, end-to-end example program that uses
 - Connect to the authenticated chat websocket
 - Echo-reply to inbound **1:1** text messages
 
-Unlike `bin/signal-go link` (which currently persists only the account record),
-this example uses `internal/store/sqlstore` so the on-disk store includes the
-libsignal session/identity/prekey state required for receive + send.
+Uses `internal/store/sqlstore` (`signal.db` + optional `kdf.json`) so the store
+includes libsignal session/identity/prekey state required for receive + send.
+The `signal-go link` CLI uses the same sqlstore layout.
 
 ## Build prerequisites
 
@@ -28,10 +28,6 @@ go run ./examples/echo-bot link -store ./.signal-bot
 ```
 
 The program prompts for a store passphrase and renders a terminal QR code.
-
-Do **not** use `signal-go link -store` on the same directory for the bot — that
-writes **fsstore** files (`account.enc`) while echo-bot expects **sqlstore**
-(`signal.db`). See [testing-e2e.md](../../docs/guides/testing-e2e.md#cli-link-vs-e2e-test-store).
 
 ## Run
 
@@ -89,3 +85,26 @@ message. Common causes:
 - The example **does not** reply in groups (it logs and skips group messages).
 - If your network blocks Signal, the websocket connect will fail.
 - Don’t use `-plaintext` for real accounts; it disables at-rest encryption.
+
+## Profiling (long-running soak)
+
+`-memprofile` and `-cpuprofile` are **echo-bot flags**, not `go run` flags. Put them
+after `run`:
+
+```sh
+go run ./examples/echo-bot run \
+  -store ./.signal-e2e \
+  -passphrase-file ./.signal-e2e/passphrase \
+  -memprofile=mem.prof \
+  -cpuprofile=cpu.prof
+```
+
+Exercise the bot (send a few 1:1 messages), then press Ctrl+C. You should see
+`profiles written` in the log.
+
+```sh
+go tool pprof -http=:8080 mem.prof   # heap
+go tool pprof -http=:8081 cpu.prof   # CPU
+```
+
+More detail: [docs/guides/profiling.md](../../docs/guides/profiling.md).

@@ -12,10 +12,8 @@ is *what* changed and *when*.
 
 ### Added
 
-- `internal/cliargs` — shared CLI flags (`-store`, `-passphrase-file`, `-client`,
-  link helpers) used by `signal-go` and `examples/echo-bot`.
-- `task test:e2e:link` — runs interactive `TestE2E_Link` only (`SIGNAL_E2E_LINK=1`);
-  `task test:e2e` excludes it.
+- `internal/profile` and `echo-bot run -memprofile` / `-cpuprofile` for long-running
+  heap/CPU soaks; guide: [`docs/guides/profiling.md`](./docs/guides/profiling.md).
 - `signal.Client.SendEdit` for 1:1 outbound edits (`Content.editMessage`).
 - Encrypted linked-device display name at `PUT /v1/devices/link` (Android-compatible
   cipher; [ADR 0036](./docs/adr/0036-linked-device-name-cipher.md)).
