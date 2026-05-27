@@ -190,6 +190,73 @@ func TestClientServerInitiatedRequestRoutesToHandler(t *testing.T) {
 	}
 }
 
+func TestClientReadIdleTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.CloseNow() }()
+		for {
+			if _, _, err := c.Read(r.Context()); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+	url := "ws://" + strings.TrimPrefix(srv.URL, "http://")
+
+	cli, err := Dial(context.Background(), url, &DialOptions{
+		ReadIdleTimeout:   2 * time.Second,
+		KeepaliveInterval: -1,
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer cli.Close()
+
+	select {
+	case <-cli.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("read loop did not exit after ReadIdleTimeout")
+	}
+	if err := cli.ReadError(); err == nil {
+		t.Fatal("expected read error after idle timeout")
+	}
+}
+
+func TestClientStaysUpUntilReadIdleTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.CloseNow() }()
+		for {
+			if _, _, err := c.Read(r.Context()); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+	url := "ws://" + strings.TrimPrefix(srv.URL, "http://")
+
+	cli, err := Dial(context.Background(), url, &DialOptions{
+		ReadIdleTimeout:   5 * time.Second,
+		KeepaliveInterval: 1 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer cli.Close()
+
+	select {
+	case <-cli.Done():
+		t.Fatal("read loop exited before ReadIdleTimeout")
+	case <-time.After(3 * time.Second):
+	}
+}
+
 func TestClientSendErrorsAfterClose(t *testing.T) {
 	fake := newFakeSignalServer(t, func(_ *wspb.WebSocketRequestMessage) (uint32, []byte) { return 200, nil })
 	defer fake.Close()
