@@ -29,15 +29,15 @@ Design rationale: [ADR 0033](../adr/0033-release-pipeline.md).
 1. **`main` is green** — latest CI on the commit you intend to ship.
 2. **`CHANGELOG.md`** — move notes from `[Unreleased]` into a dated section:
    ```markdown
-   ## [0.1.0-rc2] - 2026-05-22
+   ## [0.1.0] - 2026-05-27
    ### Fixed
    - …
    ```
    Keep `[Unreleased]` empty (or “Nothing yet.”) after the move. Update the
    compare link at the bottom:
    ```markdown
-   [Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0-rc2...HEAD
-   [0.1.0-rc2]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc2
+   [Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...HEAD
+   [0.1.0]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0
    ```
 3. **ROADMAP** — tick or re-scope items if this release closes a phase slice.
 4. **Version in `cmd/signal-go`** — release builds inject the tag via
@@ -49,7 +49,7 @@ Design rationale: [ADR 0033](../adr/0033-release-pipeline.md).
    from** set to `main` — the job only runs from the default branch and is a
    no-op (skipped) if dispatched from any other branch.
 2. Inputs:
-   - **version** — `0.1.0-rc2` or `v0.1.0-rc2` (workflow normalizes to `v…`).
+   - **version** — `0.1.0` or `v0.1.0` (workflow normalizes to `v…`).
    - **ref** — usually `main` (branch or full SHA).
    - **require_changelog** — leave enabled so the job fails if `## [version]`
      is missing.
@@ -90,8 +90,9 @@ To exercise the build matrix **without** creating a release:
 - The ref is a real `v*` tag (not a manual Release dry-run), and
 - Repo variable `ENABLE_BUILD_PROVENANCE` is `true`.
 
-GitHub Artifact Attestations are unavailable on **user-owned private**
-repositories; enable after the repo is public or on a supporting org plan.
+GitHub Artifact Attestations may be unavailable depending on repository/org
+plan (for example, user-owned private repositories). Enable when supported,
+then set `ENABLE_BUILD_PROVENANCE=true`.
 See [ADR 0033](../adr/0033-release-pipeline.md).
 
 ## Local smoke test (optional)
@@ -109,7 +110,7 @@ produces a dev binary tagged `(devel)` unless you pass `-ldflags` yourself.
 
 | Symptom | Check |
 |---------|--------|
-| Create tag succeeds but **no Release run** | Expected on workflows **before** the dispatch fix. Run **Actions → Trigger Release for tag** with `v0.1.0-rc2`, or **Release → Run workflow** with **Use workflow from** set to that tag. |
+| Create tag succeeds but **no Release run** | Expected on workflows **before** the dispatch fix. Run **Actions → Trigger Release for tag** with `v0.1.0`, or **Release → Run workflow** with **Use workflow from** set to that tag. |
 | Create tag fails on CHANGELOG | Add `## [x.y.z] - YYYY-MM-DD` matching the version input (no `v` prefix in the heading). |
 | Tag already exists | Pick a new version or delete the remote tag only if the release was mistaken. |
 | Release workflow did not start | Tag must match `v*` on `origin`. With PAT configured, push must use `RELEASE_TAG_PUSH_TOKEN`. Without PAT, *Create release tag* must include the **Trigger Release workflow** step (current `main`). |

@@ -314,7 +314,7 @@ Phase B — broaden:
 - [x] Nightly fuzz job in `.github/workflows/fuzz-nightly.yml` (Phase 8
       dependency)
 
-Phase C — release pipeline (lands with v0.1.0):
+Phase C — release pipeline (**shipped for v0.1.0**):
 
 - [x] `.github/workflows/release.yml`: build `signal-go` binaries on
   tag push; publish to a draft GitHub Release
@@ -327,6 +327,12 @@ Phase C — release pipeline (lands with v0.1.0):
       `experimental: true` until promoted)
 - [ ] Code signing (macOS Developer ID, Windows EV cert) — follow-up
 - [ ] Homebrew tap + Scoop manifest — post-v0.1.0 follow-up
+
+v0.1.0 scope boundary:
+
+- Included in `v0.1.0`: release matrix + draft release assets + checksums.
+- Explicitly deferred after `v0.1.0`: signing, package-manager distribution,
+  and the external audit publication tracked in Phase 8.
 
 ## Non-goals
 

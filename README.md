@@ -1,20 +1,11 @@
 # signal-go
 
-<!--
-  CI + CodeQL badges:
-  GitHub's actions/workflows/*.yml/badge.svg URLs don't render for
-  unauthenticated viewers of private repos, so we use static shields.io
-  badges until the repo goes public. When that happens, swap back to:
-
-    [![CI](https://github.com/thehappydinoa/signal-go/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/ci.yml)
-    [![CodeQL](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml)
--->
-[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](./.github/workflows/ci.yml)
-[![CodeQL](https://img.shields.io/badge/CodeQL-weekly-2088FF?logo=github)](./.github/workflows/codeql.yml)
+[![CI](https://github.com/thehappydinoa/signal-go/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](./LICENSE)
 [![Go version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](./go.mod)
 [![libsignal](https://img.shields.io/badge/libsignal-v0.94.1-orange)](./scripts/build-libsignal.sh)
-[![Status](https://img.shields.io/badge/status-pre--alpha-red)](./ROADMAP.md)
+[![Status](https://img.shields.io/badge/status-v0.1.0%20released-brightgreen)](./CHANGELOG.md)
 [![Threat model](https://img.shields.io/badge/security-threat--model-2e7d32)](./docs/security.md)
 
 A Go library and CLI that lets your program act as a linked **Signal**
@@ -23,10 +14,10 @@ secondary device. Cryptography flows through Signal's official Rust
 (websockets, REST, prekey lifecycle, sealed sender, groups v2) is
 implemented in Go.
 
-> **Pre-alpha.** Linking, receive, 1:1 send, groups v2, storage sync, and
-> link-and-sync are implemented and covered by CI. The next gate before
-> **v0.1.0** is an external security review — see the
-> [roadmap](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010).
+> **v0.1.0 released.** Linking, receive, 1:1 send, groups v2, storage sync,
+> and link-and-sync are implemented and covered by CI. We continue hardening
+> in `v0.1.x` (external audit, signing, and packaging follow-ups); see the
+> [roadmap](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-targeted-for-v01x-not-a-hard-gate-for-v010).
 
 ## Quick start
 
@@ -49,7 +40,7 @@ and persists an AES-256-GCM-encrypted account.
 Full walkthrough: [`docs/guides/getting-started.md`](./docs/guides/getting-started.md).
 
 **Pre-built binaries** — [GitHub Releases](https://github.com/thehappydinoa/signal-go/releases)
-(`v0.1.0-rc1` and later). Pick the archive for your OS/CPU, verify the
+(`v0.1.0` and later). Pick the archive for your OS/CPU, verify the
 `.sha256` sidecar, and run `signal-go link` the same way.
 
 **Maintainers** — after updating `CHANGELOG.md`, run
@@ -138,7 +129,7 @@ Full breakdown: [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.m
 | [5 — Groups v2](./ROADMAP.md#phase-5--groups-v2-done) | ✅ | zkgroup, sender keys, membership |
 | [6 — Bot framework](./ROADMAP.md#phase-6--bot-framework-done) | ✅ | Dispatchers, middleware, group helpers |
 | [7 — Niceties](./ROADMAP.md#phase-7--niceties-planned-out-of-mvp) | 🔧 | CDSI ✅, SQLite ✅, backup polish |
-| [8 — Security audit](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010) | ⏳ | Internal pass ✅; external review before v0.1.0 |
+| [8 — Security audit](./ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-targeted-for-v01x-not-a-hard-gate-for-v010) | ⏳ | Internal pass ✅; external review follow-up in v0.1.x |
 
 Detail and tick-boxes: [`ROADMAP.md`](./ROADMAP.md).
 
@@ -174,10 +165,10 @@ issues for vulnerabilities.
 
 ## Stability and compatibility policy
 
-- **Current phase**: pre-alpha. Until `v0.1.0`, public APIs and CLI
-  behavior may change as correctness and security hardening continue.
-- **Compatibility intent**: we avoid unnecessary breakage, but do not
-  promise semver-level stability before `v0.1.0`.
+- **Current phase**: early `v0.x` release. APIs and CLI behavior may still
+  evolve as correctness and security hardening continue.
+- **Compatibility intent**: we avoid unnecessary breakage, but per SemVer
+  pre-1.0 rules we may introduce breaking changes in `v0.x` when needed.
 - **Toolchain floor**: Go `1.25+` as declared in [`go.mod`](./go.mod).
 - **Platform support**: Linux/macOS are primary targets; Windows amd64
   is currently experimental (see [Platforms](#platforms)).
