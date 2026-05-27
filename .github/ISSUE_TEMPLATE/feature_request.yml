@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a feature or enhancement
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user or developer problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior/API/CLI UX you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: input
+    id: roadmap
+    attributes:
+      label: Related roadmap phase/item
+      description: Link to ROADMAP section if applicable.
+      placeholder: https://github.com/thehappydinoa/signal-go/blob/main/ROADMAP.md#...
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and trade-offs
+      description: Compatibility, security, complexity, or maintenance costs.

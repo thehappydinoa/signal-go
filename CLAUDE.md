@@ -103,6 +103,18 @@ three-ring testing strategy.
 - Don't merge your own PR unless that's the agreed workflow. Ask for
   review.
 
+### Agent PR checklist
+
+When an agent prepares a PR, include:
+
+- Validation summary (`task test`, `task lint`, `go vet ./...`) or a
+  clear note about what was not run and why.
+- Documentation updates for any behavior, CLI, API, or workflow change.
+- [ROADMAP](./ROADMAP.md) status updates when phase scope changes.
+- ADR update/addition when a decision could be second-guessed.
+- A short risk note for security-sensitive changes and corresponding
+  test coverage.
+
 ## Security-sensitive changes
 
 - Never log: account passwords, private keys, profile keys, prekey

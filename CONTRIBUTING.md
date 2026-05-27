@@ -45,6 +45,15 @@ what the workflow already does.
 - Do not add runtime Go dependencies without updating
   [ADR 0002](./docs/adr/0002-no-third-party-go-deps.md).
 
+Use the PR template at [`.github/pull_request_template.md`](./.github/pull_request_template.md)
+to ensure docs, ADR, roadmap, and validation details are included.
+
+## Community guidelines
+
+- Conduct expectations: [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+- Support channels and response targets: [`SUPPORT.md`](./SUPPORT.md)
+- Maintainer model and decision process: [`GOVERNANCE.md`](./GOVERNANCE.md)
+
 ## Security
 
 Report vulnerabilities per [`SECURITY.md`](./SECURITY.md). Do not open public
