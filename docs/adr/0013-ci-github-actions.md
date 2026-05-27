@@ -21,9 +21,9 @@ Three workflows under `.github/workflows/`:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | push to `main`, PRs to `main` | build libsignal (cached), lint, vet, test, govulncheck |
+| `ci.yml` | push to `main`, PRs to `main` | always runs a lightweight changed-path detector; runs libsignal+lint+vet+test+build+govulncheck only when CI-relevant paths changed |
 | `codeql.yml` | **weekly schedule only** + `workflow_dispatch` | GitHub's CodeQL security scanning for Go |
-| `dependabot.yml` (config) | weekly | bump `go.mod` modules + action versions |
+| `.github/dependabot.yml` (config) | weekly | bump `go.mod` modules + action versions |
 
 **Why CodeQL is schedule-only**: running it on every push/PR alongside
 `ci.yml` meant two parallel jobs both building `libsignal_ffi.a` (the
