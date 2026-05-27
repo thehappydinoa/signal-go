@@ -334,14 +334,15 @@ func (c *Client) dispatchResponse(resp *wspb.WebSocketResponseMessage) {
 	id := resp.GetId()
 	c.mu.Lock()
 	ch, ok := c.pending[id]
-	c.mu.Unlock()
 	if !ok {
+		c.mu.Unlock()
 		return // unsolicited or already-cancelled request
 	}
 	select {
 	case ch <- resp:
 	default:
 	}
+	c.mu.Unlock()
 }
 
 func (c *Client) failPending() {

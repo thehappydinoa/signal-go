@@ -71,7 +71,7 @@ func NewWithOptions(baseURL, userAgent string, opts Options) *Client {
 	if userAgent == "" {
 		userAgent = useragent.Resolve(useragent.SignalGo, "", useragent.Options{})
 	}
-	if opts.InsecureSkipVerify && baseURL == DefaultBaseURL {
+	if opts.InsecureSkipVerify && isProductionBaseURL(baseURL) {
 		panic("web: InsecureSkipVerify must never be set against the production base URL")
 	}
 	timeout := opts.Timeout
@@ -307,4 +307,12 @@ func (c *Client) buildURL(path string, query url.Values) (string, error) {
 		u.RawQuery = query.Encode()
 	}
 	return u.String(), nil
+}
+
+func isProductionBaseURL(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	return tlsroots.Hostname(u.Host) == "chat.signal.org"
 }
