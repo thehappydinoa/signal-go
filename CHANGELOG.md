@@ -28,9 +28,10 @@ is *what* changed and *when*.
 
 ### Fixed
 
-- Idle chat/provisioning websockets no longer disconnect every ~60s: the read
-  loop uses a 10-minute idle timeout and sends keepalive pings every 30s
-  (`internal/ws`).
+- `SERVER_DELIVERY_RECEIPT` envelopes are ignored on receive (no spurious
+  `DecryptionErrorEvent` / "empty envelope content" after a successful reply).
+- Idle chat/provisioning websockets no longer disconnect every ~60s (`internal/ws`
+  keepalive + 10-minute read idle timeout).
 - Device linking now authenticates `PUT /v1/devices/link` with the account's
   e164 number as the HTTP Basic username (the provisioning code travels only in
   `verificationCode`), matching signal-cli / libsignal-service-java. Previously

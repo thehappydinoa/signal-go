@@ -343,6 +343,13 @@ func (c *Client) processEnvelope(ctx context.Context, data []byte) {
 		return
 	}
 
+	if env.GetType() == sspb.Envelope_SERVER_DELIVERY_RECEIPT {
+		c.log.Debug("ignored server delivery receipt",
+			"sender", env.GetSourceServiceId(),
+			"device", env.GetSourceDeviceId())
+		return
+	}
+
 	sender := env.GetSourceServiceId()
 	senderDevice := env.GetSourceDeviceId()
 	envTS := msToTime(env.GetClientTimestamp())

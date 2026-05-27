@@ -425,6 +425,45 @@ func TestOpenAndReceiveSyncMessage(t *testing.T) {
 	}
 }
 
+func TestOpenServerDeliveryReceiptNoDecryptError(t *testing.T) {
+	acctStore := memstore.New()
+	if err := acctStore.SaveAccount(testAccount()); err != nil {
+		t.Fatal(err)
+	}
+	ss := memstore.NewSignalStores()
+
+	ts := uint64(1700000000000)
+	envType := sspb.Envelope_SERVER_DELIVERY_RECEIPT
+	sender := "sender-aci"
+	dev := uint32(1)
+
+	env := &sspb.Envelope{
+		Type:            &envType,
+		SourceServiceId: &sender,
+		SourceDeviceId:  &dev,
+		ClientTimestamp: &ts,
+	}
+	envReq := makeEnvelopeRequest(t, env)
+
+	fake := newChatFakeServer(t, envReq)
+	defer fake.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := Open(ctx, testOpenOptions(acctStore, ss, fake.dialFunc))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer client.Close()
+
+	select {
+	case ev := <-client.Events():
+		t.Fatalf("unexpected event %T (%v)", ev, ev)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
 func TestOpenDecryptionErrorEmitsEvent(t *testing.T) {
 	acctStore := memstore.New()
 	if err := acctStore.SaveAccount(testAccount()); err != nil {
