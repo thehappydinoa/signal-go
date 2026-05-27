@@ -7,7 +7,7 @@ import "errors"
 var ErrNotLinked = errors.New("account: not linked")
 
 // Store is the durable backing store for the linked-device account
-// material. Implementations live under internal/store/{memstore,fsstore}.
+// material. Implementations live under internal/store/{memstore,sqlstore}.
 type Store interface {
 	// LoadAccount returns the previously-persisted account or [ErrNotLinked].
 	LoadAccount() (*Account, error)

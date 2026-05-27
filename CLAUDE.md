@@ -101,7 +101,7 @@ three-ring testing strategy.
 - Constant-time comparisons (`hmac.Equal`, `subtle.ConstantTimeCompare`)
   for any MAC / tag / passphrase check.
 - File writes that involve secret material use atomic
-  temp-file + rename + 0600. `internal/store/fsstore/encryption.go`
+  temp-file + rename + 0600. `internal/store/seal` and sqlstore writes
   is the reference.
 - Touch crypto code → update [`docs/security.md`](./docs/security.md)
   if the threat model shifts, and add to the

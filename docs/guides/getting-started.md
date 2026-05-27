@@ -224,7 +224,7 @@ For systemd units, container deployments, CI, etc.:
 ```
 
 Or supply your own 32-byte key by writing a small Go program against
-`pkg/signal` and `internal/store/fsstore.NewWithKey`. The CLI doesn't
+`pkg/signal` and `internal/store/sqlstore.OpenWithKey`. The CLI uses
 expose this directly to keep flag surface small.
 
 ## Verify the link
@@ -285,10 +285,6 @@ b.OnText("ping").DM().Do(func(ctx context.Context, m *bot.Message, _ []string) e
 })
 return b.Run(ctx)
 ```
-
-If you want a fully working, end-to-end “hello world” to validate your
-environment (link → websocket receive → reply), see the `echo-bot` example:
-[`examples/echo-bot/`](../../examples/echo-bot/).
 
 ### Conversation state
 

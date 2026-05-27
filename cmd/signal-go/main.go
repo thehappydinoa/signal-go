@@ -28,7 +28,8 @@ import (
 
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/qrterminal"
-	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
+	"github.com/thehappydinoa/signal-go/internal/store/seal"
+	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
 	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
@@ -68,12 +69,6 @@ Run 'signal-go <subcommand> -h' for subcommand flags.
 `)
 }
 
-// printVersion writes the build-tagged version plus the Go toolchain
-// and (when available) the embedded VCS revision. Release binaries
-// have main.version overridden via -ldflags; dev builds fall back to
-// the `(devel)` sentinel and surface `vcs.revision` from the
-// `runtime/debug.ReadBuildInfo` block that `go build -buildvcs=true`
-// embeds by default.
 func printVersion(w io.Writer) {
 	fmt.Fprintf(w, "signal-go %s\n", version)
 	fmt.Fprintf(w, "  go:        %s (%s/%s)\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
@@ -94,7 +89,7 @@ func runLink(args []string) int {
 	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the user to scan")
 	clientProfile := fs.String("client", string(useragent.SignalGo), "client User-Agent preset: signal-go, android, ios, desktop-linux, desktop-macos, desktop-windows")
 	userAgent := fs.String("user-agent", "", "override User-Agent / X-Signal-Agent (disables -client preset)")
-	storeDir := fs.String("store", ".signal-data", "directory where account state is persisted")
+	storeDir := fs.String("store", ".signal-data", "directory where account state is persisted (SQLite signal.db)")
 	deviceName := fs.String("name", "", "device name shown in the user's linked devices list")
 	passphraseFile := fs.String("passphrase-file", "", "path to a file containing the passphrase (newline-trimmed); overrides interactive prompt")
 	noQR := fs.Bool("no-qr", false, "do not render a QR code in the terminal (URL is still printed)")
@@ -113,18 +108,19 @@ func runLink(args []string) int {
 		return 1
 	}
 
-	s, err := openStore(dir, *passphraseFile, *plaintext)
+	db, err := openStore(dir, *passphraseFile, *plaintext)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open store: %v\n", err)
 		return 1
 	}
+	defer func() { _ = db.Close() }()
 
-	if existing, err := s.LoadAccount(); err == nil {
+	if existing, err := db.LoadAccount(); err == nil {
 		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", dir, existing.ACI, existing.DeviceID)
 		fmt.Fprintln(os.Stderr, "Delete the store directory if you want to re-link.")
 		return 1
 	} else if !errors.Is(err, account.ErrNotLinked) {
-		if errors.Is(err, fsstore.ErrWrongPassphrase) {
+		if errors.Is(err, seal.ErrWrongPassphrase) {
 			fmt.Fprintln(os.Stderr, "wrong passphrase (or the store is corrupted).")
 		} else {
 			fmt.Fprintf(os.Stderr, "store: %v\n", err)
@@ -141,7 +137,8 @@ func runLink(args []string) int {
 	la, err := sg.Link(ctx, sg.LinkOptions{
 		ClientProfile: profile,
 		UserAgent:     *userAgent,
-		Store:         s,
+		Store:         db,
+		SignalStores:  db.SignalStores(),
 		DeviceName:    *deviceName,
 		OnURL: func(linkURL string) error {
 			fmt.Println("Open Signal on your phone → Settings → Linked devices → +")
@@ -173,34 +170,26 @@ func runLink(args []string) int {
 	fmt.Printf("  number:    %s\n", la.Number)
 	fmt.Printf("  deviceID:  %d\n", la.DeviceID)
 	fmt.Printf("  store:     %s\n", dir)
-	if s.IsEncrypted() {
+	if db.IsEncrypted() {
 		fmt.Println("  encrypted: yes (AES-256-GCM)")
 	} else {
 		fmt.Println("  encrypted: NO — plaintext mode (test only)")
 	}
-	fmt.Println()
-	fmt.Println("Phase 3 will add real-time receive over the chat websocket.")
 	return 0
 }
 
-// openStore picks the right fsstore mode based on flags and (for the
-// interactive case) prompts for a passphrase.
-func openStore(dir, passphraseFile string, plaintext bool) (*fsstore.Store, error) {
+func openStore(dir, passphraseFile string, plaintext bool) (*sqlstore.DB, error) {
 	if plaintext {
 		fmt.Fprintln(os.Stderr, "WARNING: -plaintext requested; credentials will be stored unencrypted.")
-		return fsstore.New(dir)
+		return sqlstore.Open(dir)
 	}
 	passphrase, err := readPassphrase(passphraseFile)
 	if err != nil {
 		return nil, err
 	}
-	return fsstore.NewWithPassphrase(dir, passphrase)
+	return sqlstore.OpenWithPassphrase(dir, passphrase)
 }
 
-// readPassphrase reads a passphrase from the supplied file (with trailing
-// newline trimmed) or interactively from the TTY. Returns an error if
-// neither source is available (typical for piped/non-interactive use
-// without -passphrase-file).
 func readPassphrase(file string) (string, error) {
 	if file != "" {
 		raw, err := os.ReadFile(file)
@@ -221,10 +210,6 @@ func readPassphrase(file string) (string, error) {
 	if len(pw1) == 0 {
 		return "", errors.New("empty passphrase")
 	}
-	// For first-time use we'd ideally ask twice; defer until we can
-	// tell whether kdf.json already exists (which would mean the user
-	// is opening an existing store, not creating one). For now, accept
-	// one read — the wrong-passphrase code path is graceful.
 	_ = bufio.NewReader(os.Stdin)
 	return string(pw1), nil
 }

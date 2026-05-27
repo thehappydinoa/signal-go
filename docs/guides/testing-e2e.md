@@ -114,8 +114,8 @@ _, err := signal.Link(ctx, signal.LinkOptions{
 })
 ```
 
-If you already linked with the CLI into `./.signal-e2e`, use a **fresh directory**
-for sqlstore (or delete the fsstore files) and link again with option A or B.
+If the directory still has legacy **fsstore** files (`account.enc` or
+`account.json`), delete them or use a fresh directory before linking.
 
 ## Running the suite
 

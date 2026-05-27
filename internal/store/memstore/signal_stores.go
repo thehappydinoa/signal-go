@@ -9,7 +9,7 @@ import (
 
 // SignalStores is an in-memory implementation of [store.SignalStores].
 // It is the test-side backing store for libsignal callbacks; production
-// uses fsstore.
+// uses sqlstore.
 //
 // Goroutine-safe: a single mutex protects every map.
 type SignalStores struct {

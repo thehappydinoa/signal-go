@@ -1,9 +1,10 @@
 # Encrypted store
 
-`fsstore` writes the account JSON sealed under AES-256-GCM. The 32-byte
-symmetric key never touches disk; the caller either supplies it directly
-(OS keyring / HSM / TPM-sealed) or has it derived from a passphrase via
-Argon2id.
+[seal](../../internal/store/seal/) seals the account JSON under AES-256-GCM.
+[sqlstore](../../internal/store/sqlstore/) stores the ciphertext in `signal.db`;
+the 32-byte symmetric key never touches disk. The caller either supplies it
+directly (OS keyring / HSM / TPM-sealed) or derives it from a passphrase via
+Argon2id (`kdf.json` beside the store directory).
 
 ```mermaid
 flowchart TB
@@ -20,9 +21,9 @@ flowchart TB
     key[32-byte symmetric key<br/>in memory only]
     json[Account JSON]
     nonce[12-byte nonce<br/>crypto/rand per write]
-    sealed["account.enc<br/>0x01 + nonce + ct + tag"]
+    sealed["account row BLOB<br/>0x01 + nonce + ct + tag"]
     kdfjson[kdf.json<br/>salt + params + version]
-    disk[(disk - mode 0600)]
+    disk[(signal.db + kdf.json<br/>mode 0600 / dir 0700)]
 
     pp --> kdf
     kdf --> key
@@ -51,30 +52,24 @@ flowchart TB
 ## What to look at
 
 - **The key is never persisted.** Only inputs to the KDF (salt +
-  parameters) hit disk; the derived 32 bytes live in the `*fsstore.Store`
-  for the process lifetime and die with the process.
+  parameters) hit disk; the derived 32 bytes live in `*sqlstore.DB` for the
+  process lifetime and die with the process.
 - **GCM nonce is fresh per write.** Two saves of the same account
   produce different ciphertexts. Reused nonces under AES-GCM are
-  catastrophic — see the tests in `internal/store/fsstore/encryption_test.go`
-  for the explicit assertion.
+  catastrophic — see `internal/store/seal/seal_test.go`.
 - **Wrong passphrase fails closed.** Argon2id-deriving with the wrong
   passphrase yields a different key, the GCM tag check fails, and
-  `LoadAccount` returns a typed `ErrWrongPassphrase` so callers can
-  re-prompt rather than crash.
-- **Mode mixing is rejected.** A directory with `account.json` blocks
-  encrypted constructors with `ErrDirPlaintext`; one with `account.enc`
-  blocks `New` with `ErrDirEncrypted`. No silent leftovers.
+  `LoadAccount` returns `seal.ErrWrongPassphrase` so callers can re-prompt.
+- **Legacy fsstore rejected.** Directories with `account.enc` or
+  `account.json` from the removed fsstore package must be migrated manually
+  (fresh link) before `sqlstore.Open*`.
 
 ## On-disk layout
 
 ```
-.signal-data/
-├── kdf.json          (passphrase mode only: salt + Argon2id params)
-└── account.enc       (0x01 || 12-byte nonce || ciphertext || 16-byte GCM tag)
+store-dir/
+├── kdf.json      # passphrase mode only (0600)
+└── signal.db     # SQLite WAL; account BLOB + libsignal tables (0600)
 ```
 
-## Linked design records
-
-- [ADR 0012 — Encrypted account store](../adr/0012-encrypted-store.md)
-- [ADR 0011 — Threat model & security audit](../adr/0011-security-audit.md)
-- [security.md](../security.md) — short threat model + reporting policy
+Parent directory mode `0700`.

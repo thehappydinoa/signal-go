@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
+	"github.com/thehappydinoa/signal-go/internal/store/seal"
 )
 
 const kdfFile = "kdf.json"
@@ -31,8 +31,8 @@ var defaultKDFParams = kdfMeta{
 	Threads: 4,
 }
 
-func loadOrCreatePassphraseKey(dir, passphrase string) ([fsstore.KeyLen]byte, error) {
-	var zero [fsstore.KeyLen]byte
+func loadOrCreatePassphraseKey(dir, passphrase string) ([seal.KeyLen]byte, error) {
+	var zero [seal.KeyLen]byte
 	path := filepath.Join(dir, kdfFile)
 	raw, err := os.ReadFile(path)
 	switch {
@@ -90,13 +90,13 @@ func (m kdfMeta) validate() error {
 	return nil
 }
 
-func (m kdfMeta) derive(passphrase string) ([fsstore.KeyLen]byte, error) {
-	var out [fsstore.KeyLen]byte
+func (m kdfMeta) derive(passphrase string) ([seal.KeyLen]byte, error) {
+	var out [seal.KeyLen]byte
 	salt, err := base64.StdEncoding.DecodeString(m.Salt)
 	if err != nil {
 		return out, fmt.Errorf("sqlstore: kdf salt not base64: %w", err)
 	}
-	key := argon2.IDKey([]byte(passphrase), salt, m.Time, m.Memory, m.Threads, fsstore.KeyLen)
+	key := argon2.IDKey([]byte(passphrase), salt, m.Time, m.Memory, m.Threads, seal.KeyLen)
 	copy(out[:], key)
 	return out, nil
 }

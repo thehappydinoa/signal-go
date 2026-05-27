@@ -145,9 +145,8 @@ type Client struct {
 	knownDevices     map[string][]uint32 // recipientACI → device ID set
 	knownUAKs        map[string][]byte   // recipientACI → 16-byte unidentified access key
 	knownProfileKeys map[string][]byte   // recipientACI → 32-byte profile key
-	// allowSealedSender is true only after [Client.FetchProfile] confirms the
-	// peer allows unrestricted unidentified access. Inbound profileKey alone
-	// does not set this — sealed-sender send requires the flag.
+	// allowSealedSender is true only after [Client.FetchProfile] confirms
+	// unrestricted unidentified access for that ACI.
 	allowSealedSender map[string]bool
 
 	// groupAuthMu guards the zkgroup auth credential cache.

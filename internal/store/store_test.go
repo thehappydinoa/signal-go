@@ -8,7 +8,6 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/account"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/prekeys"
-	"github.com/thehappydinoa/signal-go/internal/store/fsstore"
 	"github.com/thehappydinoa/signal-go/internal/store/memstore"
 	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
 )
@@ -57,14 +56,8 @@ func validAccount(t *testing.T) *account.Account {
 // stores is the table of [account.Store] implementations under test.
 func stores(t *testing.T) map[string]account.Store {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), "fs")
-	fs, err := fsstore.New(dir)
-	if err != nil {
-		t.Fatalf("fsstore.New: %v", err)
-	}
 	return map[string]account.Store{
 		"memstore": memstore.New(),
-		"fsstore":  fs,
 		"sqlstore": mustSQLStore(t),
 	}
 }

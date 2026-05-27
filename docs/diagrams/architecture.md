@@ -27,7 +27,7 @@ flowchart TB
     subgraph storage [Persistence]
         account[internal/account<br/>Account model]
         store[internal/store<br/>SessionStore / IdentityStore / …]
-        fs[fsstore<br/>AES-256-GCM at rest]
+        sql[sqlstore<br/>SQLite + seal]
         mem[memstore]
     end
 
