@@ -204,7 +204,7 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkedAccount, error) {
 	if err := opts.Store.SaveAccount(acct); err != nil {
 		return nil, fmt.Errorf("signal.Link: persist account: %w", err)
 	}
-	if err := persistSignalStoreKeys(opts.SignalStores, aciIdent, pniIdent); err != nil {
+	if err := persistSignalStoreKeys(opts.SignalStores, aciIdent); err != nil {
 		return nil, err
 	}
 
@@ -386,10 +386,10 @@ func generatePassword() (string, error) {
 	return base64.StdEncoding.EncodeToString(b[:]), nil
 }
 
-// persistSignalStoreKeys writes the signed prekeys and last-resort Kyber
-// prekeys from both identity namespaces into stores so inbound decryption
-// can look them up by ID. No-op when stores is nil.
-func persistSignalStoreKeys(stores store.SignalStores, aciIdent, pniIdent account.Identity) error {
+// persistSignalStoreKeys writes the ACI signed prekey and last-resort Kyber
+// prekey into stores so inbound decryption can look them up by ID.
+// No-op when stores is nil.
+func persistSignalStoreKeys(stores store.SignalStores, aciIdent account.Identity) error {
 	if stores == nil {
 		return nil
 	}
