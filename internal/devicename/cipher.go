@@ -144,8 +144,14 @@ func Decrypt(nameCipher string, identity *libsignal.IdentityKeyPair) (string, er
 }
 
 func computeSyntheticIV(masterSecret, plaintext []byte) ([]byte, error) {
-	// Signal Android DeviceNameCipher: HMAC(key=masterSecret, msg="auth"||plaintext)
-	full, err := hmacSHA256concat(masterSecret, []byte("auth"), plaintext)
+	// Signal Android DeviceNameCipher derives an auth key first:
+	//   authKey = HMAC(masterSecret, "auth")
+	//   ivFull  = HMAC(authKey, plaintext)
+	authKey, err := hmacSHA256concat(masterSecret, []byte("auth"))
+	if err != nil {
+		return nil, err
+	}
+	full, err := hmacSHA256concat(authKey, plaintext)
 	if err != nil {
 		return nil, err
 	}
@@ -156,8 +162,14 @@ func computeSyntheticIV(masterSecret, plaintext []byte) ([]byte, error) {
 }
 
 func computeCipherKey(masterSecret, syntheticIV []byte) ([]byte, error) {
-	// Signal Android DeviceNameCipher: HMAC(key=masterSecret, msg="cipher"||syntheticIV)
-	return hmacSHA256concat(masterSecret, []byte("cipher"), syntheticIV)
+	// Signal Android DeviceNameCipher derives a cipher key first:
+	//   cipherKeyKey = HMAC(masterSecret, "cipher")
+	//   cipherKey    = HMAC(cipherKeyKey, syntheticIV)
+	cipherKeyKey, err := hmacSHA256concat(masterSecret, []byte("cipher"))
+	if err != nil {
+		return nil, err
+	}
+	return hmacSHA256concat(cipherKeyKey, syntheticIV)
 }
 
 // hmacSHA256concat computes HMAC-SHA256(key, parts...) where all parts are
@@ -187,7 +199,11 @@ func aesCTR(key, in []byte) ([]byte, error) {
 }
 
 func verifySyntheticIV(masterSecret, plaintext, syntheticIV []byte) error {
-	full, err := hmacSHA256concat(masterSecret, []byte("auth"), plaintext)
+	authKey, err := hmacSHA256concat(masterSecret, []byte("auth"))
+	if err != nil {
+		return err
+	}
+	full, err := hmacSHA256concat(authKey, plaintext)
 	if err != nil {
 		return err
 	}
