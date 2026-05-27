@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,8 +36,10 @@ func (c *Client) FetchVersionedProfile(
 }
 
 // FetchExpiringProfileKeyCredential issues GET /v1/profile/{aci}/{version}/{request}
-// with credentialType=expiringProfileKey and returns the raw credential
-// response bytes (497 bytes).
+// with credentialType=expiringProfileKey and returns the credential response
+// bytes consumed by libsignal. Signal currently returns a JSON profile payload
+// that includes a base64 `credential` field; older deployments may return raw
+// credential bytes directly, so this method supports both shapes.
 func (c *Client) FetchExpiringProfileKeyCredential(
 	ctx context.Context,
 	aci, profileKeyVersion string,
@@ -45,7 +48,23 @@ func (c *Client) FetchExpiringProfileKeyCredential(
 	if len(credentialRequest) != 329 {
 		return nil, fmt.Errorf("web.FetchExpiringProfileKeyCredential: request length %d, want 329", len(credentialRequest))
 	}
-	return c.fetchVersionedProfileRaw(ctx, aci, profileKeyVersion, uak, credentialRequest)
+	raw, err := c.fetchVersionedProfileRaw(ctx, aci, profileKeyVersion, uak, credentialRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	var profileResp struct {
+		Credential []byte `json:"credential"`
+	}
+	if err := json.Unmarshal(raw, &profileResp); err == nil {
+		if len(profileResp.Credential) == 0 {
+			return nil, errors.New("web.FetchExpiringProfileKeyCredential: JSON response missing credential field")
+		}
+		return profileResp.Credential, nil
+	}
+
+	// Legacy shape: endpoint returned the raw credential bytes directly.
+	return raw, nil
 }
 
 func (c *Client) fetchVersionedProfile(

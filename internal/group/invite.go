@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -126,13 +125,9 @@ func BuildJoinViaInviteLinkActions(
 	if err != nil {
 		return nil, fmt.Errorf("group.BuildJoinViaInviteLinkActions: local aci: %w", err)
 	}
-	encLocal, err := libsignal.GroupSecretParamsEncryptServiceID(secretParams, localID)
-	if err != nil {
-		return nil, err
-	}
 	version := currentRevision + 1
 	actions := &groupspb.GroupChange_Actions{
-		SourceUserId: encLocal[:],
+		SourceUserId: append([]byte(nil), localID[:]...),
 		Version:      version,
 		AddMembers: []*groupspb.GroupChange_Actions_AddMemberAction{
 			{
@@ -140,7 +135,6 @@ func BuildJoinViaInviteLinkActions(
 					Presentation: presentation,
 					Role:         groupspb.Member_DEFAULT,
 				},
-				JoinFromInviteLink: true,
 			},
 		},
 	}
@@ -162,21 +156,14 @@ func BuildJoinRequestActions(
 	if err != nil {
 		return nil, fmt.Errorf("group.BuildJoinRequestActions: local aci: %w", err)
 	}
-	encLocal, err := libsignal.GroupSecretParamsEncryptServiceID(secretParams, localID)
-	if err != nil {
-		return nil, err
-	}
 	version := currentRevision + 1
-	now := uint64(time.Now().UnixMilli())
 	actions := &groupspb.GroupChange_Actions{
-		SourceUserId: encLocal[:],
+		SourceUserId: append([]byte(nil), localID[:]...),
 		Version:      version,
 		AddMembersPendingAdminApproval: []*groupspb.GroupChange_Actions_AddMemberPendingAdminApprovalAction{
 			{
 				Added: &groupspb.MemberPendingAdminApproval{
-					UserId:       encLocal[:],
 					Presentation: presentation,
-					Timestamp:    now,
 				},
 			},
 		},

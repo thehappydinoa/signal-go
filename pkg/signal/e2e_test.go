@@ -17,6 +17,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/qrterminal"
 	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
+	"github.com/thehappydinoa/signal-go/internal/web"
 	"github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -192,6 +193,105 @@ func TestE2E_GroupManagement(t *testing.T) {
 	t.Logf("SendGroup ok at %s", receipt.Timestamp)
 }
 
+// TestE2E_GroupCreateAndChat joins a fresh peer-created group invite,
+// verifies peer membership, sends a bot message, and waits for a peer reply
+// in that same group thread.
+func TestE2E_GroupCreateAndChat(t *testing.T) {
+	e2eGroupCreateEnabled(t)
+	inviteURL := requireEnv(t, "SIGNAL_E2E_GROUP_INVITE_URL")
+	peerACI := requireEnv(t, "SIGNAL_E2E_PEER_ACI")
+	db := openE2EDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx, cancel := e2eRecvContext(t)
+	defer cancel()
+
+	client, err := signal.Open(ctx, e2eOpenOptions(db))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer client.Close()
+
+	masterKey, _, err := signal.ParseGroupInviteLink(inviteURL)
+	if err != nil {
+		t.Fatalf("ParseGroupInviteLink: %v", err)
+	}
+	groupID := hex.EncodeToString(masterKey)
+
+	preview, err := client.PreviewGroupJoin(ctx, inviteURL)
+	if err != nil {
+		var webErr *web.Error
+		if errors.As(err, &webErr) && webErr.StatusCode == 404 {
+			t.Skip("group invite link not found (HTTP 404): regenerate/copy a fresh invite URL from the peer-owned group and ensure invite link is enabled")
+		}
+		if errors.As(err, &webErr) && webErr.StatusCode == 403 {
+			t.Skip("group invite link rejected (HTTP 403): regenerate a fresh invite URL; if the bot previously joined/left, remove any pending request or ban for the bot and retry")
+		}
+		t.Fatalf("PreviewGroupJoin: %v", err)
+	}
+	if preview.RequiresAdminApproval {
+		t.Skip("group invite requires admin approval; use an invite where members can join directly")
+	}
+
+	grp, err := client.JoinGroupViaInviteLink(ctx, inviteURL)
+	if err != nil {
+		t.Fatalf("JoinGroupViaInviteLink: %v", err)
+	}
+	t.Logf("joined group %q title=%q revision=%d members=%d", grp.ID, grp.Title, grp.Revision, len(grp.Members))
+
+	if grp.ID == "" {
+		t.Fatal("JoinGroupViaInviteLink: empty group ID")
+	}
+	if grp.ID != groupID {
+		t.Fatalf("JoinGroupViaInviteLink: group id %q does not match invite %q", grp.ID, groupID)
+	}
+	if !groupHasMember(grp, peerACI) {
+		t.Fatalf("joined group does not include peer ACI %s", peerACI)
+	}
+
+	botToken := fmt.Sprintf("signal-go e2e group bot %d", time.Now().UnixNano())
+	receipt, err := client.SendGroup(ctx, masterKey, botToken)
+	if err != nil {
+		t.Fatalf("SendGroup(bot): %v", err)
+	}
+	if receipt.Timestamp.IsZero() {
+		t.Fatal("SendGroup(bot): zero receipt timestamp")
+	}
+	t.Logf("bot message sent at %s: %q", receipt.Timestamp, botToken)
+
+	peerToken := botToken + " ack"
+	t.Logf("manual step: from the peer account (%s), reply in that group with text containing: %q", peerACI, peerToken)
+
+	for {
+		select {
+		case ev, ok := <-client.Events():
+			if !ok {
+				t.Fatal("Events channel closed before peer group reply arrived")
+			}
+			msg, ok := ev.(*signal.MessageEvent)
+			if !ok {
+				t.Logf("non-message event: %T %+v", ev, ev)
+				continue
+			}
+			if msg.GroupID != groupID {
+				continue
+			}
+			if msg.Sender != peerACI {
+				t.Logf("ignoring group message from non-peer sender %s in %s", msg.Sender, msg.GroupID)
+				continue
+			}
+			if !strings.Contains(msg.Body, peerToken) {
+				t.Logf("ignoring peer group message without token (body %q)", truncateRunes(msg.Body, 120))
+				continue
+			}
+			t.Logf("received peer group reply from %s at %s: %q", msg.Sender, msg.Timestamp, truncateRunes(msg.Body, 200))
+			return
+		case <-ctx.Done():
+			t.Fatalf("timeout waiting for peer group reply in %s: %v", groupID, ctx.Err())
+		}
+	}
+}
+
 func TestE2E_Link(t *testing.T) {
 	e2eLinkEnabled(t)
 	dir := requireEnv(t, "SIGNAL_E2E_STORE_DIR")
@@ -237,6 +337,17 @@ func e2eLinkEnabled(t *testing.T) {
 	e2eEnabled(t)
 	if os.Getenv("SIGNAL_E2E_LINK") != "1" {
 		t.Skip("interactive link test skipped (run task test:e2e:link or set SIGNAL_E2E_LINK=1)")
+	}
+}
+
+// e2eGroupCreateEnabled gates the interactive group create-and-chat test.
+// Use task test:e2e:group or SIGNAL_GO_E2E=1 SIGNAL_E2E_GROUP_INTERACTIVE=1
+// go test -tags=e2e -run TestE2E_GroupCreateAndChat.
+func e2eGroupCreateEnabled(t *testing.T) {
+	t.Helper()
+	e2eEnabled(t)
+	if os.Getenv("SIGNAL_E2E_GROUP_INTERACTIVE") != "1" {
+		t.Skip("interactive group create test skipped (run task test:e2e:group or set SIGNAL_E2E_GROUP_INTERACTIVE=1)")
 	}
 }
 
@@ -355,4 +466,16 @@ func truncateRunes(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "…"
+}
+
+func groupHasMember(grp *signal.Group, aci string) bool {
+	if grp == nil {
+		return false
+	}
+	for _, m := range grp.Members {
+		if m.ACI == aci {
+			return true
+		}
+	}
+	return false
 }

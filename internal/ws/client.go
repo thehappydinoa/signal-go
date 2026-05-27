@@ -271,6 +271,10 @@ func (c *Client) readLoop() {
 		_, data, err := c.conn.Read(readCtx)
 		cancel()
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) && c.keepalive > 0 {
+				// Keepalive pings prove liveness; on idle reads, keep waiting.
+				continue
+			}
 			c.readErr.Store(&err)
 			c.failPending()
 			return

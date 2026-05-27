@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/thehappydinoa/signal-go/internal/group"
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	groupspb "github.com/thehappydinoa/signal-go/internal/proto/gen/groupspb"
+	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
 // ParseGroupInviteLink parses a signal.group invite URL into master key and
@@ -109,6 +111,13 @@ func (c *Client) JoinGroupViaInviteLink(ctx context.Context, inviteURL string) (
 		return nil, err
 	}
 	if _, err := c.patchGroupWithInvite(ctx, secretParams, parsed.InviteLinkPassword, actions); err != nil {
+		var werr *web.Error
+		if errors.As(err, &werr) && werr.StatusCode == 400 {
+			msg := strings.ToLower(string(werr.Body))
+			if strings.Contains(msg, "adding member already in group") {
+				return c.FetchGroup(ctx, parsed.MasterKey)
+			}
+		}
 		return nil, err
 	}
 	return c.FetchGroup(ctx, parsed.MasterKey)

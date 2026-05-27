@@ -196,11 +196,13 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
          `internal/libsignal/cgo.go` linux `#cgo LDFLAGS`. Hides the
          warning without fixing the root cause.~~ Superseded by option 1.
 
-## Phase 8 — Security audit **(internal pass done; external pass required before v0.1.0)**
+## Phase 8 — Security audit **(internal pass done; external pass targeted for v0.1.x, not a hard gate for v0.1.0)**
 
-A focused review before we cut a `v0.1.0` tag and put `signal-go` in front
-of real Signal accounts. Scope is **our Go code and our cgo boundary** —
-libsignal itself is out of scope (we trust upstream Signal). See
+A focused review as we put `signal-go` in front of real Signal accounts.
+Scope is **our Go code and our cgo boundary** — libsignal itself is out of
+scope (we trust upstream Signal). We will ship `v0.1.0` on the completed
+internal pass and continue pursuing the external audit as a `v0.1.x`
+follow-through item. See
 [ADR 0011](./docs/adr/0011-security-audit.md) for the methodology and
 [ADR 0032](./docs/adr/0032-phase-8-internal-audit.md) for the
 internal-pass record; the canonical write-up of the threat model is
@@ -276,7 +278,7 @@ below):
   - [x] Real e-mail contact for security reports — published in
         [`SECURITY.md`](./SECURITY.md) (PGP exchange on request)
 
-External review (after the internal pass is clean):
+External review (planned follow-through after the internal pass):
 
 - [ ] Engage an external auditor familiar with Signal/libsignal-FFI
       bindings (e.g. someone who reviewed `pkg/libsignalgo`)

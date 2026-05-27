@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -183,7 +184,7 @@ func (c *Client) groupsV2AuthHeader(
 	if err != nil {
 		return "", fmt.Errorf("parse ACI: %w", err)
 	}
-	pni, err := libsignal.ParseServiceIDString(c.acct.PNI)
+	pni, err := libsignal.ParseServiceIDString(normalizePNIServiceID(c.acct.PNI))
 	if err != nil {
 		return "", fmt.Errorf("parse PNI: %w", err)
 	}
@@ -206,4 +207,17 @@ func (c *Client) groupsV2AuthHeader(
 	}
 
 	return libsignal.GroupsV2AuthorizationHeader(publicParams, presentation), nil
+}
+
+func normalizePNIServiceID(pni string) string {
+	pni = strings.TrimSpace(pni)
+	if pni == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToUpper(pni), "PNI:") {
+		return "PNI:" + pni[4:]
+	}
+	// Older stores may persist a bare UUID for PNI. Explicitly prefix it so
+	// libsignal interprets the service id as PNI (not ACI).
+	return "PNI:" + pni
 }

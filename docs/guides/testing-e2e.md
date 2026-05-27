@@ -130,8 +130,9 @@ SIGNAL_GO_E2E=1 task test:e2e
 ```
 
 `task test:e2e` sets `SIGNAL_GO_E2E=1` and runs Open/Send/Recv/Group tests only
-(`TestE2E_Link` is excluded). Interactive link uses `task test:e2e:link`
-(requires `SIGNAL_E2E_LINK=1` and an empty store directory).
+(`TestE2E_Link` and `TestE2E_GroupCreateAndChat` are excluded).
+Interactive link uses `task test:e2e:link` (requires `SIGNAL_E2E_LINK=1`
+and an empty store directory).
 
 ## Tests and environment variables
 
@@ -141,6 +142,7 @@ SIGNAL_GO_E2E=1 task test:e2e
 | `TestE2E_Send` | `SIGNAL_E2E_PEER_ACI` | Sends a unique plaintext to the peer |
 | `TestE2E_Recv` | `SIGNAL_E2E_PEER_ACI` and/or `SIGNAL_E2E_RECV_CONTAINS` | **You** send a message from the peer first; test waits on `Events()` |
 | `TestE2E_GroupManagement` | `SIGNAL_E2E_GROUP_MASTER_KEY` (64 hex chars) | `FetchGroup` + `SyncGroup`; optional `SIGNAL_E2E_GROUP_SEND=1` to post a message |
+| `TestE2E_GroupCreateAndChat` | `SIGNAL_E2E_GROUP_INTERACTIVE=1`, `SIGNAL_E2E_GROUP_INVITE_URL`, `SIGNAL_E2E_PEER_ACI` | Joins a peer-created invite-link group, verifies peer membership, sends bot message, then waits for peer reply containing a token |
 | `TestE2E_Link` | `SIGNAL_E2E_LINK=1` + empty store dir | Interactive link (logs URL); skips if `signal.db` exists |
 
 Common optional variables:
@@ -166,6 +168,36 @@ Common optional variables:
    `TestE2E_GroupManagement`. Set `SIGNAL_E2E_GROUP_SEND=1` only if you
    want an extra test message in that chat.
 
+## Interactive group create/join and bidirectional chat
+
+Use this when you want an end-to-end check that a fresh group can be joined
+and both sides can chat in it.
+
+1. From the **peer account** (usually your phone), create a new Signal group.
+2. In that group, enable an invite link and copy the full `https://signal.group/...` URL.
+3. Export environment variables:
+
+```sh
+export SIGNAL_E2E_STORE_DIR=./.signal-e2e
+export SIGNAL_E2E_PASSPHRASE='your-store-passphrase'
+export SIGNAL_E2E_PEER_ACI='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+export SIGNAL_E2E_GROUP_INVITE_URL='https://signal.group/#...'
+```
+
+4. Run the interactive task (uses `go test -v` so `t.Log` prompts are visible):
+
+```sh
+task test:e2e:group
+```
+
+5. Watch for the prompt that includes `manual step: ... reply ... containing ...`.
+  From the peer account, send that reply in the group.
+6. The test passes when it receives the peer's group message carrying the token.
+
+This test intentionally requires operator interaction because creating a new
+group on the peer side and producing an invite URL cannot be done from the
+linked bot API in this repository today.
+
 ## Troubleshooting
 
 ### `expected handshake response status code 101 but got 499`
@@ -187,6 +219,30 @@ is older than the minimum version Signal accepts.
 TLS to `chat.signal.org` must succeed first (pinned Signal root; see
 [ADR 0034](../adr/0034-signal-tls-root-pinning.md)). A 499 means TLS worked but the
 server rejected the upgrade.
+
+### `PreviewGroupJoin ... web.FetchGroupJoinInfo: web: HTTP 404 Not Found`
+
+For `TestE2E_GroupCreateAndChat`, this almost always means the invite link in
+`SIGNAL_E2E_GROUP_INVITE_URL` is no longer valid on Signal's side (revoked,
+regenerated, disabled, or copied incorrectly).
+
+Fix:
+
+1. On the peer account, open the target group and re-enable invite link.
+2. Copy a fresh full `https://signal.group/#...` URL.
+3. Update `SIGNAL_E2E_GROUP_INVITE_URL` and rerun `task test:e2e:group`.
+
+### `PreviewGroupJoin ... web.FetchGroupJoinInfo: web: HTTP 403 Forbidden`
+
+For `TestE2E_GroupCreateAndChat`, this usually means the invite link exists
+but is not currently usable by the bot account (for example after prior
+join/leave/remove state).
+
+Fix:
+
+1. On the peer account, regenerate/copy a fresh full `https://signal.group/#...` URL.
+2. In group settings, clear any pending request/ban state for the bot account.
+3. Update `SIGNAL_E2E_GROUP_INVITE_URL` and rerun `task test:e2e:group`.
 
 ### How registration works (and where it can fail)
 

@@ -242,8 +242,8 @@ func TestClientStaysUpUntilReadIdleTimeout(t *testing.T) {
 	url := "ws://" + strings.TrimPrefix(srv.URL, "http://")
 
 	cli, err := Dial(context.Background(), url, &DialOptions{
-		ReadIdleTimeout:   5 * time.Second,
-		KeepaliveInterval: 1 * time.Second,
+		ReadIdleTimeout:   2 * time.Second,
+		KeepaliveInterval: 500 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -252,8 +252,8 @@ func TestClientStaysUpUntilReadIdleTimeout(t *testing.T) {
 
 	select {
 	case <-cli.Done():
-		t.Fatal("read loop exited before ReadIdleTimeout")
-	case <-time.After(3 * time.Second):
+		t.Fatal("read loop exited despite keepalive pings")
+	case <-time.After(4 * time.Second):
 	}
 }
 

@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include <stdlib.h>
 */
 import "C"
 
@@ -76,22 +77,39 @@ func CombineGroupSendEndorsements(endorsements ...[]byte) ([]byte, error) {
 	if len(endorsements) == 0 {
 		return nil, errors.New("libsignal.CombineGroupSendEndorsements: empty input")
 	}
-	ptrs := make([]C.SignalBorrowedBuffer, len(endorsements))
+	ptrs := C.malloc(C.size_t(len(endorsements)) * C.size_t(unsafe.Sizeof(C.SignalBorrowedBuffer{})))
+	if ptrs == nil {
+		return nil, errors.New("libsignal.CombineGroupSendEndorsements: malloc failed")
+	}
+	defer C.free(ptrs)
+
+	cPtrs := unsafe.Slice((*C.SignalBorrowedBuffer)(ptrs), len(endorsements))
+	allocated := make([]unsafe.Pointer, len(endorsements))
+	defer func() {
+		for _, p := range allocated {
+			if p != nil {
+				C.free(p)
+			}
+		}
+	}()
+
 	for i, e := range endorsements {
 		if len(e) == 0 {
 			return nil, fmt.Errorf("libsignal.CombineGroupSendEndorsements: empty endorsement at index %d", i)
 		}
-		ptrs[i] = borrowed(e)
+		p := C.CBytes(e)
+		allocated[i] = p
+		cPtrs[i] = C.SignalBorrowedBuffer{
+			base:   (*C.uchar)(p),
+			length: C.size_t(len(e)),
+		}
 	}
 	slice := C.SignalBorrowedSliceOfBuffers{
-		base:   (*C.SignalBorrowedBuffer)(unsafe.Pointer(&ptrs[0])),
-		length: C.size_t(len(ptrs)),
+		base:   (*C.SignalBorrowedBuffer)(ptrs),
+		length: C.size_t(len(cPtrs)),
 	}
 	var buf C.SignalOwnedBuffer
 	err := checkError(C.signal_group_send_endorsement_combine(&buf, slice))
-	for _, e := range endorsements {
-		keepAlive(e)
-	}
 	if err != nil {
 		return nil, err
 	}

@@ -4,11 +4,27 @@ dotenv: ['.env']
 
 vars:
   LIBSIGNAL_VERSION: v0.94.1
-  GOFLAGS: -trimpath
+  # -trimpath only for build outputs (reproducibility + no dev paths in binaries).
+  # Tests don't need it and it breaks cgo preprocessing on Windows (Go cgo/trimpath
+  # interaction bug on windows/amd64 with go test).
+  BUILDFLAGS: -trimpath
+  # Race detector: enabled everywhere except Windows, where ThreadSanitizer cannot
+  # allocate its shadow memory (ERROR_INVALID_PARAMETER / error code 87).
+  _GOOS:
+    sh: go env GOOS
+  RACE: '{{if ne ._GOOS "windows"}}-race{{end}}'
   COVER_THRESHOLD: 0  # tighten as we grow; ADR 0006 target is 80%
 
 env:
   CGO_ENABLED: '1'
+  # Resolve the full compiler path via dev-env.sh so the Go toolchain can
+  # find gcc even on a cold build cache (where runtime/cgo must be compiled
+  # from scratch and a bare "gcc" won't resolve without mingw64 on PATH).
+  # On Linux/macOS dev-env.sh is effectively a no-op for CC/CXX.
+  CC:
+    sh: bash -c 'source scripts/dev-env.sh 2>/dev/null && echo "${CC:-gcc}"'
+  CXX:
+    sh: bash -c 'source scripts/dev-env.sh 2>/dev/null && echo "${CXX:-g++}"'
 
 tasks:
   default:
@@ -55,28 +71,33 @@ tasks:
     desc: Build all packages and the demo CLI (binary at bin/signal-go)
     deps: [libsignal]
     cmds:
-      - go build {{.GOFLAGS}} ./...
-      - go build {{.GOFLAGS}} -o bin/signal-go ./cmd/signal-go
+      - go build {{.BUILDFLAGS}} ./...
+      - go build {{.BUILDFLAGS}} -o bin/signal-go ./cmd/signal-go
 
   test:
     desc: Run unit tests
     deps: [libsignal]
     cmds:
-      - go test {{.GOFLAGS}} -race -count=1 ./...
+      - go test {{.RACE}} -count=1 ./...
 
   test:component:
     desc: Run component tests (require fake Signal server)
     deps: [libsignal]
     cmds:
-      - go test {{.GOFLAGS}} -race -count=1 -tags=component ./...
+      - go test {{.RACE}} -count=1 -tags=component ./...
 
   test:e2e:
-    desc: Run end-to-end tests against real chat.signal.org (excludes interactive link)
+    desc: Run end-to-end tests against real chat.signal.org (excludes interactive link/group-create)
     deps: [libsignal]
     env:
       SIGNAL_GO_E2E: '1'
+      GOTMPDIR: ./.build/tmp
+      TMPDIR: ./.build/tmp
+      TMP: ./.build/tmp
+      TEMP: ./.build/tmp
     cmds:
-      - go test {{.GOFLAGS}} -race -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement)$' ./...
+      - mkdir -p .build/tmp
+      - go test {{.RACE}} -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement)$' ./...
 
   test:e2e:link:
     desc: Interactive e2e device link (requires empty SIGNAL_E2E_STORE_DIR; sets SIGNAL_E2E_LINK=1)
@@ -84,8 +105,27 @@ tasks:
     env:
       SIGNAL_GO_E2E: '1'
       SIGNAL_E2E_LINK: '1'
+      GOTMPDIR: ./.build/tmp
+      TMPDIR: ./.build/tmp
+      TMP: ./.build/tmp
+      TEMP: ./.build/tmp
     cmds:
-      - go test {{.GOFLAGS}} -race -count=1 -tags=e2e -timeout=15m -run '^TestE2E_Link$' ./pkg/signal/...
+      - mkdir -p .build/tmp
+      - go test {{.RACE}} -count=1 -tags=e2e -timeout=15m -run '^TestE2E_Link$' ./pkg/signal/...
+
+  test:e2e:group:
+    desc: Interactive e2e group create/join + bidirectional chat via invite link (runs with -v)
+    deps: [libsignal]
+    env:
+      SIGNAL_GO_E2E: '1'
+      SIGNAL_E2E_GROUP_INTERACTIVE: '1'
+      GOTMPDIR: ./.build/tmp
+      TMPDIR: ./.build/tmp
+      TMP: ./.build/tmp
+      TEMP: ./.build/tmp
+    cmds:
+      - mkdir -p .build/tmp
+      - go test {{.RACE}} -v -count=1 -tags=e2e -timeout=15m -run '^TestE2E_GroupCreateAndChat$' ./pkg/signal/...
 
   cover:
     desc: Run tests with coverage report
@@ -95,7 +135,7 @@ tasks:
         rm -f coverage.out coverage.tmp
         echo "mode: atomic" > coverage.out
         for pkg in $(go list -f '{{`{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}`}}' ./...); do
-          go test {{.GOFLAGS}} -race -count=1 -coverprofile=coverage.tmp -covermode=atomic "$pkg"
+          go test {{.RACE}} -count=1 -coverprofile=coverage.tmp -covermode=atomic "$pkg"
           if [ -f coverage.tmp ]; then
             tail -n +2 coverage.tmp >> coverage.out
             rm coverage.tmp
