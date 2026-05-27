@@ -18,12 +18,81 @@ env:
   GO_VERSION: '1.25'
 
 jobs:
+  detect_changes:
+    name: Detect CI-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.detect.outputs.run_ci }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        name: Check changed paths
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          case "$EVENT_NAME" in
+            pull_request)
+              base="$PR_BASE_SHA"
+              head="$PR_HEAD_SHA"
+              ;;
+            push)
+              base="$PUSH_BEFORE_SHA"
+              head="$PUSH_AFTER_SHA"
+              ;;
+            *)
+              # Defensive default: run full CI for unknown events.
+              echo "run_ci=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          # First push on a branch may not have a usable parent SHA.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "run_ci=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$base" "$head")"
+
+          if [ -n "$changed_files" ]; then
+            echo "Changed files between $base and $head:"
+            echo "$changed_files"
+          else
+            echo "No changed files detected between $base and $head."
+          fi
+
+          if echo "$changed_files" | grep -Eq '^(\.github/workflows/ci\.yml|\.golangci\.yml|Taskfile\.yml|go\.mod|go\.sum|cmd/|internal/|pkg/|proto/|scripts/)'; then
+            echo "run_ci=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_ci=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: CI scope summary
+        run: |
+          if [ "${{ steps.detect.outputs.run_ci }}" = "true" ]; then
+            echo "Running full CI: CI-relevant files changed."
+          else
+            echo "Skipping heavy CI jobs: no CI-relevant files changed."
+          fi
+
   # Builds libsignal_ffi.a (or restores from cache) and uploads it as a
   # workflow artifact. Downstream jobs download instead of rebuilding.
   # See ADR 0013 for the caching rationale.
   libsignal:
     name: Build libsignal_ffi.a
     runs-on: ubuntu-latest
+    needs: detect_changes
+    if: needs.detect_changes.outputs.run_ci == 'true'
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -76,7 +145,8 @@ jobs:
   lint:
     name: Lint (golangci-lint)
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -106,7 +176,8 @@ jobs:
   vet:
     name: go vet
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -125,7 +196,8 @@ jobs:
   test:
     name: Test (race)
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -144,7 +216,8 @@ jobs:
   staticcheck:
     name: staticcheck
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -171,7 +244,8 @@ jobs:
   cover:
     name: Coverage
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -191,7 +265,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -216,7 +291,8 @@ jobs:
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
-    needs: libsignal
+    needs: [detect_changes, libsignal]
+    if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
       - uses: actions/checkout@v6
 

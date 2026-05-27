@@ -133,7 +133,10 @@ three-ring testing strategy.
 GitHub Actions workflows under [`.github/workflows/`](./.github/workflows/)
 ([ADR 0013](./docs/adr/0013-ci-github-actions.md)):
 
-- **`ci.yml`** runs on every push to `main` and every PR:
+- **`ci.yml`** runs on every push to `main` and every PR, but heavy
+   jobs run only when CI-relevant paths change (`cmd/`, `internal/`,
+   `pkg/`, `proto/`, `scripts/`, `go.mod`, `go.sum`, `Taskfile.yml`,
+   `.golangci.yml`, and `.github/workflows/ci.yml`):
   - `libsignal` (one-shot, cached): builds `libsignal_ffi.a` from the
     pinned tag and uploads it as a workflow artifact
   - `lint` — golangci-lint against the committed `.golangci.yml`
@@ -141,10 +144,10 @@ GitHub Actions workflows under [`.github/workflows/`](./.github/workflows/)
   - `test` — `go test -race -count=1 ./...`
   - `build` — `go build ./...` + `bin/signal-go` + smoke-test `--help`
   - `govulncheck` — vulnerability scan against the dep tree
-- **`codeql.yml`** runs CodeQL's `security-extended` query set on push,
-  PR, and weekly schedule. Findings land in the *Security* tab; PRs
-  aren't blocked on it.
-- **`dependabot.yml`** — weekly bumps for Go modules + Actions
+- **`codeql.yml`** runs CodeQL's `security-extended` query set on a
+  weekly schedule (+ manual dispatch). Findings land in the *Security*
+  tab; PRs aren't blocked on it.
+- **`.github/dependabot.yml`** — weekly bumps for Go modules + Actions
   versions. New direct deps still need an ADR 0002 allowlist update.
 
 Locally these correspond to:
