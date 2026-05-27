@@ -221,7 +221,8 @@ below):
   - [x] We link only the release `libsignal_ffi.a`; no `*-testing*`
         variant reaches production (`scripts/build-libsignal.sh` pins
         `cargo build --release`).
-  - [ ] Long-running receive `-memprofile` bake. Methodology recorded in
+  - [ ] Long-running receive `-memprofile` bake (`examples/echo-bot run` is a
+        convenient soak harness). Methodology recorded in
         [`docs/security/threat-model.md`](./docs/security/threat-model.md);
         bake gated on maintainer bandwidth.
   - [ ] `valgrind --tool=memcheck` or `-fsanitize=address` sweep of a
