@@ -277,9 +277,9 @@ func readPassphrase(file string) (string, error) {
 	return string(pw), nil
 }
 
-func truncate(s string, max int) string {
-	if max <= 0 || len(s) <= max {
+func truncate(s string, limit int) string {
+	if limit <= 0 || len(s) <= limit {
 		return s
 	}
-	return s[:max] + "…"
+	return s[:limit] + "…"
 }
