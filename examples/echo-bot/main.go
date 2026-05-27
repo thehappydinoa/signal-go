@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/thehappydinoa/signal-go/internal/cliargs"
+	"github.com/thehappydinoa/signal-go/internal/profile"
 	"github.com/thehappydinoa/signal-go/internal/qrterminal"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
@@ -47,6 +48,8 @@ func usage(w *os.File) {
 Usage:
   echo-bot link [flags]   Link as a Signal secondary device into a SQLite store
   echo-bot run  [flags]   Run an echo bot (reply to inbound 1:1 messages)
+
+Profiling (run): -memprofile / -cpuprofile write on exit (see README).
 
 Typical flow:
   go run ./examples/echo-bot link -store .signal-bot
@@ -142,13 +145,39 @@ func runLink(args []string) int {
 	return 0
 }
 
+func setupRunProfiling(memProfile, cpuProfile *string) (func(), error) {
+	memPath, cpuPath, err := profile.PathsFromFlags(memProfile, cpuProfile)
+	if err != nil {
+		return nil, err
+	}
+	prof, err := profile.Start(memPath, cpuPath)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		if err := prof.Close(); err != nil {
+			log.Printf("write profiles: %v", err)
+		} else if memPath != "" || cpuPath != "" {
+			log.Printf("profiles written (mem=%q cpu=%q)", memPath, cpuPath)
+		}
+	}, nil
+}
+
 func runBot(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	storeDir, passphraseFile, plaintext := cliargs.StoreBind(fs, ".signal-bot")
 	clientPreset, userAgent := cliargs.ClientBind(fs)
 	replyPrefix := fs.String("reply-prefix", "echo: ", "prefix added to replies")
 	basicAuth := fs.Bool("basic-auth", false, "send replies with basic auth (not sealed sender); use if the peer never receives echoes")
+	memProfile, cpuProfile := profile.Bind(fs)
 	_ = fs.Parse(args)
+
+	flushProf, err := setupRunProfiling(memProfile, cpuProfile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+	defer flushProf()
 
 	client, err := cliargs.ClientFromFlags(clientPreset, userAgent)
 	if err != nil {

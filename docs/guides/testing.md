@@ -50,6 +50,9 @@ against a pre-linked `sqlstore` directory.
 Full setup, env vars, and a manual runbook:
 [`testing-e2e.md`](./testing-e2e.md).
 
+Long-running receive/memory soaks use [`examples/echo-bot`](../../examples/echo-bot/)
+with `-memprofile` / `-cpuprofile` — see [`profiling.md`](./profiling.md).
+
 Quick checklist:
 
 - Linked store: `SIGNAL_E2E_STORE_DIR` (with `signal.db` from
