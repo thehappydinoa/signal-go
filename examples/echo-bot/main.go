@@ -5,7 +5,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -13,17 +12,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
-	"golang.org/x/term"
-
+	"github.com/thehappydinoa/signal-go/internal/cliargs"
 	"github.com/thehappydinoa/signal-go/internal/qrterminal"
-	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
-	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -64,29 +58,25 @@ Run 'echo-bot <subcommand> -h' for subcommand flags.
 
 func runLink(args []string) int {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
-	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the user to scan")
-	clientProfile := fs.String("client", string(useragent.SignalGo), "client User-Agent preset: signal-go, android, ios, desktop-linux, desktop-macos, desktop-windows")
-	userAgent := fs.String("user-agent", "", "override User-Agent / X-Signal-Agent (disables -client preset)")
-	storeDir := fs.String("store", ".signal-bot", "directory where account state is persisted")
+	timeout, noQR := cliargs.LinkBind(fs)
 	deviceName := fs.String("name", "echo-bot", "device name shown in the user's linked devices list")
-	passphraseFile := fs.String("passphrase-file", "", "path to a file containing the passphrase (newline-trimmed); overrides interactive prompt")
-	noQR := fs.Bool("no-qr", false, "do not render a QR code in the terminal (URL is still printed)")
-	plaintext := fs.Bool("plaintext", false, "EXPERIMENTAL: do NOT encrypt account blobs. Test-only.")
+	storeDir, passphraseFile, plaintext := cliargs.StoreBind(fs, ".signal-bot")
+	clientPreset, userAgent := cliargs.ClientBind(fs)
 	_ = fs.Parse(args)
 
-	profile, err := useragent.Parse(*clientProfile)
+	client, err := cliargs.ClientFromFlags(clientPreset, userAgent)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid -client: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 2
 	}
 
-	dir, err := filepath.Abs(*storeDir)
+	store, err := cliargs.StoreFromFlags(storeDir, passphraseFile, plaintext)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve store dir: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
 
-	db, err := openDB(dir, *passphraseFile, *plaintext)
+	db, err := store.OpenSQLStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open store: %v\n", err)
 		return 1
@@ -94,7 +84,7 @@ func runLink(args []string) int {
 	defer func() { _ = db.Close() }()
 
 	if existing, err := db.LoadAccount(); err == nil {
-		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", dir, existing.ACI, existing.DeviceID)
+		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", store.Dir, existing.ACI, existing.DeviceID)
 		fmt.Fprintln(os.Stderr, "Delete the store directory if you want to re-link.")
 		return 1
 	} else if !errors.Is(err, sg.ErrNotLinked) {
@@ -109,8 +99,8 @@ func runLink(args []string) int {
 	go func() { <-sigCh; cancel() }()
 
 	linked, err := sg.Link(ctx, sg.LinkOptions{
-		ClientProfile: profile,
-		UserAgent:     *userAgent,
+		ClientProfile: client.Profile,
+		UserAgent:     client.UserAgent,
 		Store:         db,
 		SignalStores:  db.SignalStores(),
 		DeviceName:    *deviceName,
@@ -143,7 +133,7 @@ func runLink(args []string) int {
 	fmt.Printf("  ACI:       %s\n", linked.ACI)
 	fmt.Printf("  number:    %s\n", linked.Number)
 	fmt.Printf("  deviceID:  %d\n", linked.DeviceID)
-	fmt.Printf("  store:     %s\n", dir)
+	fmt.Printf("  store:     %s\n", store.Dir)
 	if db.IsEncrypted() {
 		fmt.Println("  encrypted: yes (AES-256-GCM)")
 	} else {
@@ -154,28 +144,25 @@ func runLink(args []string) int {
 
 func runBot(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	storeDir := fs.String("store", ".signal-bot", "directory where account state is persisted")
-	passphraseFile := fs.String("passphrase-file", "", "path to a file containing the passphrase (newline-trimmed); overrides interactive prompt")
-	plaintext := fs.Bool("plaintext", false, "EXPERIMENTAL: do NOT encrypt account blobs. Test-only.")
-	clientProfile := fs.String("client", string(useragent.SignalGo), "client User-Agent preset: signal-go, android, ios, desktop-linux, desktop-macos, desktop-windows")
-	userAgent := fs.String("user-agent", "", "override User-Agent / X-Signal-Agent (disables -client preset)")
+	storeDir, passphraseFile, plaintext := cliargs.StoreBind(fs, ".signal-bot")
+	clientPreset, userAgent := cliargs.ClientBind(fs)
 	replyPrefix := fs.String("reply-prefix", "echo: ", "prefix added to replies")
 	basicAuth := fs.Bool("basic-auth", false, "send replies with basic auth (not sealed sender); use if the peer never receives echoes")
 	_ = fs.Parse(args)
 
-	profile, err := useragent.Parse(*clientProfile)
+	client, err := cliargs.ClientFromFlags(clientPreset, userAgent)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid -client: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 2
 	}
 
-	dir, err := filepath.Abs(*storeDir)
+	store, err := cliargs.StoreFromFlags(storeDir, passphraseFile, plaintext)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve store dir: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
 
-	db, err := openDB(dir, *passphraseFile, *plaintext)
+	db, err := store.OpenSQLStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open store: %v\n", err)
 		return 1
@@ -188,13 +175,13 @@ func runBot(args []string) int {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() { <-sigCh; cancel() }()
 
-	client, err := sg.Open(ctx, sg.OpenOptions{
+	sgClient, err := sg.Open(ctx, sg.OpenOptions{
 		AccountStore:           db,
 		SignalStores:           db.SignalStores(),
 		GroupDistributionStore: db.GroupDistributionStore(),
 		GroupEndorsementStore:  db.GroupEndorsementStore(),
-		ClientProfile:          profile,
-		UserAgent:              *userAgent,
+		ClientProfile:          client.Profile,
+		UserAgent:              client.UserAgent,
 		AutoSyncStorage:        true,
 		AutoSyncGroupUpdates:   true,
 	})
@@ -202,10 +189,10 @@ func runBot(args []string) int {
 		fmt.Fprintf(os.Stderr, "open client: %v\n", err)
 		return 1
 	}
-	defer func() { _ = client.Close() }()
+	defer func() { _ = sgClient.Close() }()
 
-	selfACI := client.Account().ACI
-	log.Printf("connected (aci=%s device_id=%d go=%s)", selfACI, client.Account().DeviceID, runtime.Version())
+	selfACI := sgClient.Account().ACI
+	log.Printf("connected (aci=%s device_id=%d go=%s)", selfACI, sgClient.Account().DeviceID, runtime.Version())
 	if *basicAuth {
 		log.Printf("basic-auth mode: replies use identifiable send (not sealed sender)")
 	}
@@ -216,10 +203,10 @@ func runBot(args []string) int {
 		case <-ctx.Done():
 			log.Printf("shutting down")
 			return 0
-		case <-client.Done():
+		case <-sgClient.Done():
 			log.Printf("connection closed")
 			return 0
-		case ev, ok := <-client.Events():
+		case ev, ok := <-sgClient.Events():
 			if !ok {
 				log.Printf("event channel closed")
 				return 0
@@ -239,7 +226,7 @@ func runBot(args []string) int {
 				}
 				reply := *replyPrefix + e.Body
 				log.Printf("recv msg sender=%s device=%d body=%q", e.Sender, e.SenderDevice, truncate(e.Body, 160))
-				if err := sendReply(ctx, client, e.Sender, reply, *basicAuth); err != nil {
+				if err := sendReply(ctx, sgClient, e.Sender, reply, *basicAuth); err != nil {
 					log.Printf("send failed recipient=%s err=%v", e.Sender, err)
 				}
 			case *sg.DecryptionErrorEvent:
@@ -249,8 +236,6 @@ func runBot(args []string) int {
 	}
 }
 
-// sendReply delivers text to recipientACI. Unless basicAuth is set, it tries
-// FetchProfile once so pkg/signal can use sealed sender only when the peer allows it.
 func sendReply(ctx context.Context, client *sg.Client, recipientACI, text string, basicAuth bool) error {
 	if basicAuth {
 		client.SetRecipientProfileKey(recipientACI, nil)
@@ -264,41 +249,6 @@ func sendReply(ctx context.Context, client *sg.Client, recipientACI, text string
 	}
 	log.Printf("replied recipient=%s ts=%s body=%q", recipientACI, receipt.Timestamp.Format(time.RFC3339), truncate(text, 160))
 	return nil
-}
-
-func openDB(dir, passphraseFile string, plaintext bool) (*sqlstore.DB, error) {
-	if plaintext {
-		return sqlstore.Open(dir)
-	}
-	passphrase, err := readPassphrase(passphraseFile)
-	if err != nil {
-		return nil, err
-	}
-	return sqlstore.OpenWithPassphrase(dir, passphrase)
-}
-
-func readPassphrase(file string) (string, error) {
-	if file != "" {
-		raw, err := os.ReadFile(file)
-		if err != nil {
-			return "", fmt.Errorf("read passphrase file: %w", err)
-		}
-		return strings.TrimRight(strings.TrimRight(string(raw), "\n"), "\r"), nil
-	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return "", errors.New("no -passphrase-file given and stdin is not a terminal; pipe a passphrase via -passphrase-file=<path>")
-	}
-	fmt.Fprint(os.Stderr, "Store passphrase (used to encrypt credentials at rest): ")
-	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
-	if err != nil {
-		return "", fmt.Errorf("read passphrase: %w", err)
-	}
-	if len(pw) == 0 {
-		return "", errors.New("empty passphrase")
-	}
-	_ = bufio.NewReader(os.Stdin)
-	return string(pw), nil
 }
 
 func truncate(s string, limit int) string {

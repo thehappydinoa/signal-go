@@ -9,7 +9,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -17,20 +16,13 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"syscall"
-	"time"
-
-	"golang.org/x/term"
 
 	"github.com/thehappydinoa/signal-go/internal/account"
+	"github.com/thehappydinoa/signal-go/internal/cliargs"
 	"github.com/thehappydinoa/signal-go/internal/qrterminal"
-	"github.com/thehappydinoa/signal-go/internal/store/seal"
-	"github.com/thehappydinoa/signal-go/internal/store/sqlstore"
-	"github.com/thehappydinoa/signal-go/internal/web/useragent"
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 )
 
@@ -86,29 +78,25 @@ func printVersion(w io.Writer) {
 
 func runLink(args []string) int {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
-	timeout := fs.Duration("timeout", 5*time.Minute, "how long to wait for the user to scan")
-	clientProfile := fs.String("client", string(useragent.SignalGo), "client User-Agent preset: signal-go, android, ios, desktop-linux, desktop-macos, desktop-windows")
-	userAgent := fs.String("user-agent", "", "override User-Agent / X-Signal-Agent (disables -client preset)")
-	storeDir := fs.String("store", ".signal-data", "directory where account state is persisted (SQLite signal.db)")
+	timeout, noQR := cliargs.LinkBind(fs)
 	deviceName := fs.String("name", "", "device name shown in the user's linked devices list")
-	passphraseFile := fs.String("passphrase-file", "", "path to a file containing the passphrase (newline-trimmed); overrides interactive prompt")
-	noQR := fs.Bool("no-qr", false, "do not render a QR code in the terminal (URL is still printed)")
-	plaintext := fs.Bool("plaintext", false, "EXPERIMENTAL: do NOT encrypt the store on disk. Test-only.")
+	storeDir, passphraseFile, plaintext := cliargs.StoreBind(fs, ".signal-data")
+	clientPreset, userAgent := cliargs.ClientBind(fs)
 	_ = fs.Parse(args)
 
-	profile, err := useragent.Parse(*clientProfile)
+	client, err := cliargs.ClientFromFlags(clientPreset, userAgent)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid -client: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 2
 	}
 
-	dir, err := filepath.Abs(*storeDir)
+	store, err := cliargs.StoreFromFlags(storeDir, passphraseFile, plaintext)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve store dir: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
 
-	db, err := openStore(dir, *passphraseFile, *plaintext)
+	db, err := store.OpenSQLStore()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open store: %v\n", err)
 		return 1
@@ -116,11 +104,11 @@ func runLink(args []string) int {
 	defer func() { _ = db.Close() }()
 
 	if existing, err := db.LoadAccount(); err == nil {
-		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", dir, existing.ACI, existing.DeviceID)
+		fmt.Fprintf(os.Stderr, "already linked at %s (ACI=%s, deviceID=%d).\n", store.Dir, existing.ACI, existing.DeviceID)
 		fmt.Fprintln(os.Stderr, "Delete the store directory if you want to re-link.")
 		return 1
 	} else if !errors.Is(err, account.ErrNotLinked) {
-		if errors.Is(err, seal.ErrWrongPassphrase) {
+		if cliargs.IsWrongPassphrase(err) {
 			fmt.Fprintln(os.Stderr, "wrong passphrase (or the store is corrupted).")
 		} else {
 			fmt.Fprintf(os.Stderr, "store: %v\n", err)
@@ -135,8 +123,8 @@ func runLink(args []string) int {
 	go func() { <-sigCh; cancel() }()
 
 	la, err := sg.Link(ctx, sg.LinkOptions{
-		ClientProfile: profile,
-		UserAgent:     *userAgent,
+		ClientProfile: client.Profile,
+		UserAgent:     client.UserAgent,
 		Store:         db,
 		SignalStores:  db.SignalStores(),
 		DeviceName:    *deviceName,
@@ -169,47 +157,11 @@ func runLink(args []string) int {
 	fmt.Printf("  PNI:       %s\n", la.PNI)
 	fmt.Printf("  number:    %s\n", la.Number)
 	fmt.Printf("  deviceID:  %d\n", la.DeviceID)
-	fmt.Printf("  store:     %s\n", dir)
+	fmt.Printf("  store:     %s\n", store.Dir)
 	if db.IsEncrypted() {
 		fmt.Println("  encrypted: yes (AES-256-GCM)")
 	} else {
 		fmt.Println("  encrypted: NO — plaintext mode (test only)")
 	}
 	return 0
-}
-
-func openStore(dir, passphraseFile string, plaintext bool) (*sqlstore.DB, error) {
-	if plaintext {
-		fmt.Fprintln(os.Stderr, "WARNING: -plaintext requested; credentials will be stored unencrypted.")
-		return sqlstore.Open(dir)
-	}
-	passphrase, err := readPassphrase(passphraseFile)
-	if err != nil {
-		return nil, err
-	}
-	return sqlstore.OpenWithPassphrase(dir, passphrase)
-}
-
-func readPassphrase(file string) (string, error) {
-	if file != "" {
-		raw, err := os.ReadFile(file)
-		if err != nil {
-			return "", fmt.Errorf("read passphrase file: %w", err)
-		}
-		return strings.TrimRight(strings.TrimRight(string(raw), "\n"), "\r"), nil
-	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return "", errors.New("no -passphrase-file given and stdin is not a terminal; pipe a passphrase via -passphrase-file=<path>")
-	}
-	fmt.Fprint(os.Stderr, "Store passphrase (used to encrypt credentials at rest): ")
-	pw1, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
-	if err != nil {
-		return "", fmt.Errorf("read passphrase: %w", err)
-	}
-	if len(pw1) == 0 {
-		return "", errors.New("empty passphrase")
-	}
-	_ = bufio.NewReader(os.Stdin)
-	return string(pw1), nil
 }

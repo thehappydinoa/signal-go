@@ -71,12 +71,21 @@ tasks:
       - go test {{.GOFLAGS}} -race -count=1 -tags=component ./...
 
   test:e2e:
-    desc: Run end-to-end tests against real chat.signal.org (manual; gated)
+    desc: Run end-to-end tests against real chat.signal.org (excludes interactive link)
     deps: [libsignal]
     env:
       SIGNAL_GO_E2E: '1'
     cmds:
-      - go test {{.GOFLAGS}} -race -count=1 -tags=e2e -timeout=10m ./...
+      - go test {{.GOFLAGS}} -race -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement)$' ./...
+
+  test:e2e:link:
+    desc: Interactive e2e device link (requires empty SIGNAL_E2E_STORE_DIR; sets SIGNAL_E2E_LINK=1)
+    deps: [libsignal]
+    env:
+      SIGNAL_GO_E2E: '1'
+      SIGNAL_E2E_LINK: '1'
+    cmds:
+      - go test {{.GOFLAGS}} -race -count=1 -tags=e2e -timeout=15m -run '^TestE2E_Link$' ./pkg/signal/...
 
   cover:
     desc: Run tests with coverage report
