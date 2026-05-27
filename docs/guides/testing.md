@@ -59,6 +59,38 @@ Quick checklist:
 - Recv: send a message from the peer, set `SIGNAL_E2E_RECV_CONTAINS`
 - Group: `SIGNAL_E2E_GROUP_MASTER_KEY` (64 hex chars)
 
+## Validating wire-protocol changes
+
+Some behaviour — device linking, prekey upload, the chat websocket — is
+defined by Signal's server, which we can't unit-test against. A wrong
+assumption about the wire format passes every local test and only fails in
+production. We validate these changes in layers, cheapest first:
+
+0. **Spec from the reference, by triangulation.** Treat signal-cli /
+   libsignal-service-java as the protocol source of truth, and cross-check
+   against [Signal-Server](https://github.com/signalapp/Signal-Server) when
+   the two might disagree. One source can be misread; agreement between the
+   client and the server is the bar. (Example: linking is REST
+   `PUT /v1/devices/link`, Basic-authed with the **e164 number** as the
+   username, provisioning code in the body as `verificationCode`, with
+   `attachmentBackfill` + `spqr` capabilities — confirmed in both repos.)
+1. **Static**: `gofmt`, `go build`, `go vet`. Note cgo packages link only
+   once `libsignal_ffi.a` is built (`task libsignal` / CI), so a pure-Go
+   `go build ./internal/web` is the most you can compile without it.
+2. **Contract unit tests**: assert the exact bytes we emit — method, path,
+   the *decoded* Authorization username, capability keys, body fields — not
+   just "a request was made". The link-auth bug shipped because the test
+   only checked for a `Basic ` prefix; `link_test.go` now decodes the header
+   and asserts the e164. A fake only catches a wrong claim if you assert the
+   claim.
+3. **CI**: builds libsignal and runs the `-race` suite + govulncheck — the
+   first place cgo packages compile and the full suite runs.
+4. **Live e2e** (gated): the only layer that proves the server *accepts* the
+   request. A change to a server-facing request is not "done" until one live
+   run passes — see [testing-e2e.md](./testing-e2e.md) for the runbook and
+   the status-code → cause map (403 = token, 422 = capabilities/prekeys,
+   499 = stale User-Agent).
+
 ## Adding tests for a new package
 
 We default to table-driven tests in the same package
