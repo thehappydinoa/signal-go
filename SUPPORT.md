@@ -40,10 +40,9 @@ Do not file public issues for vulnerabilities. Follow [SECURITY.md](./SECURITY.m
 - Initial triage target for support/bug issues: within 7 days.
 - We may ask for additional logs or a minimal reproduction before taking
   action.
-- Pre-alpha caveat: APIs and behavior may change quickly before v0.1.0.
+- Early `v0.x` caveat: APIs and behavior may still change as we harden the
+  release line.
 
 ## Supported versions
 
-Until v0.1.0, support is best-effort on `main`.
-
-After v0.1.0, this file will include an explicit support matrix.
+Support is best-effort on the latest `v0.1.x` release and `main`.

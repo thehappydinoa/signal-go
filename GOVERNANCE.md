@@ -29,6 +29,6 @@ signal-go is currently maintainer-led.
 
 ## Scope and stability
 
-- Until v0.1.0, the project is pre-alpha and APIs may evolve quickly.
+- The project is in the early `v0.x` lifecycle and APIs may still evolve.
 - We aim to avoid unnecessary breaking changes, but we prioritize
-  correctness and security while the API is still settling.
+  correctness and security while the API continues to harden.
