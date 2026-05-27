@@ -267,14 +267,14 @@ func (c *Client) keepaliveLoop() {
 func (c *Client) readLoop() {
 	defer close(c.done)
 	for {
-		readCtx, cancel := context.WithTimeout(context.Background(), c.readIdle)
+		readCtx := context.Background()
+		cancel := func() {}
+		if c.keepalive <= 0 {
+			readCtx, cancel = context.WithTimeout(readCtx, c.readIdle)
+		}
 		_, data, err := c.conn.Read(readCtx)
 		cancel()
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) && c.keepalive > 0 {
-				// Keepalive pings prove liveness; on idle reads, keep waiting.
-				continue
-			}
 			c.readErr.Store(&err)
 			c.failPending()
 			return
