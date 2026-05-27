@@ -182,9 +182,10 @@ func (c *Client) sendContent(
 
 	c.mu.Lock()
 	uak := c.knownUAKs[recipientACI]
+	allowSealed := c.allowSealedSender[recipientACI]
 	c.mu.Unlock()
 
-	if len(uak) > 0 {
+	if len(uak) > 0 && allowSealed {
 		if cert, certErr := c.cachedSenderCert(ctx, creds); certErr == nil {
 			return c.deliverSealed(ctx, creds, recipientACI, addrs, padded, ts, opts, cert, uak)
 		}

@@ -129,6 +129,7 @@ func (c *Client) SetRecipientProfileKey(aci string, profileKey []byte) {
 		c.mu.Lock()
 		delete(c.knownProfileKeys, aci)
 		delete(c.knownUAKs, aci)
+		delete(c.allowSealedSender, aci)
 		c.mu.Unlock()
 		return
 	}

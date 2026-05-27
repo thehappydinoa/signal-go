@@ -140,11 +140,15 @@ type Client struct {
 	storageWebc *web.Client
 	stores      store.SignalStores
 
-	// mu guards knownDevices, knownUAKs, and knownProfileKeys.
+	// mu guards knownDevices, knownUAKs, knownProfileKeys, and allowSealedSender.
 	mu               sync.Mutex
 	knownDevices     map[string][]uint32 // recipientACI → device ID set
 	knownUAKs        map[string][]byte   // recipientACI → 16-byte unidentified access key
 	knownProfileKeys map[string][]byte   // recipientACI → 32-byte profile key
+	// allowSealedSender is true only after [Client.FetchProfile] confirms the
+	// peer allows unrestricted unidentified access. Inbound profileKey alone
+	// does not set this — sealed-sender send requires the flag.
+	allowSealedSender map[string]bool
 
 	// groupAuthMu guards the zkgroup auth credential cache.
 	groupAuthMu    sync.Mutex
