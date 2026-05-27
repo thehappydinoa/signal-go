@@ -118,9 +118,13 @@ patch_gnu_stack() {
     for obj in *.o; do
       [[ -f "$obj" ]] || continue
       if ! readelf -S "$obj" 2>/dev/null | grep -q '\.note\.GNU-stack'; then
-        objcopy --add-section .note.GNU-stack=/dev/null "$obj" "$obj.patched"
-        mv "$obj.patched" "$obj"
-        patched=$((patched + 1))
+        if objcopy --add-section .note.GNU-stack=/dev/null "$obj" "$obj.patched"; then
+          mv "$obj.patched" "$obj"
+          patched=$((patched + 1))
+        else
+          echo ">> warning: objcopy failed to patch $obj; leaving as-is" >&2
+          rm -f "$obj.patched" || true
+        fi
       fi
     done
     if ls *.o >/dev/null 2>&1; then
