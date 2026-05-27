@@ -45,7 +45,9 @@ Design rationale: [ADR 0033](../adr/0033-release-pipeline.md).
 
 ## Create the tag (GitHub Actions)
 
-1. Open **Actions → Create release tag → Run workflow**.
+1. Open **Actions → Create release tag → Run workflow**. Leave **Use workflow
+   from** set to `main` — the job only runs from the default branch and is a
+   no-op (skipped) if dispatched from any other branch.
 2. Inputs:
    - **version** — `0.1.0-rc2` or `v0.1.0-rc2` (workflow normalizes to `v…`).
    - **ref** — usually `main` (branch or full SHA).
