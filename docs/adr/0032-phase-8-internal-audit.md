@@ -100,7 +100,8 @@ work — every change shipped in the PR that lands this ADR:
 - **Pro**: every internal-review checkbox in [ROADMAP §
   "Phase 8"](../../ROADMAP.md#phase-8--security-audit-internal-pass-done-external-pass-required-before-v010)
   except the optional `-race -count=10` matrix and the valgrind/ASAN
-  bake is now satisfied. We are ready to tag `v0.1.0-rc1` once the
+  bake. The long-running receive `-memprofile` bake is recorded (2026-05-27).
+  We are ready to tag `v0.1.0-rc1` once the external-audit gate decision is made.
   external-audit gate decision is made.
 - **Pro**: the threat model is publicly documented and CI now enforces
   the staticcheck + nightly-fuzz floor it depends on.

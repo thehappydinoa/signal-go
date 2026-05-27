@@ -173,6 +173,8 @@ Items currently satisfied:
       `main`. `gosec` deferred (post-triage, ADR 0013).
 - [x] Fuzz corpora live with the package; CI runs them 5 minutes / target
       nightly.
+- [x] Long-running receive heap/CPU profile bake — see
+      [`docs/guides/profiling.md`](../guides/profiling.md#phase-8-long-running-receive-bake-recorded).
 
 Pending items (handed off to a follow-up):
 

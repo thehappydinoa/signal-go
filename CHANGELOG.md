@@ -13,7 +13,8 @@ is *what* changed and *when*.
 ### Added
 
 - `internal/profile` and `echo-bot run -memprofile` / `-cpuprofile` for long-running
-  heap/CPU soaks; guide: [`docs/guides/profiling.md`](./docs/guides/profiling.md).
+  heap/CPU soaks; guide: [`docs/guides/profiling.md`](./docs/guides/profiling.md)
+  (Phase 8 bake results recorded 2026-05-27).
 - `signal.Client.SendEdit` for 1:1 outbound edits (`Content.editMessage`).
 - Encrypted linked-device display name at `PUT /v1/devices/link` (Android-compatible
   cipher; [ADR 0036](./docs/adr/0036-linked-device-name-cipher.md)).
