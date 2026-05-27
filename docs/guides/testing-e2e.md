@@ -164,31 +164,29 @@ TLS to `chat.signal.org` must succeed first (pinned Signal root; see
 [ADR 0034](../adr/0034-signal-tls-root-pinning.md)). A 499 means TLS worked but the
 server rejected the upgrade.
 
-### `register: ... ws.Client: closed during request`
+### How registration works (and where it can fail)
 
-Signal closes the provisioning websocket shortly after delivering the link
-envelope. Registration uses a **separate** unauthenticated service websocket;
-rebuild with a current signal-go if you still see this after pulling the fix.
+The provisioning websocket (`/v1/websocket/provisioning/`) is only a
+rendezvous channel: it delivers the provisioning UUID and the encrypted
+provision envelope, then Signal closes it. Registration is a **separate REST
+call** — `PUT /v1/devices/link` over HTTPS — exactly as signal-cli /
+libsignal-service-java do it. It is Basic-authenticated with the **e164
+number** as the username and our freshly generated account password; the
+provisioning code travels in the request body as `verificationCode`.
 
-While waiting for you to scan the QR, the client sends periodic WebSocket pings
-to reduce idle timeouts.
+### `register: web: HTTP 403 Forbidden` on link
 
-### `register: web: HTTP 404 Not Found` on link
+The server rejected `verificationCode` (validated as a device-linking token).
+Usual causes: the QR was not approved in time (the code expired) or the
+provisioning code did not round-trip from the decrypted envelope. Restart the
+link flow and approve promptly.
 
-Registration was sent on the **provisioning** websocket, which does not route
-`/v1/devices/link`. Rebuild — link must use `wss://chat.signal.org/v1/websocket/`.
+### `register: web: HTTP 422 Unprocessable Entity` on link
 
-### `register: web: HTTP 498 : {"message":"use websockets"}`
-
-Provisioning succeeded (you saw the QR) but registration still used HTTP.
-Rebuild after updating signal-go — `PUT /v1/devices/link` must run on the
-**service websocket** (`/v1/websocket/`), not the provisioning socket and not
-`https://chat.signal.org/v1/devices/link` REST.
-
-```sh
-task build
-./bin/signal-go link -store ./.signal-e2e ...
-```
+The signed prekey / Kyber last-resort prekey signatures failed validation, or
+a required device capability was missing. Check `buildLinkRequest` in
+[`pkg/signal/link.go`](../../pkg/signal/link.go) and
+[`DefaultCapabilities`](../../internal/web/devices.go).
 
 ### E2e store must be sqlstore
 

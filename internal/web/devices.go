@@ -10,30 +10,28 @@ import (
 )
 
 // AccountCapabilities mirrors the JSON keys Signal expects in the
-// `capabilities` object of an account-attributes payload. We default to
-// the conservative minimum and grow as the higher layers learn to handle
-// each capability.
+// `capabilities` object of an account-attributes payload. The set matches
+// what signal-cli / libsignal-service-java serialize
+// (AccountAttributes.Capabilities).
+//
+// AttachmentBackfill and Spqr are REQUIRED for new linked devices per
+// Signal-Server DeviceCapability.requireForNewDevices — omitting either makes
+// PUT /v1/devices/link fail with HTTP 422 "Missing device capabilities".
 type AccountCapabilities struct {
-	DeleteSync                      bool `json:"deleteSync"`
-	VersionedExpirationTimer        bool `json:"versionedExpirationTimer"`
-	SSRE2                           bool `json:"ssre2"`
-	StorageServiceRecordKeyRotation bool `json:"storageServiceRecordKeyRotation"`
-	// SPQR and profiles_v2 are required for all new linked devices per
-	// Signal-Server DeviceCapability.CAPABILITIES_REQUIRED_FOR_NEW_DEVICES.
-	Spqr       bool `json:"spqr"`
-	ProfilesV2 bool `json:"profiles_v2"`
+	Storage                  bool `json:"storage"`
+	VersionedExpirationTimer bool `json:"versionedExpirationTimer"`
+	AttachmentBackfill       bool `json:"attachmentBackfill"`
+	Spqr                     bool `json:"spqr"`
 }
 
-// DefaultCapabilities is the conservative capability set we advertise at
-// link time. Bots and library consumers can override.
+// DefaultCapabilities is the capability set we advertise at link time,
+// matching signal-cli. Bots and library consumers can override.
 func DefaultCapabilities() AccountCapabilities {
 	return AccountCapabilities{
-		DeleteSync:                      true,
-		VersionedExpirationTimer:        true,
-		SSRE2:                           true,
-		StorageServiceRecordKeyRotation: true,
-		Spqr:                            true,
-		ProfilesV2:                      true,
+		Storage:                  true,
+		VersionedExpirationTimer: true,
+		AttachmentBackfill:       true,
+		Spqr:                     true,
 	}
 }
 
@@ -81,26 +79,32 @@ type LinkDeviceResponse struct {
 	PNI      string `json:"pni"`
 }
 
-// LinkDevice issues PUT /v1/devices/link.
+// LinkDevice issues PUT /v1/devices/link over REST, matching signal-cli /
+// libsignal-service-java (PushServiceSocket.finishNewDeviceRegistration).
 //
-// Per upstream's HTTP-auth convention, this call is Basic-authenticated
-// with username = the provisioning code from the ProvisionMessage and
-// password = our chosen account password. Signal validates the
-// provisioning code and stores the password for all subsequent device
-// authentication.
-func (c *Client) LinkDevice(ctx context.Context, provisioningCode, password string, req LinkDeviceRequest) (*LinkDeviceResponse, error) {
-	if provisioningCode == "" {
-		return nil, errors.New("web.LinkDevice: missing provisioning code")
+// The request is Basic-authenticated with username = the account's e164
+// number (from the ProvisionMessage) and password = our freshly generated
+// account password. Upstream deliberately uses the e164 here and NOT the
+// ACI/UUID — the server rejects a UUID identifier with HTTP 400. The server
+// identifies which account to attach to from req.VerificationCode (the
+// provisioning code, validated as a device-linking token) and stores the
+// password for all subsequent device authentication.
+func (c *Client) LinkDevice(ctx context.Context, number, password string, req LinkDeviceRequest) (*LinkDeviceResponse, error) {
+	if number == "" {
+		return nil, errors.New("web.LinkDevice: missing account number")
 	}
 	if password == "" {
 		return nil, errors.New("web.LinkDevice: missing password")
+	}
+	if req.VerificationCode == "" {
+		return nil, errors.New("web.LinkDevice: missing verification code")
 	}
 	var resp LinkDeviceResponse
 	if err := c.Do(ctx, Request{
 		Method: http.MethodPut,
 		Path:   "/v1/devices/link",
 		Credentials: Credentials{
-			Username: provisioningCode,
+			Username: number,
 			Password: password,
 		},
 		Body: req,

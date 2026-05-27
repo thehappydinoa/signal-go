@@ -26,7 +26,7 @@ import (
 )
 
 // fakeSignal answers both halves of the link flow: the provisioning
-// websocket (including PUT /v1/devices/link) and REST /v2/keys calls.
+// websocket and the REST /v1/devices/link + /v2/keys calls.
 type fakeSignal struct {
 	t              *testing.T
 	httpSrv        *httptest.Server
@@ -68,9 +68,6 @@ func (f *fakeSignal) Close() {
 
 func (f *fakeSignal) ProvisioningURL() string {
 	return "ws://" + strings.TrimPrefix(f.wsSrv.URL, "http://")
-}
-func (f *fakeSignal) ServiceWebSocketURL() string {
-	return f.ProvisioningURL()
 }
 func (f *fakeSignal) APIBaseURL() string { return f.httpSrv.URL }
 
@@ -134,58 +131,28 @@ func (f *fakeSignal) handleWS(w http.ResponseWriter, r *http.Request) {
 		if err := proto.Unmarshal(data, &msg); err != nil {
 			return
 		}
-		switch msg.GetType() {
-		case wspb.WebSocketMessage_RESPONSE:
-			if msg.GetResponse().GetStatus() == 200 && msg.GetResponse().GetId() == id {
-				go f.pushProvisionEnvelope(c, r.Context())
-			}
-		case wspb.WebSocketMessage_REQUEST:
-			req := msg.GetRequest()
-			if req.GetVerb() == "PUT" && req.GetPath() == "/v1/devices/link" {
-				f.handleWSLinkDevice(c, r.Context(), req)
-			}
+		if msg.GetType() == wspb.WebSocketMessage_RESPONSE && msg.GetResponse().GetStatus() == 200 && msg.GetResponse().GetId() == id {
+			go func() {
+				// Block until the test has fed us an envelope. This is
+				// what synchronises with OnURL — the test produces the
+				// envelope only after seeing the linking URL.
+				var env *provpb.ProvisionEnvelope
+				select {
+				case env = <-f.envelopeCh:
+				case <-r.Context().Done():
+					return
+				}
+				envBody, _ := proto.Marshal(env)
+				envVerb, envPath := "PUT", "/v1/message"
+				envID := uint64(2)
+				out, _ := proto.Marshal(&wspb.WebSocketMessage{
+					Type:    &reqType,
+					Request: &wspb.WebSocketRequestMessage{Verb: &envVerb, Path: &envPath, Body: envBody, Id: &envID},
+				})
+				_ = c.Write(r.Context(), websocket.MessageBinary, out)
+			}()
 		}
 	}
-}
-
-func (f *fakeSignal) pushProvisionEnvelope(c *websocket.Conn, ctx context.Context) {
-	var env *provpb.ProvisionEnvelope
-	select {
-	case env = <-f.envelopeCh:
-	case <-ctx.Done():
-		return
-	}
-	envBody, _ := proto.Marshal(env)
-	envVerb, envPath := "PUT", "/v1/message"
-	envID := uint64(2)
-	reqType := wspb.WebSocketMessage_REQUEST
-	out, _ := proto.Marshal(&wspb.WebSocketMessage{
-		Type:    &reqType,
-		Request: &wspb.WebSocketRequestMessage{Verb: &envVerb, Path: &envPath, Body: envBody, Id: &envID},
-	})
-	_ = c.Write(ctx, websocket.MessageBinary, out)
-}
-
-func (f *fakeSignal) handleWSLinkDevice(c *websocket.Conn, ctx context.Context, req *wspb.WebSocketRequestMessage) {
-	raw := req.GetBody()
-	_ = json.Unmarshal(raw, &f.lastLinkReq)
-	for _, h := range req.GetHeaders() {
-		if strings.HasPrefix(h, "Authorization:") {
-			f.lastLinkAuth = strings.TrimSpace(strings.TrimPrefix(h, "Authorization:"))
-		}
-	}
-	respBody, _ := json.Marshal(f.linkResponse)
-	status := uint32(200)
-	msg := "OK"
-	respType := wspb.WebSocketMessage_RESPONSE
-	rid := req.GetId()
-	out, _ := proto.Marshal(&wspb.WebSocketMessage{
-		Type: &respType,
-		Response: &wspb.WebSocketResponseMessage{
-			Id: &rid, Status: &status, Message: &msg, Body: respBody,
-		},
-	})
-	_ = c.Write(ctx, websocket.MessageBinary, out)
 }
 
 // fullProvisionMessage builds a ProvisionMessage with real ACI + PNI keys
@@ -244,9 +211,8 @@ func TestLinkHappyPath(t *testing.T) {
 	// channel.
 	var onceURL sync.Once
 	opts := LinkOptions{
-		ProvisioningURL:       fake.ProvisioningURL(),
-		ServiceWebSocketURL:   fake.ServiceWebSocketURL(),
-		APIBaseURL:            fake.APIBaseURL(),
+		ProvisioningURL:    fake.ProvisioningURL(),
+		APIBaseURL:         fake.APIBaseURL(),
 		Store:              memstore.New(),
 		OneTimePreKeyCount: 4, // small batch to keep test fast
 		OnURL: func(linkURL string) error {
@@ -293,8 +259,19 @@ func TestLinkHappyPath(t *testing.T) {
 	if fake.lastLinkReq.PNIPqLastResortPreKey.KeyID == 0 {
 		t.Errorf("PNI Kyber prekey not sent")
 	}
-	if !strings.HasPrefix(fake.lastLinkAuth, "Basic ") {
-		t.Errorf("auth header = %q", fake.lastLinkAuth)
+	// The link request must be Basic-authenticated with the e164 number as
+	// the username (matching signal-cli) — NOT the provisioning code, which
+	// belongs only in req.VerificationCode.
+	rawAuth, ok := strings.CutPrefix(fake.lastLinkAuth, "Basic ")
+	if !ok {
+		t.Fatalf("auth header = %q, want Basic", fake.lastLinkAuth)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(rawAuth)
+	if err != nil {
+		t.Fatalf("decode auth header %q: %v", fake.lastLinkAuth, err)
+	}
+	if gotUser, _, _ := strings.Cut(string(decoded), ":"); gotUser != "+15558675309" {
+		t.Errorf("link auth username = %q, want e164 +15558675309", gotUser)
 	}
 
 	// Verify the account was persisted in the store.
@@ -352,7 +329,6 @@ func TestLinkEncryptsDeviceName(t *testing.T) {
 	var onceURL sync.Once
 	opts := LinkOptions{
 		ProvisioningURL:      fake.ProvisioningURL(),
-		ServiceWebSocketURL:  fake.ServiceWebSocketURL(),
 		APIBaseURL:           fake.APIBaseURL(),
 		Store:                memstore.New(),
 		OneTimePreKeyCount:   0,
@@ -422,9 +398,8 @@ func TestLinkSurfacesRegistrationError(t *testing.T) {
 	}))
 
 	opts := LinkOptions{
-		ProvisioningURL:     fake.ProvisioningURL(),
-		ServiceWebSocketURL: fake.ServiceWebSocketURL(),
-		APIBaseURL:          fake.httpSrv.URL,
+		ProvisioningURL: fake.ProvisioningURL(),
+		APIBaseURL:      fake.httpSrv.URL,
 		Store:           memstore.New(),
 		OnURL: func(linkURL string) error {
 			u, _ := url.Parse(linkURL)

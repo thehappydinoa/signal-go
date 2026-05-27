@@ -18,8 +18,7 @@
 //     [ProvisionMessage] containing the account's ACI/PNI identity keys,
 //     UUIDs, number, and provisioning code.
 //  6. [pkg/signal.Link] continues from there: generates prekeys, calls
-//     PUT /v1/devices/link on the same provisioning websocket (not REST),
-//     uploads one-time prekeys, and persists the
+//     PUT /v1/devices/link, uploads one-time prekeys, and persists the
 //     account.
 //
 // Steps 1-5 (plus decryption) are fully implemented in this package.

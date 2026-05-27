@@ -28,6 +28,15 @@ is *what* changed and *when*.
 
 ### Fixed
 
+- Device linking now authenticates `PUT /v1/devices/link` with the account's
+  e164 number as the HTTP Basic username (the provisioning code travels only in
+  `verificationCode`), matching signal-cli / libsignal-service-java. Previously
+  the provisioning code was sent as the username, which the server rejects.
+- Linked-device capabilities now match signal-cli
+  (`storage`, `versionedExpirationTimer`, `attachmentBackfill`, `spqr`). The
+  previous set omitted `attachmentBackfill` and `spqr`, both of which
+  Signal-Server requires for new devices, causing `PUT /v1/devices/link` to
+  fail with HTTP 422 "Missing device capabilities".
 - **Create release tag** now dispatches **Release** after the tag push. Pushes
   made with the default `GITHUB_TOKEN` do not trigger other workflows on GitHub.
 
