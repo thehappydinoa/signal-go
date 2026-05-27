@@ -289,6 +289,7 @@ Cross-cutting infrastructure that runs on every PR and merge to `main`.
 Design: [ADR 0013](./docs/adr/0013-ci-github-actions.md).
 
 Phase A — bootstrap (this PR):
+
 - [x] `.github/workflows/ci.yml`: lint + vet + build + test + govulncheck
       on `ubuntu-latest`, with cached `libsignal_ffi.a` keyed on the
       pinned tag
@@ -299,6 +300,7 @@ Phase A — bootstrap (this PR):
 - [x] CI status badge in [`README.md`](./README.md)
 
 Phase B — broaden:
+
 - [x] macOS runners (`macos-latest` arm64, `macos-15-intel` amd64) +
       Windows runner (`windows-latest`, MinGW-w64) validated via the
       release workflow's `workflow_dispatch` dry-run path
@@ -311,6 +313,7 @@ Phase B — broaden:
       dependency)
 
 Phase C — release pipeline (lands with v0.1.0):
+
 - [x] `.github/workflows/release.yml`: build `signal-go` binaries on
   tag push; publish to a draft GitHub Release
       ([ADR 0033](./docs/adr/0033-release-pipeline.md))
