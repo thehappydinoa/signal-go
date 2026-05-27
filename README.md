@@ -153,7 +153,8 @@ Detail and tick-boxes: [`ROADMAP.md`](./ROADMAP.md).
 | Security + threat model | [`docs/security.md`](./docs/security.md), [`threat-model.md`](./docs/security/threat-model.md) |
 | Architecture decisions | [`docs/adr/`](./docs/adr/) |
 | Changelog | [`CHANGELOG.md`](./CHANGELOG.md) |
-| Contributing | [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CLAUDE.md`](./CLAUDE.md) |
+| Contributing | [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CLAUDE.md`](./CLAUDE.md), [`AGENTS.md`](./AGENTS.md) |
+| Community policies | [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md), [`SUPPORT.md`](./SUPPORT.md), [`GOVERNANCE.md`](./GOVERNANCE.md) |
 
 ## Contributing
 
@@ -162,8 +163,24 @@ Detail and tick-boxes: [`ROADMAP.md`](./ROADMAP.md).
    (the pre-push hook runs the same checks when `libsignal_ffi.a` exists).
 3. Open a focused PR; one concept per change when possible.
 
+Community/process docs:
+
+- Code of conduct: [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+- Support channels: [`SUPPORT.md`](./SUPPORT.md)
+- Governance: [`GOVERNANCE.md`](./GOVERNANCE.md)
+
 Security issues: [`SECURITY.md`](./SECURITY.md) — **do not** file public GitHub
 issues for vulnerabilities.
+
+## Stability and compatibility policy
+
+- **Current phase**: pre-alpha. Until `v0.1.0`, public APIs and CLI
+  behavior may change as correctness and security hardening continue.
+- **Compatibility intent**: we avoid unnecessary breakage, but do not
+  promise semver-level stability before `v0.1.0`.
+- **Toolchain floor**: Go `1.25+` as declared in [`go.mod`](./go.mod).
+- **Platform support**: Linux/macOS are primary targets; Windows amd64
+  is currently experimental (see [Platforms](#platforms)).
 
 ## Disclaimer
 
