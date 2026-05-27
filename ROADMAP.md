@@ -206,7 +206,7 @@ libsignal itself is out of scope (we trust upstream Signal). See
 internal-pass record; the canonical write-up of the threat model is
 [`docs/security/threat-model.md`](./docs/security/threat-model.md).
 
-Internal review (done — modulo two profiler/sanitizer bakes flagged
+Internal review (done — modulo one optional sanitizer bake flagged
 below):
 
 - [x] **Memory safety + cgo boundary audit** (`internal/libsignal`):
@@ -221,11 +221,9 @@ below):
   - [x] We link only the release `libsignal_ffi.a`; no `*-testing*`
         variant reaches production (`scripts/build-libsignal.sh` pins
         `cargo build --release`).
-  - [x] Long-running receive `-memprofile` bake (2026-05-27). Methodology and
-        results: [`docs/guides/profiling.md` § Phase 8 bake](./docs/guides/profiling.md#phase-8-long-running-receive-bake-recorded).
-        Windows `echo-bot` + `sqlstore`: ~6 MB steady-state heap after ~20 min;
-        no receive-path leak; CPU mostly idle (session SQLite fsync when
-        libsignal persists state).
+  - [ ] Long-running receive `-memprofile` bake. Methodology recorded in
+        [`docs/security/threat-model.md`](./docs/security/threat-model.md);
+        bake gated on maintainer bandwidth.
   - [ ] `valgrind --tool=memcheck` or `-fsanitize=address` sweep of a
         cgo-linked test binary. Same note as above.
 - [x] `internal/provisioning` cipher review:
