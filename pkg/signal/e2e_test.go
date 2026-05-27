@@ -193,10 +193,7 @@ func TestE2E_GroupManagement(t *testing.T) {
 }
 
 func TestE2E_Link(t *testing.T) {
-	e2eEnabled(t)
-	if os.Getenv("SIGNAL_E2E_LINK") != "1" {
-		t.Skip("set SIGNAL_E2E_LINK=1 to run an interactive link against chat.signal.org (destructive if store already linked)")
-	}
+	e2eLinkEnabled(t)
 	dir := requireEnv(t, "SIGNAL_E2E_STORE_DIR")
 	if _, err := os.Stat(filepath.Join(dir, "signal.db")); err == nil {
 		t.Fatalf("store %s already has signal.db; use a fresh directory or link via signal-go link", dir)
@@ -230,6 +227,16 @@ func e2eEnabled(t *testing.T) {
 	t.Helper()
 	if os.Getenv("SIGNAL_GO_E2E") != "1" {
 		t.Skip("set SIGNAL_GO_E2E=1 (or run task test:e2e)")
+	}
+}
+
+// e2eLinkEnabled gates the interactive link test. Not run by task test:e2e.
+// Use task test:e2e:link or SIGNAL_GO_E2E=1 SIGNAL_E2E_LINK=1 go test -tags=e2e -run TestE2E_Link.
+func e2eLinkEnabled(t *testing.T) {
+	t.Helper()
+	e2eEnabled(t)
+	if os.Getenv("SIGNAL_E2E_LINK") != "1" {
+		t.Skip("interactive link test skipped (run task test:e2e:link or set SIGNAL_E2E_LINK=1)")
 	}
 }
 

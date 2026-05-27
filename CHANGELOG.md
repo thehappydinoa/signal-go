@@ -12,6 +12,10 @@ is *what* changed and *when*.
 
 ### Added
 
+- `internal/cliargs` — shared CLI flags (`-store`, `-passphrase-file`, `-client`,
+  link helpers) used by `signal-go` and `examples/echo-bot`.
+- `task test:e2e:link` — runs interactive `TestE2E_Link` only (`SIGNAL_E2E_LINK=1`);
+  `task test:e2e` excludes it.
 - `signal.Client.SendEdit` for 1:1 outbound edits (`Content.editMessage`).
 - Encrypted linked-device display name at `PUT /v1/devices/link` (Android-compatible
   cipher; [ADR 0036](./docs/adr/0036-linked-device-name-cipher.md)).
@@ -28,10 +32,6 @@ is *what* changed and *when*.
 
 ### Fixed
 
-- `SERVER_DELIVERY_RECEIPT` envelopes are ignored on receive (no spurious
-  `DecryptionErrorEvent` / "empty envelope content" after a successful reply).
-- Idle chat/provisioning websockets no longer disconnect every ~60s (`internal/ws`
-  keepalive + 10-minute read idle timeout).
 - Device linking now authenticates `PUT /v1/devices/link` with the account's
   e164 number as the HTTP Basic username (the provisioning code travels only in
   `verificationCode`), matching signal-cli / libsignal-service-java. Previously

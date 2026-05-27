@@ -114,8 +114,8 @@ _, err := signal.Link(ctx, signal.LinkOptions{
 })
 ```
 
-If the directory still has legacy **fsstore** files (`account.enc` or
-`account.json`), delete them or use a fresh directory before linking.
+If you already linked with the CLI into `./.signal-e2e`, use a **fresh directory**
+for sqlstore (or delete the fsstore files) and link again with option A or B.
 
 ## Running the suite
 
@@ -129,9 +129,9 @@ export SIGNAL_E2E_PEER_ACI='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 SIGNAL_GO_E2E=1 task test:e2e
 ```
 
-`task test:e2e` sets `SIGNAL_GO_E2E=1` and runs:
-
-`go test -race -count=1 -tags=e2e -timeout=10m ./...`
+`task test:e2e` sets `SIGNAL_GO_E2E=1` and runs Open/Send/Recv/Group tests only
+(`TestE2E_Link` is excluded). Interactive link uses `task test:e2e:link`
+(requires `SIGNAL_E2E_LINK=1` and an empty store directory).
 
 ## Tests and environment variables
 
