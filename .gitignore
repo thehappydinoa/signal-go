@@ -34,7 +34,6 @@ go.work.sum
 # .idea/
 # .vscode/
 # .cursor/
-# .claude/
 .claude/settings.local.json
 
 # Taskfile

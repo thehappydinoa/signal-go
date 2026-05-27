@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go env *)",
+      "Bash(task --dry *)"
+    ],
+    "deny": []
+  }
+}
