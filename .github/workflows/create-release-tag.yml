@@ -5,8 +5,9 @@ name: Create release tag
 # Release). Use [Release](./release.yml) workflow_dispatch for a dry-run
 # without tagging.
 #
-# Maintainer checklist: update CHANGELOG.md, merge to main, run this workflow,
-# then publish the draft release when the build finishes.
+# Maintainer checklist: update CHANGELOG.md, merge to main, then run this
+# workflow *from the main branch* (it is a no-op on any other branch), and
+# publish the draft release when the build finishes.
 # See docs/guides/releasing.md.
 
 on:
@@ -38,6 +39,13 @@ concurrency:
 jobs:
   tag:
     name: Create and push tag
+    # This workflow tags and ships a release, so only allow it to run from
+    # the default branch. workflow_dispatch lets the operator pick any branch
+    # in the "Run workflow" dropdown; a dispatch from a feature/PR branch
+    # (e.g. debug-linking) is a no-op here (the job is skipped, not failed).
+    # Use the `ref` input to tag a different commit while still running from
+    # main.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       # Pushing a tag with the default GITHUB_TOKEN does *not* trigger other
