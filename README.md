@@ -89,7 +89,7 @@ import "github.com/thehappydinoa/signal-go/pkg/signal"
 |----------|----------------|-------|
 | Linux amd64, arm64 | ✅ | Primary dev target |
 | macOS amd64, arm64 | ✅ | Native release binaries |
-| Windows amd64 | ⚠️ experimental | MSYS2 MinGW-w64; see [getting-started](./docs/guides/getting-started.md#windows-git-bash--msys2) |
+| Windows amd64 | ✅ | MSYS2 MinGW-w64; see [getting-started](./docs/guides/getting-started.md#windows-git-bash--msys2) |
 
 Cross-platform releases: [ADR 0033](./docs/adr/0033-release-pipeline.md),
 workflow [`.github/workflows/release.yml`](./.github/workflows/release.yml).
