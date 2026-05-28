@@ -239,6 +239,8 @@ below):
 - [x] `internal/store/fsstore` review:
   - [x] filesystem perms `0o700` dir / `0o600` files
   - [x] atomic rename for every write
+- [x] `internal/store/sqlstore` KDF file write is atomic (temp-file + rename
+      for `kdf.json`; fixed in v0.3.0 — non-atomic write was a data-loss risk)
   - [x] `Account` / `Identity` implement `slog.LogValuer`, so logging an
         account redacts Password, PrivateKey, ProfileKey, and
         AccountEntropyPool
@@ -260,7 +262,8 @@ below):
   - [x] `DecryptionErrorMessage` retry token round-trips via the Phase 4
         send path
 - [x] Sealed-sender certificate validation against Signal's pinned
-      production trust root (`internal/libsignal/decrypt_sealed.go`)
+      production trust root — receive path (`internal/libsignal/decrypt_sealed.go`)
+      and send path (`pkg/signal/send.go`; ADR 0015 audit item closed in v0.3.0)
 - [x] zkgroup credential cache eviction hook on identity-key change
       (`signal.Client.InvalidateGroupAuthCache`)
 - [x] Code-level checklists:

@@ -12,6 +12,38 @@ is *what* changed and *when*.
 
 Nothing yet.
 
+## [0.3.0] - 2026-05-28
+
+### Added
+
+- `signal.OpenFromStore` — opens a `Client` directly from an existing
+  `store.Store` without re-linking, useful for callers that manage their own
+  store lifecycle (`pkg/signal/open_store.go`).
+- `bot.Match.InGroups(groupIDs...)`, `bot.ReactionMatch.InGroups`, and
+  `bot.EditMatch.InGroups` — restrict handlers to specific group conversations
+  by hex-encoded master key. DM messages always pass; chain
+  `.Group().InGroups(...)` to restrict to group-only traffic.
+- `libsignal-canary.yml` CI workflow — detects new upstream libsignal releases
+  and opens a draft PR automatically.
+- Docs-freshness check in CI (`scripts/check-docs-touched.sh`): warns when a PR
+  touches source code without updating the corresponding documentation.
+
+### Fixed
+
+- **[Security]** `kdf.json` (Argon2id KDF salt for the sqlstore passphrase) is
+  now written atomically via temp-file + rename, preventing permanent store
+  corruption if the process crashes during first open.
+- **[Security]** Sender certificate is now validated against Signal's production
+  trust root on the outbound sealed-sender path, closing the gap that the
+  receive path already covered (ADR 0015 Phase 8 audit item).
+- **[Security]** PKCS-7 padding check in the backup decryptor is now
+  constant-time (accumulate-and-XOR), consistent with the provisioning cipher.
+- Auto group sync (`maybeAutoSyncGroupUpdate`) updates the cached revision
+  monotonically — a slow-completing goroutine can no longer regress a fresher
+  cached revision.
+- Identity keys in `SignalStores` are now saved transactionally, preventing
+  partial writes under concurrent updates.
+
 ## [0.2.0] - 2026-05-27
 
 ### Added
@@ -145,7 +177,8 @@ support, and TLS trust fixes for Signal's private CA.
   ([`SECURITY.md`](./SECURITY.md)).
 - ROADMAP: Phase B/C CI and release pipeline items marked done.
 
-[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/thehappydinoa/signal-go/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0
 [0.1.0-rc2]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc2
