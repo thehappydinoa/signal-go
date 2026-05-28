@@ -12,6 +12,7 @@ These examples are intentionally small, script-style bot programs you can run an
 | Middleware pipeline (global + per-handler) | [`middleware-bot`](./middleware-bot/) |
 | Utility helpers (attachments/typing/receipts) | [`attachment-bot`](./attachment-bot/) |
 | Minimal event loop with `pkg/signal` only | [`echo-bot`](./echo-bot/) |
+| Group invite crawler (storage + live events) | [`group-crawler`](./group-crawler/) |
 
 ## Common run pattern
 
