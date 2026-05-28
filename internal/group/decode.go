@@ -104,9 +104,9 @@ func decodeMember(secretParams [libsignal.GroupSecretParamsLen]byte, m *groupspb
 		return Member{}, fmt.Errorf("nil member")
 	}
 	var (
-		aci string
+		aci  string
 		user libsignal.ServiceIDFixedWidth
-		err error
+		err  error
 	)
 	if len(m.GetPresentation()) > 0 {
 		uuidCT, err := libsignal.ProfileKeyPresentationUUIDCiphertext(m.GetPresentation())
@@ -137,16 +137,18 @@ func decodeMember(secretParams [libsignal.GroupSecretParamsLen]byte, m *groupspb
 		ACI:  aci,
 		Role: MemberRole(m.GetRole()),
 	}
-	if label, err := decryptMemberLabel(secretParams, m.GetLabelString()); err != nil {
+	label, err := decryptMemberLabel(secretParams, m.GetLabelString())
+	if err != nil {
 		return Member{}, fmt.Errorf("label: %w", err)
-	} else {
-		member.Label = label
 	}
-	if emoji, err := decryptMemberLabel(secretParams, m.GetLabelEmoji()); err != nil {
+	member.Label = label
+
+	emoji, err := decryptMemberLabel(secretParams, m.GetLabelEmoji())
+	if err != nil {
 		return Member{}, fmt.Errorf("label emoji: %w", err)
-	} else {
-		member.LabelEmoji = emoji
 	}
+	member.LabelEmoji = emoji
+
 	if pk, err := memberProfileKey(secretParams, user, m); err != nil {
 		return Member{}, err
 	} else if len(pk) > 0 {

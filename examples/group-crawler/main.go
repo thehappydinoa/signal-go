@@ -112,7 +112,7 @@ func run(args []string) int {
 	}
 
 	if strings.TrimSpace(*seedInvite) != "" {
-		c.enqueueInvites(ctx, "seed-flag", *seedInvite)
+		c.enqueueInvites("seed-flag", *seedInvite)
 	}
 
 	c.startWorkers(ctx)
@@ -322,7 +322,7 @@ func (c *crawler) enqueueGroup(groupID string) {
 	c.log("QUEUE", "group %s (pending groups=%d)", shortID(groupID), len(c.groupQueue))
 }
 
-func (c *crawler) enqueueInvites(ctx context.Context, source, text string) {
+func (c *crawler) enqueueInvites(source, text string) {
 	for _, raw := range extractInviteLinks(text) {
 		url := strings.TrimSpace(raw)
 		dedupeKey := inviteDedupeKey(url)
@@ -423,7 +423,7 @@ func (c *crawler) processInvite(ctx context.Context, inviteURL string) {
 	c.log("INVITE|PREVIEW", "description=%q", preview.Description)
 	c.log("INVITE|PREVIEW", logBanner)
 
-	c.enqueueInvites(ctx, "invite-preview:"+inviteURL, preview.Description)
+	c.enqueueInvites("invite-preview:"+inviteURL, preview.Description)
 
 	if c.dryRun {
 		c.log("INVITE|SKIP", "dry-run: not joining %s", inviteURL)
@@ -516,7 +516,7 @@ func (c *crawler) visitGroup(ctx context.Context, groupID string) {
 	}
 	c.log("GROUP|VISIT", logBanner)
 
-	c.enqueueInvites(ctx, "group-description:"+groupID, grp.Description)
+	c.enqueueInvites("group-description:"+groupID, grp.Description)
 }
 
 func (c *crawler) scanMemberAbout(ctx context.Context, m sg.GroupMember) {
@@ -540,7 +540,7 @@ func (c *crawler) scanMemberAbout(ctx context.Context, m sg.GroupMember) {
 	}
 	c.log("PROFILE|OK", "name=%q aci=%s about=%q about_emoji=%q",
 		prof.DisplayName(), m.ACI, prof.About, prof.AboutEmoji)
-	c.enqueueInvites(ctx, "profile-about:"+m.ACI, prof.About)
+	c.enqueueInvites("profile-about:"+m.ACI, prof.About)
 }
 
 func (c *crawler) handleEvent(ctx context.Context, ev sg.Event) {
@@ -552,12 +552,12 @@ func (c *crawler) handleEvent(ctx context.Context, ev sg.Event) {
 		}
 		c.logEvent(ctx, "MESSAGE", e.GroupID, e.Sender, e.Timestamp, e.Body, extra)
 		if e.GroupID != "" {
-			c.enqueueInvites(ctx, "message:"+e.GroupID, e.Body)
+			c.enqueueInvites("message:"+e.GroupID, e.Body)
 		}
 	case *sg.EditMessageEvent:
 		c.logEvent(ctx, "EDIT", e.GroupID, e.Sender, e.Timestamp, e.NewBody, fmt.Sprintf("target_ts=%s", e.TargetTimestamp.Format(time.RFC3339)))
 		if e.GroupID != "" {
-			c.enqueueInvites(ctx, "edit:"+e.GroupID, e.NewBody)
+			c.enqueueInvites("edit:"+e.GroupID, e.NewBody)
 		}
 	case *sg.ReactionEvent:
 		c.log("EVENT|REACTION", "chat=%q sender=%s emoji=%q remove=%v target_author=%s target_ts=%s",
@@ -578,7 +578,7 @@ func (c *crawler) handleEvent(ctx context.Context, ev sg.Event) {
 	case *sg.SyncMessageEvent:
 		if e.SentBody != "" {
 			c.log("EVENT|SYNC_SENT", "to=%s body=%q", e.SentTo, truncate(e.SentBody, 200))
-			c.enqueueInvites(ctx, "sync-sent", e.SentBody)
+			c.enqueueInvites("sync-sent", e.SentBody)
 		}
 	case *sg.DecryptionErrorEvent:
 		c.log("EVENT|DECRYPT_ERR", "sender=%s err=%v", e.Sender, e.Err)
