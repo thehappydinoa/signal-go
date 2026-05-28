@@ -184,6 +184,21 @@ if [[ "${FORCE:-0}" != "1" && -f "$LIB_DIR/libsignal_ffi.a" && -f "$STAMP" ]]; t
   fi
 fi
 
+# Fast path: download a pre-built artifact rather than invoking cargo.
+# SKIP_DOWNLOAD=1 disables this (used by the libsignal-artifacts CI workflow
+# that is itself responsible for producing the artifacts).
+if [[ "${SKIP_DOWNLOAD:-0}" != "1" ]]; then
+  if bash "$(dirname "$0")/download-libsignal.sh"; then
+    # Patches are cheap and idempotent; apply regardless of download vs build.
+    patch_gnu_stack
+    patch_windows_fiat_adx_stubs || true
+    echo ">> done"
+    ls -lh "$LIB_DIR/libsignal_ffi.a" "$INCLUDE_DIR/signal_ffi.h" 2>/dev/null || true
+    exit 0
+  fi
+  echo ">> pre-built artifact unavailable; falling back to cargo build"
+fi
+
 # Shallow-clone (or refresh) at the pinned tag.
 if [[ ! -d "$BUILD_DIR/.git" ]]; then
   echo ">> cloning $REPO_URL at $LIBSIGNAL_VERSION"

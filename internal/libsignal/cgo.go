@@ -1,5 +1,10 @@
 package libsignal
 
+// Download or build libsignal_ffi.a for the current platform.
+// Requires no tools other than Go itself when a pre-built artifact is available.
+//
+//go:generate go run ../../tools/libsignal_setup.go
+
 /*
 #cgo CFLAGS: -I${SRCDIR}/include
 // libsignal embeds BoringSSL (C++), so we link the C++ runtime explicitly.

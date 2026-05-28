@@ -1,0 +1,252 @@
+name: libsignal Pre-built Artifacts
+
+# Build and publish pre-built libsignal_ffi.a files for all supported
+# platforms so that downstream library consumers and contributors without
+# Rust installed can skip the cargo build step.
+#
+# Artifacts are published as a GitHub Release under the tag
+# "libsignal-<VERSION>" (e.g. "libsignal-v0.94.1").  The download URL
+# has the form:
+#
+#   https://github.com/thehappydinoa/signal-go/releases/download/
+#     libsignal-<VERSION>/libsignal-ffi-<VERSION>-<os>-<arch>.a
+#
+# scripts/download-libsignal.sh and tools/libsignal_setup.go both use
+# this URL pattern.  See ADR 0037.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build-libsignal.sh'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild even if a release for this libsignal version already exists'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: libsignal-artifacts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create tags and releases, upload assets
+
+jobs:
+  build:
+    name: Build ${{ matrix.os_name }}/${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os_name: linux
+            arch: amd64
+            cargo_target: ''
+            cache_key_suffix: ubuntu-latest-x86_64
+            experimental: false
+          - runner: ubuntu-24.04-arm
+            os_name: linux
+            arch: arm64
+            cargo_target: ''
+            cache_key_suffix: ubuntu-24.04-arm-aarch64
+            experimental: false
+          - runner: macos-15-intel
+            os_name: darwin
+            arch: amd64
+            cargo_target: ''
+            cache_key_suffix: macos-15-intel-x86_64
+            experimental: false
+          - runner: macos-latest
+            os_name: darwin
+            arch: arm64
+            cargo_target: ''
+            cache_key_suffix: macos-latest-aarch64
+            experimental: false
+          - runner: windows-latest
+            os_name: windows
+            arch: amd64
+            cargo_target: x86_64-pc-windows-gnu
+            cache_key_suffix: windows-latest-x86_64-gnu
+            experimental: true
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pinned libsignal version
+        id: version
+        shell: bash
+        run: |
+          v=$(sed -n 's/^LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-\([^}]*\)}".*/\1/p' scripts/build-libsignal.sh)
+          if [ -z "$v" ]; then
+            echo "Could not extract LIBSIGNAL_VERSION from scripts/build-libsignal.sh" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "libsignal pinned at: $v"
+
+      - name: Cache libsignal_ffi.a
+        id: cache-libsignal
+        uses: actions/cache@v5
+        with:
+          path: internal/libsignal/lib
+          key: libsignal-${{ steps.version.outputs.version }}-${{ matrix.cache_key_suffix }}-v1
+
+      - name: (macOS) Install nasm
+        if: matrix.os_name == 'darwin' && steps.cache-libsignal.outputs.cache-hit != 'true'
+        run: brew install nasm
+
+      - name: (Windows) Install MSYS2 / MinGW-w64
+        if: matrix.os_name == 'windows' && steps.cache-libsignal.outputs.cache-hit != 'true'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-nasm
+            git
+
+      - name: (Windows) Expose MinGW on PATH
+        if: matrix.os_name == 'windows'
+        shell: bash
+        run: |
+          echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
+          echo "C:/msys64/usr/bin" >> "$GITHUB_PATH"
+
+      - name: Install protoc
+        id: protoc
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify protoc resolves
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          PROTOC: ${{ steps.protoc.outputs.path }}/bin/protoc${{ matrix.os_name == 'windows' && '.exe' || '' }}
+        run: |
+          echo "PROTOC=${PROTOC}"
+          test -x "${PROTOC}" || { echo "PROTOC not executable"; exit 1; }
+          "${PROTOC}" --version
+
+      - name: Install Rust toolchain
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.cargo_target }}
+
+      - name: Build libsignal_ffi.a
+        if: steps.cache-libsignal.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          LIBSIGNAL_VERSION: ${{ steps.version.outputs.version }}
+          CARGO_TARGET: ${{ matrix.cargo_target }}
+          CC: gcc
+          CXX: g++
+          PROTOC: ${{ steps.protoc.outputs.path }}/bin/protoc${{ matrix.os_name == 'windows' && '.exe' || '' }}
+          # Never try to download in the workflow that produces the artifacts.
+          SKIP_DOWNLOAD: '1'
+        run: bash scripts/build-libsignal.sh
+
+      - name: Package artifact with SHA256
+        id: package
+        shell: bash
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          name="libsignal-ffi-${v}-${{ matrix.os_name }}-${{ matrix.arch }}.a"
+          cp internal/libsignal/lib/libsignal_ffi.a "${name}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${name}" > "${name}.sha256"
+          else
+            shasum -a 256 "${name}" > "${name}.sha256"
+          fi
+          echo "asset=${name}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${name}.sha256" >> "$GITHUB_OUTPUT"
+          ls -lh "${name}" "${name}.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: libsignal-ffi-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: |
+            ${{ steps.package.outputs.asset }}
+            ${{ steps.package.outputs.sha256 }}
+          retention-days: 7
+          if-no-files-found: error
+
+    continue-on-error: ${{ matrix.experimental }}
+
+  publish:
+    name: Publish libsignal release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pinned libsignal version
+        id: version
+        shell: bash
+        run: |
+          v=$(sed -n 's/^LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-\([^}]*\)}".*/\1/p' scripts/build-libsignal.sh)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.a' -o -name '*.sha256' \) -exec cp -v {} release/ \;
+          ls -lh release/
+
+      - name: Create / update GitHub Release for libsignal artifacts
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: libsignal-${{ steps.version.outputs.version }}
+          name: libsignal-ffi ${{ steps.version.outputs.version }} pre-built artifacts
+          prerelease: true
+          body: |
+            Pre-built `libsignal_ffi.a` static libraries for all supported platforms.
+
+            **These are build-time artifacts, not a signal-go release.** See the
+            [signal-go releases](../../releases) page for versioned binaries.
+
+            ## Download URLs
+
+            ```
+            # Linux / macOS / Windows — replace OS and ARCH as needed:
+            https://github.com/thehappydinoa/signal-go/releases/download/libsignal-${{ steps.version.outputs.version }}/libsignal-ffi-${{ steps.version.outputs.version }}-linux-amd64.a
+            https://github.com/thehappydinoa/signal-go/releases/download/libsignal-${{ steps.version.outputs.version }}/libsignal-ffi-${{ steps.version.outputs.version }}-linux-arm64.a
+            https://github.com/thehappydinoa/signal-go/releases/download/libsignal-${{ steps.version.outputs.version }}/libsignal-ffi-${{ steps.version.outputs.version }}-darwin-amd64.a
+            https://github.com/thehappydinoa/signal-go/releases/download/libsignal-${{ steps.version.outputs.version }}/libsignal-ffi-${{ steps.version.outputs.version }}-darwin-arm64.a
+            https://github.com/thehappydinoa/signal-go/releases/download/libsignal-${{ steps.version.outputs.version }}/libsignal-ffi-${{ steps.version.outputs.version }}-windows-amd64.a
+            ```
+
+            ## Usage
+
+            No Rust required — run one of:
+
+            ```sh
+            # With task (recommended):
+            task libsignal       # tries download first, falls back to cargo build
+            task libsignal:download  # download only
+
+            # With go generate:
+            go generate ./internal/libsignal/
+
+            # With go run (useful as a library consumer):
+            go run tools/libsignal_setup.go
+            ```
+
+            See [docs/guides/getting-started.md](../../blob/main/docs/guides/getting-started.md)
+            and [ADR 0037](../../blob/main/docs/adr/0037-libsignal-prebuilt-artifacts.md).
+          fail_on_unmatched_files: true
+          files: release/*

@@ -12,6 +12,45 @@ is *what* changed and *when*.
 
 Nothing yet.
 
+## [0.2.0] - 2026-05-27
+
+### Added
+
+- Pre-built `libsignal_ffi.a` artifacts published under dedicated
+  `libsignal-v*` GitHub Releases; `task libsignal` now downloads the
+  correct platform artifact automatically — **no Rust or cargo required**
+  for tagged releases ([ADR 0037](./docs/adr/0037-libsignal-prebuilt-artifacts.md)).
+- `task libsignal:download` — download-only task; fails fast when no
+  pre-built artifact exists rather than falling back to cargo.
+- `go generate ./internal/libsignal/` bootstrap via
+  `tools/libsignal_setup.go` (pure Go, no extra tools) for library
+  consumers who do not have `task` installed.
+- `scripts/download-libsignal.sh` — portable download helper with SHA256
+  verification; called by `build-libsignal.sh` as a fast path.
+- `.github/workflows/libsignal-artifacts.yml` — matrix workflow that
+  builds and publishes pre-built `.a` + `.sha256` files on every libsignal
+  version bump (triggers on changes to `scripts/build-libsignal.sh`).
+- Three bot examples: `examples/middleware-bot` (middleware composition:
+  logging, recovery, rate limiting), `examples/poll-bot` (group poll
+  workflows using reactions), `examples/wizard-bot` (multi-stage signup
+  conversation via `bot.Wizard`).
+- Rate-limit retry middleware and local prekey-fetch rate limiting in
+  `pkg/signal` client (avoids thundering-herd on `PUT /v2/keys`).
+- CodeQL autobuild step for improved Go project instrumentation.
+
+### Fixed
+
+- Integer overflow in allocation size computation in
+  `internal/libsignal` (CodeQL alert #1).
+- Device name cipher KDF now matches Signal Android's `DeviceNameCipher`
+  — correct synthetic IV derivation and key schedule
+  ([ADR 0036](./docs/adr/0036-linked-device-name-cipher.md)).
+
+### Changed
+
+- CI workflow ignores markdown-only changes in pushes and PRs, avoiding
+  unnecessary `libsignal_ffi.a` rebuilds on doc-only commits.
+
 ## [0.1.0] - 2026-05-27
 
 ### Added
@@ -106,7 +145,8 @@ support, and TLS trust fixes for Signal's private CA.
   ([`SECURITY.md`](./SECURITY.md)).
 - ROADMAP: Phase B/C CI and release pipeline items marked done.
 
-[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0
 [0.1.0-rc2]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc2
 [0.1.0-rc1]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc1

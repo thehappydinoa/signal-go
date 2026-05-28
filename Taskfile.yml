@@ -48,14 +48,20 @@ tasks:
       - 'echo "Git hooks installed. Pre-push checks: vet, lint, test."'
 
   libsignal:
-    desc: Build libsignal_ffi.a from pinned upstream tag (slow first time, cached after)
+    desc: Obtain libsignal_ffi.a — downloads pre-built artifact if available, otherwise builds from source (requires Rust)
     sources:
       - scripts/build-libsignal.sh
+      - scripts/download-libsignal.sh
     generates:
       - internal/libsignal/lib/libsignal_ffi.a
       - internal/libsignal/include/signal_ffi.h
     cmds:
       - LIBSIGNAL_VERSION={{.LIBSIGNAL_VERSION}} bash scripts/build-libsignal.sh
+
+  libsignal:download:
+    desc: Download pre-built libsignal_ffi.a from GitHub Releases (no Rust required; fails if no artifact exists yet)
+    cmds:
+      - LIBSIGNAL_VERSION={{.LIBSIGNAL_VERSION}} bash scripts/download-libsignal.sh
 
   proto:
     desc: Regenerate Go from vendored .proto files

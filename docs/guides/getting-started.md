@@ -9,7 +9,8 @@ automatic sealed-sender when a profile key is known (Phase 4).
 - **Go 1.25+** (we use `crypto/hkdf` and other stdlib bits from recent releases)
 - **A C toolchain** (gcc/clang on Linux/macOS; on Windows use **MSYS2
   MinGW-w64**, not MSVC — see below)
-- **Rust** — only required *once* to build the pinned `libsignal_ffi.a`
+- **Rust** — only required if a pre-built `libsignal_ffi.a` is unavailable
+  (see [Build](#build) below — most users will never need this)
 - **`protoc`** if you need to regenerate the protobufs (we ship the
   generated code, so most contributors skip this)
 - **A real Signal account** on your phone (to scan the QR)
@@ -59,18 +60,56 @@ WSL2 with the Linux flow is the easiest path if MSYS linking blocks you.
 
 ## Build
 
+### Fast path — pre-built artifact (no Rust required)
+
+When a tagged release exists for the current pinned libsignal version,
+`task libsignal` automatically downloads and verifies a pre-built
+`libsignal_ffi.a` for your platform — no Rust or cargo needed.
+
 ```sh
 git clone https://github.com/thehappydinoa/signal-go
 cd signal-go
 
 cp .env.example .env   # optional but recommended on Windows
 
-# One-time: build the pinned libsignal_ffi.a (~5–10 min on first run; cached after).
+# Obtain libsignal_ffi.a: downloads pre-built artifact if available,
+# otherwise falls back to cargo build (~5–10 min on first run).
 task libsignal
 
 # Build the library and demo CLI → bin/signal-go
 task build
 ```
+
+**Library consumers** (embedding `pkg/signal` in your own project) can use
+`go generate` instead of `task` and without installing the full dev toolchain:
+
+```sh
+go generate ./internal/libsignal/
+```
+
+Or equivalently:
+
+```sh
+go run tools/libsignal_setup.go
+```
+
+Both commands download the pre-built `.a` from the project's GitHub Releases
+and write a version stamp.  If no pre-built artifact exists for your platform
+(e.g. you are on a development commit between releases), a clear error message
+points you to the cargo-build fallback.
+
+### Fallback — build from source (requires Rust)
+
+Only needed when a pre-built artifact is unavailable:
+
+```sh
+# Install Rust (one time): https://rustup.rs
+# Linux/macOS also need: nasm, a C toolchain (gcc/clang), protoc
+task libsignal   # falls back to cargo build automatically
+```
+
+See [Prerequisites](#prerequisites) and [Windows](#windows-git-bash--msys2)
+for the full toolchain setup.
 
 `task build` also runs `go build ./...` for all packages. The CLI binary
 always lands at **`bin/signal-go`** (on Windows: `bin/signal-go.exe`).
@@ -553,10 +592,11 @@ To ship a new `v*` tag and draft GitHub Release binaries, see
 - *"wrong passphrase (or the store is corrupted)"* — make sure you
   typed the same passphrase you used at link time, or delete
   `./.signal-data/` and re-link.
-- *Compilation errors mentioning `signal_*`* — re-run `task libsignal`.
-  The header (`internal/libsignal/include/signal_ffi.h`) and static
-  library (`internal/libsignal/lib/libsignal_ffi.a`) must come from the
-  same upstream tag.
+- *Compilation errors mentioning `signal_*`* — re-run `task libsignal`
+  (or `go generate ./internal/libsignal/`).  The header
+  (`internal/libsignal/include/signal_ffi.h`) and static library
+  (`internal/libsignal/lib/libsignal_ffi.a`) must come from the same
+  upstream tag.
 - *`undefined reference to fiat_p256_adx_mul` (Windows)* — your
   `libsignal_ffi.a` predates the MinGW stub step in
   `scripts/build-libsignal.sh`. Run `task libsignal` again (or

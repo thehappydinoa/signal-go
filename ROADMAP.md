@@ -325,6 +325,10 @@ Phase C — release pipeline (**shipped for v0.1.0**):
 - [x] Native-built binaries for linux/{amd64,arm64} +
       darwin/{amd64,arm64} + windows/amd64 (Windows leg is
       `experimental: true` until promoted)
+- [x] `.github/workflows/libsignal-artifacts.yml`: pre-built
+      `libsignal_ffi.a` artifacts published to `libsignal-v*` GitHub
+      Releases; `task libsignal` downloads automatically (no Rust
+      required) ([ADR 0037](./docs/adr/0037-libsignal-prebuilt-artifacts.md))
 - [ ] Code signing (macOS Developer ID, Windows EV cert) — follow-up
 - [ ] Homebrew tap + Scoop manifest — post-v0.1.0 follow-up
 
