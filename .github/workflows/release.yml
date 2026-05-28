@@ -83,10 +83,7 @@ jobs:
             cargo_target: x86_64-pc-windows-gnu
             cache_key_suffix: windows-latest-x86_64-gnu
             archive: zip
-            # Windows runs against MinGW-w64 so cgo can link the static
-            # archive. BoringSSL upstream prefers MSVC; mark this leg as
-            # experimental until we've shipped a clean release from it.
-            experimental: true
+            experimental: false
 
     steps:
       - uses: actions/checkout@v6

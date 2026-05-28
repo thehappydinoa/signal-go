@@ -70,7 +70,7 @@ jobs:
             arch: amd64
             cargo_target: x86_64-pc-windows-gnu
             cache_key_suffix: windows-latest-x86_64-gnu
-            experimental: true
+            experimental: false
 
     steps:
       - uses: actions/checkout@v6

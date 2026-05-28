@@ -315,3 +315,17 @@ jobs:
 
       - name: Run govulncheck
         run: govulncheck ./...
+
+  docs_check:
+    name: Docs freshness check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Warn if API-visible files changed without docs update
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/check-docs-touched.sh "$BASE_SHA"

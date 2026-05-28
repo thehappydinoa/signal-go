@@ -306,8 +306,8 @@ Phase B — broaden:
 - [x] macOS runners (`macos-latest` arm64, `macos-15-intel` amd64) +
       Windows runner (`windows-latest`, MinGW-w64) validated via the
       release workflow's `workflow_dispatch` dry-run path
-      ([ADR 0033](./docs/adr/0033-release-pipeline.md)). Windows is
-      `experimental: true` until the first clean release.
+      ([ADR 0033](./docs/adr/0033-release-pipeline.md)). Windows promoted
+      from `experimental` after v0.2.0 shipped cleanly.
 - [x] `staticcheck` job in `ci.yml`; `gosec` still gated on triage
 - [x] Coverage report uploaded as a PR check (`ci.yml` `cover` job;
       `task cover` locally)

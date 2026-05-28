@@ -1,0 +1,122 @@
+name: libsignal canary
+
+# Runs weekly. Compares our pinned libsignal tag against the latest upstream
+# release and diffs signal_ffi.h. Fails (as a warning to the maintainer) when
+# a newer release is available and the header has changed.
+#
+# signal_ffi.h lives at swift/Sources/SignalFfi/signal_ffi.h in the upstream
+# libsignal repo — that's where build-libsignal.sh copies it from.
+
+on:
+  schedule:
+    # 04:27 UTC every Monday — off-peak, off-the-hour.
+    - cron: '27 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: Check for new libsignal release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pinned libsignal version
+        id: pinned
+        run: |
+          v=$(sed -n 's/^LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-\([^}]*\)}".*/\1/p' scripts/build-libsignal.sh)
+          if [ -z "$v" ]; then
+            echo "Could not parse LIBSIGNAL_VERSION from build-libsignal.sh" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Pinned libsignal: $v"
+
+      - name: Fetch latest libsignal release
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api repos/signalapp/libsignal/releases/latest --jq '.tag_name')
+          echo "version=$latest" >> "$GITHUB_OUTPUT"
+          echo "Latest libsignal: $latest"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          pinned="${{ steps.pinned.outputs.version }}"
+          latest="${{ steps.latest.outputs.version }}"
+          if [ "$pinned" = "$latest" ]; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+            echo "Pinned ($pinned) == latest ($latest). Nothing to do."
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+            echo "New release available: $latest (pinned: $pinned)"
+          fi
+
+      - name: Download signal_ffi.h from pinned tag
+        if: steps.compare.outputs.up_to_date == 'false'
+        run: |
+          tag="${{ steps.pinned.outputs.version }}"
+          curl -sf \
+            "https://raw.githubusercontent.com/signalapp/libsignal/$tag/swift/Sources/SignalFfi/signal_ffi.h" \
+            -o pinned_signal_ffi.h
+          echo "Downloaded signal_ffi.h for $tag"
+
+      - name: Download signal_ffi.h from latest tag
+        if: steps.compare.outputs.up_to_date == 'false'
+        run: |
+          tag="${{ steps.latest.outputs.version }}"
+          curl -sf \
+            "https://raw.githubusercontent.com/signalapp/libsignal/$tag/swift/Sources/SignalFfi/signal_ffi.h" \
+            -o latest_signal_ffi.h
+          echo "Downloaded signal_ffi.h for $tag"
+
+      - name: Diff signal_ffi.h
+        if: steps.compare.outputs.up_to_date == 'false'
+        id: diff
+        run: |
+          pinned="${{ steps.pinned.outputs.version }}"
+          latest="${{ steps.latest.outputs.version }}"
+
+          if diff -u pinned_signal_ffi.h latest_signal_ffi.h > ffi.diff; then
+            echo "signal_ffi.h is identical between $pinned and $latest."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            lines=$(wc -l < ffi.diff)
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "ffi_diff_lines=$lines" >> "$GITHUB_OUTPUT"
+            echo "signal_ffi.h changed ($lines diff lines)."
+          fi
+
+      - name: Upload diff artifact
+        if: steps.compare.outputs.up_to_date == 'false' && steps.diff.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: signal_ffi-diff-${{ steps.pinned.outputs.version }}-to-${{ steps.latest.outputs.version }}
+          path: ffi.diff
+          retention-days: 30
+
+      - name: Report result
+        if: steps.compare.outputs.up_to_date == 'false'
+        run: |
+          pinned="${{ steps.pinned.outputs.version }}"
+          latest="${{ steps.latest.outputs.version }}"
+          has_changes="${{ steps.diff.outputs.has_changes }}"
+
+          if [ "$has_changes" = "true" ]; then
+            lines="${{ steps.diff.outputs.ffi_diff_lines }}"
+            echo "::error::libsignal $latest is available (pinned: $pinned). signal_ffi.h changed ($lines diff lines). Download the ffi.diff artifact and audit every changed signature against internal/libsignal/ callers before bumping."
+            echo ""
+            echo "Compare URL: https://github.com/signalapp/libsignal/compare/$pinned...$latest"
+            echo ""
+            head -100 ffi.diff || true
+            exit 1
+          else
+            echo "::warning::libsignal $latest is available (pinned: $pinned). signal_ffi.h is unchanged — bump is low-risk but should still be tested."
+            echo ""
+            echo "Compare URL: https://github.com/signalapp/libsignal/compare/$pinned...$latest"
+          fi
