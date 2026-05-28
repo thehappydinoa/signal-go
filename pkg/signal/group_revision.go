@@ -20,7 +20,9 @@ func (c *Client) storeGroupRevision(masterKeyHex string, revision uint32) {
 	if c.groupRevision == nil {
 		c.groupRevision = make(map[string]uint32)
 	}
-	c.groupRevision[masterKeyHex] = revision
+	if revision > c.groupRevision[masterKeyHex] {
+		c.groupRevision[masterKeyHex] = revision
+	}
 	c.groupRevMu.Unlock()
 }
 

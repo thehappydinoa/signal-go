@@ -433,6 +433,11 @@ func (h Match) Use(mw MiddlewareFunc) Match {
 // the provided hex-encoded master keys. DM messages (empty GroupID) are
 // unaffected: they still match. Pair with [Match.Group] to restrict to
 // group-only traffic.
+//
+// Security: DM messages always pass this filter — InGroups alone does NOT
+// prevent a direct-message sender from triggering this handler. If your
+// handler must never run for DMs (e.g. admin commands, group-scoped secrets),
+// chain .Group().InGroups(...) instead of .InGroups(...) alone.
 func (h Match) InGroups(groupIDs ...string) Match {
 	ids := make(map[string]struct{}, len(groupIDs))
 	for _, id := range groupIDs {
@@ -588,7 +593,9 @@ func (h ReactionMatch) Group() ReactionMatch { h.m.groupOnly = true; return h }
 func (h ReactionMatch) From(aci string) ReactionMatch { h.m.fromACI = aci; return h }
 
 // InGroups narrows the match to reactions whose group ID is one of the
-// provided hex-encoded master keys. DM reactions are unaffected.
+// provided hex-encoded master keys. DM reactions (empty GroupID) always pass
+// this filter. Chain [ReactionMatch.Group] before InGroups to block DM
+// reactions entirely.
 func (h ReactionMatch) InGroups(groupIDs ...string) ReactionMatch {
 	ids := make(map[string]struct{}, len(groupIDs))
 	for _, id := range groupIDs {
@@ -630,7 +637,8 @@ func (h EditMatch) Group() EditMatch { h.m.groupOnly = true; return h }
 func (h EditMatch) From(aci string) EditMatch { h.m.fromACI = aci; return h }
 
 // InGroups narrows the match to edits whose group ID is one of the
-// provided hex-encoded master keys. DM edits are unaffected.
+// provided hex-encoded master keys. DM edits (empty GroupID) always pass this
+// filter. Chain [EditMatch.Group] before InGroups to block DM edits entirely.
 func (h EditMatch) InGroups(groupIDs ...string) EditMatch {
 	ids := make(map[string]struct{}, len(groupIDs))
 	for _, id := range groupIDs {

@@ -129,10 +129,12 @@ func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
 	if padLen == 0 || padLen > blockSize || padLen > len(data) {
 		return nil, errors.New("invalid pkcs7 padding")
 	}
+	var diff byte
 	for _, b := range data[len(data)-padLen:] {
-		if int(b) != padLen {
-			return nil, errors.New("invalid pkcs7 padding bytes")
-		}
+		diff |= b ^ byte(padLen)
+	}
+	if diff != 0 {
+		return nil, errors.New("invalid pkcs7 padding bytes")
 	}
 	return data[:len(data)-padLen], nil
 }

@@ -527,6 +527,13 @@ func (c *Client) cachedSenderCert(ctx context.Context, creds web.Credentials) (*
 	if err != nil {
 		return nil, fmt.Errorf("signal.Send: parse sender cert: %w", err)
 	}
+	roots, err := libsignal.ProductionTrustRoots()
+	if err != nil {
+		return nil, fmt.Errorf("signal.Send: sender cert trust roots: %w", err)
+	}
+	if ok, verr := cert.Validate(roots, time.Now()); verr != nil || !ok {
+		return nil, fmt.Errorf("signal.Send: sender cert invalid or expired")
+	}
 	expiry, err := cert.Expiration()
 	if err != nil {
 		return nil, fmt.Errorf("signal.Send: sender cert expiry: %w", err)

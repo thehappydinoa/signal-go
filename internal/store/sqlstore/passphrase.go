@@ -54,8 +54,13 @@ func loadOrCreatePassphraseKey(dir, passphrase string) ([seal.KeyLen]byte, error
 		if err != nil {
 			return zero, err
 		}
-		if err := os.WriteFile(path, out, 0o600); err != nil {
-			return zero, fmt.Errorf("sqlstore: write kdf.json: %w", err)
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, out, 0o600); err != nil {
+			return zero, fmt.Errorf("sqlstore: write kdf.json.tmp: %w", err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			_ = os.Remove(tmp)
+			return zero, fmt.Errorf("sqlstore: install kdf.json: %w", err)
 		}
 		return meta.derive(passphrase)
 	default:
