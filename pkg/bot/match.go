@@ -28,6 +28,10 @@ type matcher struct {
 	dmOnly    bool
 	groupOnly bool
 	fromACI   string
+	// allowedGroupIDs, when non-nil, restricts group messages to those
+	// whose GroupID is present in the map. DM messages (empty GroupID)
+	// are unaffected: they pass the filter regardless.
+	allowedGroupIDs map[string]struct{}
 	// stage, when non-empty, requires the conversation's current
 	// stage (as written via [Convo.SetStage]) to match exactly.
 	// stageAny, when true, matches any non-empty stage.
@@ -46,8 +50,8 @@ func (m matcher) match(ev *signal.MessageEvent, msg *Message) ([]string, bool) {
 }
 
 // scopeOK evaluates the non-pattern scope filters: dmOnly, groupOnly,
-// fromACI, stage, stageAny. Pulled out of [matcher.match] to keep
-// cyclomatic complexity down.
+// fromACI, allowedGroupIDs, stage, stageAny. Pulled out of [matcher.match]
+// to keep cyclomatic complexity down.
 func (m matcher) scopeOK(ev *signal.MessageEvent, msg *Message) bool {
 	if m.dmOnly && msg.IsGroup() {
 		return false
@@ -57,6 +61,11 @@ func (m matcher) scopeOK(ev *signal.MessageEvent, msg *Message) bool {
 	}
 	if m.fromACI != "" && ev.Sender != m.fromACI {
 		return false
+	}
+	if m.allowedGroupIDs != nil && ev.GroupID != "" {
+		if _, ok := m.allowedGroupIDs[ev.GroupID]; !ok {
+			return false
+		}
 	}
 	if m.stageAny || m.stage != "" {
 		current := msg.Convo().Stage()

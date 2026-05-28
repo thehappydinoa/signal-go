@@ -429,6 +429,19 @@ func (h Match) Use(mw MiddlewareFunc) Match {
 	return h
 }
 
+// InGroups narrows the match to group messages whose group ID is one of
+// the provided hex-encoded master keys. DM messages (empty GroupID) are
+// unaffected: they still match. Pair with [Match.Group] to restrict to
+// group-only traffic.
+func (h Match) InGroups(groupIDs ...string) Match {
+	ids := make(map[string]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		ids[id] = struct{}{}
+	}
+	h.m.allowedGroupIDs = ids
+	return h
+}
+
 // Do registers handler for the current matcher. Handlers receive
 // (ctx, *Message, []string-of-captures-or-args).
 func (h Match) Do(handler HandlerFunc) {
@@ -491,11 +504,12 @@ type ReactionHandlerFunc func(ctx context.Context, r *Reaction) error
 type EditHandlerFunc func(ctx context.Context, e *Edit) error
 
 type reactionMatcher struct {
-	emoji     string // empty = match any emoji
-	includeRm bool   // include "remove" reactions even when emoji is set
-	dmOnly    bool
-	groupOnly bool
-	fromACI   string
+	emoji           string // empty = match any emoji
+	includeRm       bool   // include "remove" reactions even when emoji is set
+	dmOnly          bool
+	groupOnly       bool
+	fromACI         string
+	allowedGroupIDs map[string]struct{}
 }
 
 func (m reactionMatcher) match(ev *signal.ReactionEvent) bool {
@@ -507,6 +521,11 @@ func (m reactionMatcher) match(ev *signal.ReactionEvent) bool {
 	}
 	if m.fromACI != "" && ev.Sender != m.fromACI {
 		return false
+	}
+	if m.allowedGroupIDs != nil && ev.GroupID != "" {
+		if _, ok := m.allowedGroupIDs[ev.GroupID]; !ok {
+			return false
+		}
 	}
 	if !m.includeRm && ev.Remove {
 		return false
@@ -523,9 +542,10 @@ type reactionHandler struct {
 }
 
 type editMatcher struct {
-	dmOnly    bool
-	groupOnly bool
-	fromACI   string
+	dmOnly          bool
+	groupOnly       bool
+	fromACI         string
+	allowedGroupIDs map[string]struct{}
 }
 
 func (m editMatcher) match(ev *signal.EditMessageEvent) bool {
@@ -537,6 +557,11 @@ func (m editMatcher) match(ev *signal.EditMessageEvent) bool {
 	}
 	if m.fromACI != "" && ev.Sender != m.fromACI {
 		return false
+	}
+	if m.allowedGroupIDs != nil && ev.GroupID != "" {
+		if _, ok := m.allowedGroupIDs[ev.GroupID]; !ok {
+			return false
+		}
 	}
 	return true
 }
@@ -561,6 +586,17 @@ func (h ReactionMatch) Group() ReactionMatch { h.m.groupOnly = true; return h }
 
 // From narrows the match to reactions whose sender ACI equals aci.
 func (h ReactionMatch) From(aci string) ReactionMatch { h.m.fromACI = aci; return h }
+
+// InGroups narrows the match to reactions whose group ID is one of the
+// provided hex-encoded master keys. DM reactions are unaffected.
+func (h ReactionMatch) InGroups(groupIDs ...string) ReactionMatch {
+	ids := make(map[string]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		ids[id] = struct{}{}
+	}
+	h.m.allowedGroupIDs = ids
+	return h
+}
 
 // IncludeRemovals reverses the default behavior of skipping "remove"
 // reactions: with this set, a removal of the matching emoji (or any
@@ -592,6 +628,17 @@ func (h EditMatch) Group() EditMatch { h.m.groupOnly = true; return h }
 
 // From narrows the match to edits whose sender ACI equals aci.
 func (h EditMatch) From(aci string) EditMatch { h.m.fromACI = aci; return h }
+
+// InGroups narrows the match to edits whose group ID is one of the
+// provided hex-encoded master keys. DM edits are unaffected.
+func (h EditMatch) InGroups(groupIDs ...string) EditMatch {
+	ids := make(map[string]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		ids[id] = struct{}{}
+	}
+	h.m.allowedGroupIDs = ids
+	return h
+}
 
 // Do registers handler for the current matcher.
 func (h EditMatch) Do(handler EditHandlerFunc) {
