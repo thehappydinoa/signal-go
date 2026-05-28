@@ -20,7 +20,7 @@ the embedding application. We treat libsignal itself as trusted upstream
 | ACI/PNI long-term identity keys | `internal/account.Account.{ACI,PNI}Identity`, persisted by `internal/store/fsstore` | Account impersonation |
 | Account HTTP Basic password | `Account.Password` | Full account takeover |
 | `AccountEntropyPool` (master backup key) | `Account.AccountEntropyPool` | Full backup decryption |
-| ProfileKey | `Account.ProfileKey` (self) and `Client.knownProfileKeys` (peers) | Profile metadata exposure |
+| ProfileKey | `Account.ProfileKey` (self), `Client.knownProfileKeys` (peers), and `recipient_profile_keys` in `sqlstore` when wired | Profile metadata exposure |
 | Per-recipient session state | libsignal-owned, persisted via `internal/store.SignalStores` | Future-message forgery |
 | zkgroup auth credentials | `Client.groupAuthCreds` | Group impersonation until cred expiry |
 | Sender certificate | `Client.senderCert` | Time-bounded sealed-sender impersonation |

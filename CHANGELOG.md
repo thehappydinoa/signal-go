@@ -131,6 +131,13 @@ is *what* changed and *when*.
   `Client.GroupInviteLinkURL`, and `FormatGroupInviteLink` for group metadata
   and invite links.
 - `libsignal.GenerateGroupMasterKey` for fresh group master keys.
+- `TestE2E_GroupAdminLifecycle` e2e test — create group, add peer, promote,
+  demote, remove (`task test:e2e:group-admin`).
+- `store.ProfileKeyStore` and `recipient_profile_keys` SQLite table — recipient
+  profile keys learned at runtime persist across restarts when using `sqlstore`
+  ([ADR 0039](./docs/adr/0039-persist-profile-keys.md)).
+- `OpenOptions.ProfileKeyStore` — wire `db.ProfileKeyStore()` alongside other
+  sqlstore helpers; `OpenFromStore` enables this automatically.
 
 ## [0.3.0] - 2026-05-28
 

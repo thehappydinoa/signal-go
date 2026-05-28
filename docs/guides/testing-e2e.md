@@ -142,6 +142,7 @@ and an empty store directory).
 | `TestE2E_Send` | `SIGNAL_E2E_PEER_ACI` | Sends a unique plaintext to the peer |
 | `TestE2E_Recv` | `SIGNAL_E2E_PEER_ACI` and/or `SIGNAL_E2E_RECV_CONTAINS` | **You** send a message from the peer first; test waits on `Events()` |
 | `TestE2E_GroupManagement` | `SIGNAL_E2E_GROUP_MASTER_KEY` (64 hex chars) | `FetchGroup` + `SyncGroup`; optional `SIGNAL_E2E_GROUP_SEND=1` to post a message |
+| `TestE2E_GroupAdminLifecycle` | `SIGNAL_E2E_GROUP_ADMIN=1`, `SIGNAL_E2E_PEER_ACI` | Bot creates a group, adds peer, promotes, demotes, removes; optional `SIGNAL_E2E_PEER_PROFILE_KEY` (64 hex) |
 | `TestE2E_GroupCreateAndChat` | `SIGNAL_E2E_GROUP_INTERACTIVE=1`, `SIGNAL_E2E_GROUP_INVITE_URL`, `SIGNAL_E2E_PEER_ACI` | Joins a peer-created invite-link group, verifies peer membership, sends bot message, then waits for peer reply containing a token |
 | `TestE2E_Link` | `SIGNAL_E2E_LINK=1` + empty store dir | Interactive link (logs URL); skips if `signal.db` exists |
 
@@ -154,6 +155,8 @@ Common optional variables:
 | `SIGNAL_E2E_PLAINTEXT` | off | Use `sqlstore.Open` (test-only plaintext DB) |
 | `SIGNAL_E2E_SEND_PREFIX` | — | Prefix on outbound send body |
 | `SIGNAL_E2E_EXPECT_BODY` | — | Alias for `SIGNAL_E2E_RECV_CONTAINS` |
+| `SIGNAL_E2E_GROUP_ADMIN` | off | Enable `TestE2E_GroupAdminLifecycle` (`task test:e2e:group-admin`) |
+| `SIGNAL_E2E_PEER_PROFILE_KEY` | — | 64 hex chars; peer profile key for `AddMember` when not cached from a prior DM |
 
 ## Suggested manual flow
 
@@ -167,6 +170,36 @@ Common optional variables:
    message’s `GroupID` or your backup import; run
    `TestE2E_GroupManagement`. Set `SIGNAL_E2E_GROUP_SEND=1` only if you
    want an extra test message in that chat.
+5. **Group admin lifecycle** — bot creates a throwaway group, adds your
+   peer ACI, promotes/demotes/removes them (`task test:e2e:group-admin`).
+   Requires `SIGNAL_E2E_PEER_ACI`. After the peer has sent any DM to the bot
+   once, their profile key is persisted in `signal.db` and reused on later
+   runs. Otherwise supply `SIGNAL_E2E_PEER_PROFILE_KEY` (64 hex) or send a
+   fresh DM before running the test.
+
+## Bot-side group admin lifecycle
+
+Fully automated (no manual reply step). The linked bot:
+
+1. Creates a new group (`CreateGroup`)
+2. Adds `SIGNAL_E2E_PEER_ACI` (`AddMember`)
+3. Promotes the peer to administrator (`PromoteMember`)
+4. Demotes back to default member (`DemoteMember`)
+5. Removes the peer from the group (`RemoveMember`)
+
+```sh
+export SIGNAL_E2E_STORE_DIR=./.signal-e2e
+export SIGNAL_E2E_PASSPHRASE='your-store-passphrase'
+export SIGNAL_E2E_PEER_ACI='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+# Optional only if the peer has never DM'd the bot (and no persisted key yet):
+# export SIGNAL_E2E_PEER_PROFILE_KEY='64-hex-char-profile-key'
+
+task test:e2e:group-admin
+```
+
+The test skips with a clear message if the peer profile key is unavailable.
+Sending any DM from the peer account to the linked bot once persists the key
+in `recipient_profile_keys` for subsequent runs.
 
 ## Interactive group create/join and bidirectional chat
 
@@ -194,9 +227,10 @@ task test:e2e:group
   From the peer account, send that reply in the group.
 6. The test passes when it receives the peer's group message carrying the token.
 
-This test intentionally requires operator interaction because creating a new
-group on the peer side and producing an invite URL cannot be done from the
-linked bot API in this repository today.
+This test intentionally requires operator interaction because it verifies
+bidirectional chat after joining a **peer-created** invite-link group.
+For bot-side create/add/promote/demote/remove, use
+[`task test:e2e:group-admin`](#bot-side-group-admin-lifecycle) instead.
 
 ## Troubleshooting
 

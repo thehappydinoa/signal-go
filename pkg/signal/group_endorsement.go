@@ -132,7 +132,7 @@ func (c *Client) storeGroupSendEndorsements(
 		// Some servers/libsignal combinations may include extra endorsement
 		// entries transiently (for example around invite/join transitions).
 		// Keep the known-member prefix so group send can proceed.
-		c.log.Warn("trimming extra group send endorsements", "group", masterKeyHex, "endorsements", len(endorsements), "members", len(memberACIs))
+		c.log.Debug("trimming extra group send endorsements", "group", masterKeyHex, "endorsements", len(endorsements), "members", len(memberACIs))
 		endorsements = endorsements[:len(memberACIs)]
 	}
 	if len(endorsements) != len(memberACIs) {

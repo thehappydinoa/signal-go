@@ -111,6 +111,10 @@ type OpenOptions struct {
 	// link-and-sync into the client's profile-key and list caches.
 	BackupImportStore store.BackupImportStore
 
+	// ProfileKeyStore persists recipient profile keys across restarts.
+	// When nil, profile keys are in-memory only.
+	ProfileKeyStore store.ProfileKeyStore
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -205,6 +209,8 @@ type Client struct {
 
 	// storeCloser is set by OpenFromStore and closed in Close.
 	storeCloser io.Closer
+
+	profileKeyStore store.ProfileKeyStore
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -268,6 +274,7 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		accountStore:         opts.AccountStore,
 		autoSyncStorage:      opts.AutoSyncStorage,
 		autoMarkRead:         opts.AutoMarkRead,
+		profileKeyStore:      opts.ProfileKeyStore,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{
@@ -285,6 +292,7 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	}
 	c.conn = conn
 	c.loadImportedBackupData(opts.BackupImportStore)
+	c.loadPersistedProfileKeys(opts.ProfileKeyStore)
 	return c, nil
 }
 
