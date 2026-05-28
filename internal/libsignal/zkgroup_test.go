@@ -19,6 +19,23 @@ func TestParseServiceIDStringRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGenerateGroupMasterKey(t *testing.T) {
+	master, secret, err := GenerateGroupMasterKey()
+	if err != nil {
+		t.Fatalf("GenerateGroupMasterKey: %v", err)
+	}
+	if len(master) != GroupMasterKeyLen {
+		t.Fatalf("master len = %d", len(master))
+	}
+	derived, err := GroupSecretParamsFromMasterKey(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if derived != secret {
+		t.Fatal("secret params mismatch after derive")
+	}
+}
+
 func TestProductionServerPublicParamsDeserialize(t *testing.T) {
 	p, err := ProductionServerPublicParams()
 	if err != nil {

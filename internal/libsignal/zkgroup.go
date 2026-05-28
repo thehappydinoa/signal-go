@@ -75,6 +75,29 @@ func DeserializeServerPublicParams(b []byte) (*ServerPublicParams, error) {
 	return wrapServerPublicParams(out), nil
 }
 
+// GenerateGroupMasterKey creates a fresh Groups v2 master key and its secret
+// params, matching Signal-Android's GroupSecretParams.generate().
+func GenerateGroupMasterKey() (masterKey []byte, secretParams [GroupSecretParamsLen]byte, err error) {
+	randomness, err := Randomness()
+	if err != nil {
+		return nil, secretParams, err
+	}
+	if err := checkError(C.signal_group_secret_params_generate_deterministic(
+		cGroupSecretParamsOut(&secretParams),
+		cRandomnessIn(&randomness),
+	)); err != nil {
+		return nil, secretParams, err
+	}
+	var mk [GroupMasterKeyLen]byte
+	if err := checkError(C.signal_group_secret_params_get_master_key(
+		cGroupMasterKeyOut(&mk),
+		cGroupSecretParamsIn(&secretParams),
+	)); err != nil {
+		return nil, secretParams, err
+	}
+	return append([]byte(nil), mk[:]...), secretParams, nil
+}
+
 // GroupSecretParamsFromMasterKey derives group secret params from a 32-byte
 // master key.
 func GroupSecretParamsFromMasterKey(masterKey []byte) ([GroupSecretParamsLen]byte, error) {
@@ -264,6 +287,10 @@ func GroupsV2AuthorizationHeader(publicParams [GroupPublicParamsLen]byte, presen
 
 func cGroupMasterKeyIn(b []byte) *[C.SignalGROUP_MASTER_KEY_LEN]C.uchar {
 	return (*[C.SignalGROUP_MASTER_KEY_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+}
+
+func cGroupMasterKeyOut(b *[GroupMasterKeyLen]byte) *[C.SignalGROUP_MASTER_KEY_LEN]C.uchar {
+	return (*[C.SignalGROUP_MASTER_KEY_LEN]C.uchar)(unsafe.Pointer(b))
 }
 
 func cGroupSecretParamsIn(b *[GroupSecretParamsLen]byte) *[C.SignalGROUP_SECRET_PARAMS_LEN]C.uchar {

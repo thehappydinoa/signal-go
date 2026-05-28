@@ -131,6 +131,7 @@ For current phase details and tick-box progress, see:
 | Topic | Link |
 |-------|------|
 | Build, link, Windows setup | [`docs/guides/getting-started.md`](./docs/guides/getting-started.md) |
+| Creating a Signal bot | [`docs/guides/creating-a-bot.md`](./docs/guides/creating-a-bot.md) |
 | Cutting a release (tags + CI) | [`docs/guides/releasing.md`](./docs/guides/releasing.md) |
 | Testing (unit / component / e2e) | [`docs/guides/testing.md`](./docs/guides/testing.md) |
 | Bot examples by script type | [`examples/`](./examples/) |

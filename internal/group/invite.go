@@ -1,6 +1,7 @@
 package group
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -14,6 +15,42 @@ import (
 )
 
 const groupInviteHost = "signal.group"
+
+// InviteLinkPasswordLen is the size of a Groups v2 invite link password.
+const InviteLinkPasswordLen = 16
+
+// GenerateInviteLinkPassword returns a fresh 16-byte invite link password.
+func GenerateInviteLinkPassword() ([]byte, error) {
+	b := make([]byte, InviteLinkPasswordLen)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("group.GenerateInviteLinkPassword: %w", err)
+	}
+	return b, nil
+}
+
+// FormatInviteLinkURL builds a https://signal.group/#... URL from master key and
+// password bytes.
+func FormatInviteLinkURL(masterKey, password []byte) (string, error) {
+	if len(masterKey) != libsignal.GroupMasterKeyLen {
+		return "", fmt.Errorf("group.FormatInviteLinkURL: master key length %d, want %d", len(masterKey), libsignal.GroupMasterKeyLen)
+	}
+	if len(password) == 0 {
+		return "", errors.New("group.FormatInviteLinkURL: empty password")
+	}
+	link := &groupspb.GroupInviteLink{
+		Contents: &groupspb.GroupInviteLink_ContentsV1{
+			ContentsV1: &groupspb.GroupInviteLink_GroupInviteLinkContentsV1{
+				GroupMasterKey:     append([]byte(nil), masterKey...),
+				InviteLinkPassword: append([]byte(nil), password...),
+			},
+		},
+	}
+	raw, err := proto.Marshal(link)
+	if err != nil {
+		return "", fmt.Errorf("group.FormatInviteLinkURL: marshal: %w", err)
+	}
+	return "https://" + groupInviteHost + "/#" + base64.RawURLEncoding.EncodeToString(raw), nil
+}
 
 // ParsedInviteLink holds the master key and invite password from a
 // signal.group URL.

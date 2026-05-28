@@ -10,7 +10,18 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- [`docs/guides/creating-a-bot.md`](./docs/guides/creating-a-bot.md) — step-by-step
+  guide to linking a device, building a `pkg/bot` bot, groups, middleware, and
+  deployment.
+- `Client.CreateGroup` — create a new Groups v2 chat (`PUT /v2/groups/`) with the
+  linked account as administrator; members without profile keys are added as
+  pending invites ([ADR 0038](./docs/adr/0038-groups-v2-create.md)).
+- `Client.SetGroupTitle`, `Client.SetGroupDescription`, `Client.EnableGroupInviteLink`,
+  `Client.GroupInviteLinkURL`, and `FormatGroupInviteLink` for group metadata
+  and invite links.
+- `libsignal.GenerateGroupMasterKey` for fresh group master keys.
 
 ## [0.3.0] - 2026-05-28
 

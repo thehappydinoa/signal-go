@@ -2,6 +2,9 @@
 
 These examples are intentionally small, script-style bot programs you can run and modify.
 
+**New to bots?** Start with the step-by-step guide:
+[Creating a Signal bot](../docs/guides/creating-a-bot.md).
+
 ## Choose by script type
 
 | Script type | Example |

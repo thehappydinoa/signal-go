@@ -305,6 +305,9 @@ ProfileCipher wire format.
 
 ## Build a bot (Phase 6)
 
+**Full walkthrough:** [Creating a Signal bot](./creating-a-bot.md) — link a
+device, register handlers, groups, middleware, deployment.
+
 `pkg/bot` is a thin dispatcher on top of `pkg/signal` modeled on
 Telegram bot / Slack Bolt. You register handlers, scope them with
 `DM()`/`Group()`/`From()`/`Stage()`, and reply with `m.Reply(ctx, …)`:
@@ -418,6 +421,19 @@ See [ADR 0026](../adr/0026-attachment-cipher.md).
 
 ### Groups v2 (membership)
 
+Create a new group (local account becomes administrator):
+
+```go
+result, err := client.CreateGroup(ctx, signal.CreateGroupOptions{
+    Title: "Bot alerts",
+    Members: []signal.CreateGroupMember{
+        {ACI: memberACI, ProfileKey: profileKey},
+    },
+})
+masterKey := result.MasterKey
+_, err = client.SendGroup(ctx, masterKey, "hello group")
+```
+
 Administrators can promote/demote, add/remove members, or any member can leave:
 
 ```go
@@ -444,6 +460,13 @@ grp, err := client.JoinGroupViaInviteLink(ctx, "https://signal.group/#...")
 
 When the link requires admin approval, [JoinGroupViaInviteLink] adds the local
 user to the pending list instead of full membership.
+
+Create or enable an invite link from a bot-owned group:
+
+```go
+inviteURL, grp, err := client.EnableGroupInviteLink(ctx, masterKey, signal.GroupInviteLinkAccessAny)
+inviteURL, err = client.GroupInviteLinkURL(ctx, masterKey) // existing link
+```
 
 Catch up from a known revision without a full refetch:
 
