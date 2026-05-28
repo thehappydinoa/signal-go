@@ -12,7 +12,7 @@ is *what* changed and *when*.
 
 Nothing yet.
 
-## [0.2.0-rc1] - 2026-05-27
+## [0.2.0] - 2026-05-27
 
 ### Added
 
@@ -145,8 +145,8 @@ support, and TLS trust fixes for Signal's private CA.
   ([`SECURITY.md`](./SECURITY.md)).
 - ROADMAP: Phase B/C CI and release pipeline items marked done.
 
-[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.2.0-rc1...HEAD
-[0.2.0-rc1]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...v0.2.0-rc1
+[Unreleased]: https://github.com/thehappydinoa/signal-go/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/thehappydinoa/signal-go/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0
 [0.1.0-rc2]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc2
 [0.1.0-rc1]: https://github.com/thehappydinoa/signal-go/releases/tag/v0.1.0-rc1
