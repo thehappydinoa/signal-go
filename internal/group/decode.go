@@ -23,6 +23,12 @@ const (
 type Member struct {
 	ACI  string
 	Role MemberRole
+	// Label is the optional per-group nickname for this member (admin-set).
+	Label string
+	// LabelEmoji is the optional per-group emoji label for this member.
+	LabelEmoji string
+	// ProfileKey is the member's 32-byte profile key when present on the wire.
+	ProfileKey []byte
 }
 
 // State is a decrypted Groups v2 group snapshot.
@@ -97,6 +103,11 @@ func decodeMember(secretParams [libsignal.GroupSecretParamsLen]byte, m *groupspb
 	if m == nil {
 		return Member{}, fmt.Errorf("nil member")
 	}
+	var (
+		aci string
+		user libsignal.ServiceIDFixedWidth
+		err error
+	)
 	if len(m.GetPresentation()) > 0 {
 		uuidCT, err := libsignal.ProfileKeyPresentationUUIDCiphertext(m.GetPresentation())
 		if err != nil {
@@ -106,23 +117,81 @@ func decodeMember(secretParams [libsignal.GroupSecretParamsLen]byte, m *groupspb
 		if err != nil {
 			return Member{}, fmt.Errorf("presentation decrypt aci: %w", err)
 		}
-		aci, err := libsignal.ServiceIDString(id)
+		user = id
+		aci, err = libsignal.ServiceIDString(id)
 		if err != nil {
 			return Member{}, err
 		}
-		return Member{
-			ACI:  aci,
-			Role: MemberRole(m.GetRole()),
-		}, nil
+	} else {
+		aci, err = decryptACI(secretParams, m.GetUserId())
+		if err != nil {
+			return Member{}, err
+		}
+		user, err = libsignal.ParseServiceIDString(aci)
+		if err != nil {
+			return Member{}, err
+		}
 	}
-	aci, err := decryptACI(secretParams, m.GetUserId())
-	if err != nil {
-		return Member{}, err
-	}
-	return Member{
+
+	member := Member{
 		ACI:  aci,
 		Role: MemberRole(m.GetRole()),
-	}, nil
+	}
+	if label, err := decryptMemberLabel(secretParams, m.GetLabelString()); err != nil {
+		return Member{}, fmt.Errorf("label: %w", err)
+	} else {
+		member.Label = label
+	}
+	if emoji, err := decryptMemberLabel(secretParams, m.GetLabelEmoji()); err != nil {
+		return Member{}, fmt.Errorf("label emoji: %w", err)
+	} else {
+		member.LabelEmoji = emoji
+	}
+	if pk, err := memberProfileKey(secretParams, user, m); err != nil {
+		return Member{}, err
+	} else if len(pk) > 0 {
+		member.ProfileKey = pk
+	}
+	return member, nil
+}
+
+func memberProfileKey(
+	secretParams [libsignal.GroupSecretParamsLen]byte,
+	user libsignal.ServiceIDFixedWidth,
+	m *groupspb.Member,
+) ([]byte, error) {
+	if pkWire := m.GetProfileKey(); len(pkWire) == libsignal.ProfileKeyCiphertextLen {
+		var ct [libsignal.ProfileKeyCiphertextLen]byte
+		copy(ct[:], pkWire)
+		dec, err := libsignal.GroupSecretParamsDecryptProfileKey(secretParams, ct, user)
+		if err != nil {
+			return nil, fmt.Errorf("profile key ciphertext: %w", err)
+		}
+		return dec[:], nil
+	}
+	if len(m.GetPresentation()) == 0 {
+		return nil, nil
+	}
+	pkCT, err := libsignal.ProfileKeyPresentationProfileKeyCiphertext(m.GetPresentation())
+	if err != nil {
+		return nil, fmt.Errorf("presentation profile key: %w", err)
+	}
+	dec, err := libsignal.GroupSecretParamsDecryptProfileKey(secretParams, pkCT, user)
+	if err != nil {
+		return nil, fmt.Errorf("presentation decrypt profile key: %w", err)
+	}
+	return dec[:], nil
+}
+
+func decryptMemberLabel(secretParams [libsignal.GroupSecretParamsLen]byte, ciphertext []byte) (string, error) {
+	if len(ciphertext) == 0 {
+		return "", nil
+	}
+	plain, err := libsignal.GroupSecretParamsDecryptBlob(secretParams, ciphertext)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(plain)), nil
 }
 
 func decryptACI(secretParams [libsignal.GroupSecretParamsLen]byte, ciphertext []byte) (string, error) {

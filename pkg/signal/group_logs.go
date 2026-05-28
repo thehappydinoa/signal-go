@@ -175,7 +175,13 @@ func groupFromDecodedState(masterKeyHex string, state *group.State) (*Group, []s
 	members := make([]GroupMember, len(state.Members))
 	memberACIs := make([]string, len(state.Members))
 	for i, m := range state.Members {
-		members[i] = GroupMember{ACI: m.ACI, Role: m.Role}
+		members[i] = GroupMember{
+			ACI:        m.ACI,
+			Role:       m.Role,
+			Label:      m.Label,
+			LabelEmoji: m.LabelEmoji,
+			ProfileKey: append([]byte(nil), m.ProfileKey...),
+		}
 		memberACIs[i] = m.ACI
 	}
 	return &Group{

@@ -99,6 +99,10 @@ func run(args []string) int {
 		joinCooldown: *joinCooldown,
 		dryRun:       *dryRun,
 		profileKeys:  map[string][]byte{},
+		contactNames: map[string]string{},
+		displayNames: map[string]string{},
+		groupTitles:  map[string]string{},
+		groupLabels:  map[string]map[string]string{},
 	}
 	c.log("START", "group crawler connected aci=%s device=%d store=%s dry_run=%v",
 		c.selfACI, sgClient.Account().DeviceID, store.Dir, *dryRun)
@@ -142,6 +146,10 @@ type crawler struct {
 	visitedGroup  map[string]struct{}
 	visitedInvite map[string]struct{} // hex-encoded group master key from invite
 	profileKeys   map[string][]byte
+	contactNames  map[string]string            // ACI → storage contact name
+	displayNames  map[string]string            // ACI → profile or contact name
+	groupTitles   map[string]string            // group ID hex → title
+	groupLabels   map[string]map[string]string // group ID → ACI → per-group label
 	groupQueue    []string
 	inviteQueue   []string
 	groupsVisited int
@@ -166,6 +174,11 @@ func (c *crawler) seedProfileKeys(ctx context.Context) error {
 		if contact.ACI != "" && len(contact.ProfileKey) > 0 {
 			c.profileKeys[contact.ACI] = append([]byte(nil), contact.ProfileKey...)
 		}
+		if contact.ACI != "" {
+			if name := storageContactName(contact); name != "" {
+				c.contactNames[contact.ACI] = name
+			}
+		}
 	}
 	c.mu.Unlock()
 	c.log("STORAGE", "manifest version=%d contacts=%d groups=%d unchanged=%v",
@@ -180,6 +193,115 @@ func (c *crawler) profileKeyFor(aci string) []byte {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]byte(nil), c.profileKeys[aci]...)
+}
+
+func (c *crawler) rememberProfileKey(aci string, key []byte) {
+	if aci == "" || len(key) == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.profileKeys[aci] = append([]byte(nil), key...)
+	c.mu.Unlock()
+}
+
+func storageContactName(contact sg.StoredContact) string {
+	switch {
+	case contact.GivenName != "" && contact.FamilyName != "":
+		return contact.GivenName + " " + contact.FamilyName
+	case contact.GivenName != "":
+		return contact.GivenName
+	case contact.FamilyName != "":
+		return contact.FamilyName
+	case contact.E164 != "":
+		return contact.E164
+	default:
+		return ""
+	}
+}
+
+func (c *crawler) rememberGroupRoster(grp *sg.Group) {
+	if grp == nil {
+		return
+	}
+	id := strings.ToLower(grp.ID)
+	labels := make(map[string]string, len(grp.Members))
+	for _, m := range grp.Members {
+		if m.Label != "" {
+			labels[m.ACI] = m.Label
+		}
+		if len(m.ProfileKey) > 0 {
+			c.rememberProfileKey(m.ACI, m.ProfileKey)
+		}
+	}
+	c.mu.Lock()
+	c.groupTitles[id] = grp.Title
+	c.groupLabels[id] = labels
+	c.mu.Unlock()
+}
+
+func (c *crawler) groupLabel(groupID, aci string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if labels := c.groupLabels[strings.ToLower(groupID)]; labels != nil {
+		return labels[aci]
+	}
+	return ""
+}
+
+func (c *crawler) groupChatName(groupID string) string {
+	if groupID == "" {
+		return "dm"
+	}
+	id := strings.ToLower(groupID)
+	c.mu.Lock()
+	title := c.groupTitles[id]
+	c.mu.Unlock()
+	if title != "" {
+		return title
+	}
+	return shortID(groupID)
+}
+
+// resolveDisplayName picks the best available name: per-group label, cached
+// profile/contact name, or a live profile fetch using roster/storage keys.
+func (c *crawler) resolveDisplayName(ctx context.Context, aci, groupLabel string, rosterProfileKey []byte) string {
+	if groupLabel != "" {
+		return groupLabel
+	}
+	c.mu.Lock()
+	if name := c.displayNames[aci]; name != "" {
+		c.mu.Unlock()
+		return name
+	}
+	c.mu.Unlock()
+
+	profileKey := rosterProfileKey
+	if len(profileKey) == 0 {
+		profileKey = c.profileKeyFor(aci)
+	} else {
+		c.rememberProfileKey(aci, profileKey)
+	}
+	if len(profileKey) > 0 {
+		pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		prof, err := c.client.FetchProfile(pctx, aci, profileKey)
+		cancel()
+		if err == nil {
+			if name := prof.DisplayName(); name != "" {
+				c.mu.Lock()
+				c.displayNames[aci] = name
+				c.mu.Unlock()
+				return name
+			}
+		}
+	}
+
+	c.mu.Lock()
+	name := c.contactNames[aci]
+	c.mu.Unlock()
+	if name != "" {
+		return name
+	}
+	return aci
 }
 
 func (c *crawler) enqueueGroup(groupID string) {
@@ -318,7 +440,8 @@ func (c *crawler) processInvite(ctx context.Context, inviteURL string) {
 	c.mu.Lock()
 	c.groupsJoined++
 	c.mu.Unlock()
-	c.log("INVITE|JOIN_OK", "joined group_id=%s title=%q members=%d", grp.ID, grp.Title, len(grp.Members))
+	c.rememberGroupRoster(grp)
+	c.log("INVITE|JOIN_OK", "joined group_id=%s chat_name=%q members=%d", grp.ID, grp.Title, len(grp.Members))
 	c.enqueueGroup(grp.ID)
 }
 
@@ -363,47 +486,61 @@ func (c *crawler) visitGroup(ctx context.Context, groupID string) {
 		return
 	}
 
+	c.rememberGroupRoster(grp)
+
 	c.log("GROUP|VISIT", logBanner)
-	c.log("GROUP|VISIT", "#%d group_id=%s", visitNum, grp.ID)
-	c.log("GROUP|VISIT", "title=%q", grp.Title)
+	c.log("GROUP|VISIT", "#%d group_id=%s chat_name=%q", visitNum, grp.ID, grp.Title)
 	c.log("GROUP|VISIT", "description=%q", grp.Description)
 	c.log("GROUP|VISIT", "avatar_url=%q revision=%d member_count=%d",
 		grp.AvatarURL, grp.Revision, len(grp.Members))
-	c.log("GROUP|VISIT", "admins=%v", grp.Admins())
+	adminNames := make([]string, 0, len(grp.Admins()))
+	for _, aci := range grp.Admins() {
+		adminNames = append(adminNames, c.resolveDisplayName(ctx, aci, c.groupLabel(grp.ID, aci), nil))
+	}
+	c.log("GROUP|VISIT", "admins=%v", adminNames)
 	for _, m := range grp.Members {
 		role := "member"
 		if m.Role == sg.GroupRoleAdministrator {
 			role = "admin"
 		}
-		c.log("GROUP|MEMBER", "aci=%s role=%s", m.ACI, role)
+		display := c.resolveDisplayName(ctx, m.ACI, m.Label, m.ProfileKey)
+		line := fmt.Sprintf("name=%q aci=%s role=%s", display, m.ACI, role)
+		if m.Label != "" && m.Label != display {
+			line += fmt.Sprintf(" group_label=%q", m.Label)
+		}
+		if m.LabelEmoji != "" {
+			line += fmt.Sprintf(" label_emoji=%q", m.LabelEmoji)
+		}
+		c.log("GROUP|MEMBER", "%s", line)
+		c.scanMemberAbout(ctx, m)
 	}
 	c.log("GROUP|VISIT", logBanner)
 
 	c.enqueueInvites(ctx, "group-description:"+groupID, grp.Description)
-	c.scanMemberBios(ctx, grp)
 }
 
-func (c *crawler) scanMemberBios(ctx context.Context, grp *sg.Group) {
-	for _, m := range grp.Members {
-		if m.ACI == c.selfACI {
-			continue
-		}
-		key := c.profileKeyFor(m.ACI)
-		if len(key) == 0 {
-			c.log("PROFILE|SKIP", "aci=%s (no profile key yet)", m.ACI)
-			continue
-		}
-		pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		prof, err := c.client.FetchProfile(pctx, m.ACI, key)
-		cancel()
-		if err != nil {
-			c.log("PROFILE|FAIL", "aci=%s err=%v", m.ACI, err)
-			continue
-		}
-		c.log("PROFILE|OK", "aci=%s name=%q about=%q about_emoji=%q",
-			m.ACI, prof.DisplayName(), prof.About, prof.AboutEmoji)
-		c.enqueueInvites(ctx, "profile-about:"+m.ACI, prof.About)
+func (c *crawler) scanMemberAbout(ctx context.Context, m sg.GroupMember) {
+	if m.ACI == c.selfACI {
+		return
 	}
+	key := m.ProfileKey
+	if len(key) == 0 {
+		key = c.profileKeyFor(m.ACI)
+	}
+	if len(key) == 0 {
+		return
+	}
+	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	prof, err := c.client.FetchProfile(pctx, m.ACI, key)
+	cancel()
+	if err != nil {
+		c.log("PROFILE|FAIL", "name=%q aci=%s err=%v",
+			c.resolveDisplayName(ctx, m.ACI, m.Label, nil), m.ACI, err)
+		return
+	}
+	c.log("PROFILE|OK", "name=%q aci=%s about=%q about_emoji=%q",
+		prof.DisplayName(), m.ACI, prof.About, prof.AboutEmoji)
+	c.enqueueInvites(ctx, "profile-about:"+m.ACI, prof.About)
 }
 
 func (c *crawler) handleEvent(ctx context.Context, ev sg.Event) {
@@ -413,26 +550,29 @@ func (c *crawler) handleEvent(ctx context.Context, ev sg.Event) {
 		if n := len(e.Attachments); n > 0 {
 			extra = fmt.Sprintf("attachments=%d", n)
 		}
-		c.logEvent("MESSAGE", e.GroupID, e.Sender, e.Timestamp, e.Body, extra)
+		c.logEvent(ctx, "MESSAGE", e.GroupID, e.Sender, e.Timestamp, e.Body, extra)
 		if e.GroupID != "" {
 			c.enqueueInvites(ctx, "message:"+e.GroupID, e.Body)
 		}
 	case *sg.EditMessageEvent:
-		c.logEvent("EDIT", e.GroupID, e.Sender, e.Timestamp, e.NewBody, fmt.Sprintf("target_ts=%s", e.TargetTimestamp.Format(time.RFC3339)))
+		c.logEvent(ctx, "EDIT", e.GroupID, e.Sender, e.Timestamp, e.NewBody, fmt.Sprintf("target_ts=%s", e.TargetTimestamp.Format(time.RFC3339)))
 		if e.GroupID != "" {
 			c.enqueueInvites(ctx, "edit:"+e.GroupID, e.NewBody)
 		}
 	case *sg.ReactionEvent:
-		c.log("EVENT|REACTION", "group=%s sender=%s emoji=%q remove=%v target_author=%s target_ts=%s",
-			shortID(e.GroupID), e.Sender, e.Emoji, e.Remove, e.TargetAuthorACI, e.TargetTimestamp.Format(time.RFC3339))
+		c.log("EVENT|REACTION", "chat=%q sender=%s emoji=%q remove=%v target_author=%s target_ts=%s",
+			c.groupChatName(e.GroupID), c.resolveDisplayName(ctx, e.Sender, c.groupLabel(e.GroupID, e.Sender), nil),
+			e.Emoji, e.Remove, e.TargetAuthorACI, e.TargetTimestamp.Format(time.RFC3339))
 	case *sg.GroupUpdateEvent:
-		c.log("EVENT|GROUP_UPDATE", "group=%s sender=%s revision=%d change_bytes=%d",
-			shortID(e.GroupID), e.Sender, e.Revision, len(e.GroupChange))
+		c.log("EVENT|GROUP_UPDATE", "chat=%q sender=%s revision=%d change_bytes=%d",
+			c.groupChatName(e.GroupID), c.resolveDisplayName(ctx, e.Sender, c.groupLabel(e.GroupID, e.Sender), nil),
+			e.Revision, len(e.GroupChange))
 		if e.GroupID != "" {
 			c.enqueueGroup(e.GroupID)
 		}
 	case *sg.TypingEvent:
-		c.log("EVENT|TYPING", "group=%s sender=%s action=%d", shortID(e.GroupID), e.Sender, e.Action)
+		c.log("EVENT|TYPING", "chat=%q sender=%s action=%d",
+			c.groupChatName(e.GroupID), c.resolveDisplayName(ctx, e.Sender, c.groupLabel(e.GroupID, e.Sender), nil), e.Action)
 	case *sg.ReceiptEvent:
 		c.log("EVENT|RECEIPT", "sender=%s type=%d acks=%d", e.Sender, e.Type, len(e.Timestamps))
 	case *sg.SyncMessageEvent:
@@ -449,12 +589,10 @@ func (c *crawler) handleEvent(ctx context.Context, ev sg.Event) {
 	}
 }
 
-func (c *crawler) logEvent(kind, groupID, sender string, ts time.Time, body, extra string) {
-	g := "dm"
-	if groupID != "" {
-		g = shortID(groupID)
-	}
-	line := fmt.Sprintf("group=%s sender=%s ts=%s body=%q", g, sender, ts.Format(time.RFC3339Nano), truncate(body, 400))
+func (c *crawler) logEvent(ctx context.Context, kind, groupID, sender string, ts time.Time, body, extra string) {
+	chat := c.groupChatName(groupID)
+	senderName := c.resolveDisplayName(ctx, sender, c.groupLabel(groupID, sender), nil)
+	line := fmt.Sprintf("chat=%q sender=%s ts=%s body=%q", chat, senderName, ts.Format(time.RFC3339Nano), truncate(body, 400))
 	if extra != "" {
 		line += " " + extra
 	}

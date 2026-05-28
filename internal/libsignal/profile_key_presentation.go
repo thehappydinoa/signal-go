@@ -123,6 +123,26 @@ func CreateExpiringProfileKeyCredentialPresentation(
 	return goBytesFromOwnedBuffer(buf), nil
 }
 
+// ProfileKeyPresentationProfileKeyCiphertext extracts the encrypted profile key
+// from a profile-key credential presentation.
+func ProfileKeyPresentationProfileKeyCiphertext(presentation []byte) ([ProfileKeyCiphertextLen]byte, error) {
+	var out [ProfileKeyCiphertextLen]byte
+	if len(presentation) == 0 {
+		return out, errors.New("libsignal.ProfileKeyPresentationProfileKeyCiphertext: empty presentation")
+	}
+	if err := checkError(C.signal_profile_key_credential_presentation_check_valid_contents(borrowed(presentation))); err != nil {
+		return out, err
+	}
+	if err := checkError(C.signal_profile_key_credential_presentation_get_profile_key_ciphertext(
+		cProfileKeyCiphertextIn(&out),
+		borrowed(presentation),
+	)); err != nil {
+		return out, err
+	}
+	keepAlive(presentation)
+	return out, nil
+}
+
 // ProfileKeyPresentationUUIDCiphertext extracts the encrypted service id from
 // a profile-key credential presentation.
 func ProfileKeyPresentationUUIDCiphertext(presentation []byte) ([UUIDCiphertextLen]byte, error) {

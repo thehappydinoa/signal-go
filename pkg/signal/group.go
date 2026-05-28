@@ -29,6 +29,13 @@ const (
 type GroupMember struct {
 	ACI  string
 	Role GroupRole
+	// Label is an optional per-group nickname (admin-assigned display label).
+	Label string
+	// LabelEmoji is an optional per-group emoji label for this member.
+	LabelEmoji string
+	// ProfileKey is the member's 32-byte profile key from the group roster when
+	// the server supplied one. Use with [Client.FetchProfile]; do not log it.
+	ProfileKey []byte
 }
 
 // Group is a decrypted Groups v2 group snapshot.

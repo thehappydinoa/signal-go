@@ -15,13 +15,14 @@ _mingw_bin_dir() {
     *) return 1 ;;
   esac
   local -a roots=()
-  if [[ -n "${MSYSTEM:-}" && -d /mingw64/bin ]]; then
-    roots+=(/mingw64)
-  fi
   local root
   for root in /c/msys64 /msys64 "${ProgramFiles:-/c/Program Files}/msys64"; do
     [[ -d "$root/mingw64/bin" ]] && roots+=("$root/mingw64")
   done
+  # Git for Windows embeds /mingw64; only use it when MSYS2 is not installed.
+  if [[ ${#roots[@]} -eq 0 && -n "${MSYSTEM:-}" && -d /mingw64/bin ]]; then
+    roots+=(/mingw64)
+  fi
   local r
   for r in "${roots[@]}"; do
     if [[ -x "$r/bin/gcc.exe" ]]; then
@@ -32,11 +33,18 @@ _mingw_bin_dir() {
   return 1
 }
 if _mingw_bin="$(_mingw_bin_dir 2>/dev/null)"; then
-  if ! command -v gcc.exe >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
-    export PATH="$_mingw_bin:${PATH:-}"
+  # Always prepend MSYS2 mingw64 (even if already on PATH later). Git for Windows
+  # also ships /mingw64/bin/gcc, which is not the libsignal toolchain and breaks cgo.
+  export PATH="$_mingw_bin:${PATH:-}"
+  # Do not set CC/CXX to MSYS paths like /c/msys64/.../gcc.exe: Go 1.25 cgo on
+  # Windows treats those as invalid. Prepend mingw64/bin to PATH and use bare
+  # compiler names (or leave CC/CXX unset so cgo discovers gcc on PATH).
+  if [[ -z "${CC:-}" ]]; then
+    export CC=gcc
   fi
-  export CC="${CC:-$_mingw_bin/gcc.exe}"
-  export CXX="${CXX:-$_mingw_bin/g++.exe}"
+  if [[ -z "${CXX:-}" ]]; then
+    export CXX=g++
+  fi
   if [[ -z "${CGO_LDFLAGS:-}" ]]; then
     export CGO_LDFLAGS="-lstdc++"
   fi

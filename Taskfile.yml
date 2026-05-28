@@ -17,10 +17,9 @@ vars:
 
 env:
   CGO_ENABLED: '1'
-  # Resolve the full compiler path via dev-env.sh so the Go toolchain can
-  # find gcc even on a cold build cache (where runtime/cgo must be compiled
-  # from scratch and a bare "gcc" won't resolve without mingw64 on PATH).
-  # On Linux/macOS dev-env.sh is effectively a no-op for CC/CXX.
+  # cgo tasks run via scripts/with-dev-env.sh (prepends MSYS2 mingw64 on Windows).
+  # Bare CC/CXX names for ad-hoc `go` invocations outside Task; do not use
+  # /c/msys64/... absolute paths — Go 1.25 cgo on Windows rejects them.
   CC:
     sh: bash -c 'source scripts/dev-env.sh 2>/dev/null && echo "${CC:-gcc}"'
   CXX:
@@ -77,20 +76,20 @@ tasks:
     desc: Build all packages and the demo CLI (binary at bin/signal-go)
     deps: [libsignal]
     cmds:
-      - go build {{.BUILDFLAGS}} ./...
-      - go build {{.BUILDFLAGS}} -o bin/signal-go ./cmd/signal-go
+      - bash scripts/with-dev-env.sh go build {{.BUILDFLAGS}} ./...
+      - bash scripts/with-dev-env.sh go build {{.BUILDFLAGS}} -o bin/signal-go ./cmd/signal-go
 
   test:
     desc: Run unit tests
     deps: [libsignal]
     cmds:
-      - go test {{.RACE}} -count=1 ./...
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 ./...
 
   test:component:
     desc: Run component tests (require fake Signal server)
     deps: [libsignal]
     cmds:
-      - go test {{.RACE}} -count=1 -tags=component ./...
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 -tags=component ./...
 
   test:e2e:
     desc: Run end-to-end tests against real chat.signal.org (excludes interactive link/group-create)
@@ -103,7 +102,7 @@ tasks:
       TEMP: ./.build/tmp
     cmds:
       - mkdir -p .build/tmp
-      - go test {{.RACE}} -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement)$' ./...
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement)$' ./...
 
   test:e2e:link:
     desc: Interactive e2e device link (requires empty SIGNAL_E2E_STORE_DIR; sets SIGNAL_E2E_LINK=1)
@@ -117,7 +116,7 @@ tasks:
       TEMP: ./.build/tmp
     cmds:
       - mkdir -p .build/tmp
-      - go test {{.RACE}} -count=1 -tags=e2e -timeout=15m -run '^TestE2E_Link$' ./pkg/signal/...
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 -tags=e2e -timeout=15m -run '^TestE2E_Link$' ./pkg/signal/...
 
   test:e2e:group:
     desc: Interactive e2e group create/join + bidirectional chat via invite link (runs with -v)
@@ -131,7 +130,7 @@ tasks:
       TEMP: ./.build/tmp
     cmds:
       - mkdir -p .build/tmp
-      - go test {{.RACE}} -v -count=1 -tags=e2e -timeout=15m -run '^TestE2E_GroupCreateAndChat$' ./pkg/signal/...
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -v -count=1 -tags=e2e -timeout=15m -run '^TestE2E_GroupCreateAndChat$' ./pkg/signal/...
 
   cover:
     desc: Run tests with coverage report
@@ -140,8 +139,8 @@ tasks:
       - |
         rm -f coverage.out coverage.tmp
         echo "mode: atomic" > coverage.out
-        for pkg in $(go list -f '{{`{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}`}}' ./...); do
-          go test {{.RACE}} -count=1 -coverprofile=coverage.tmp -covermode=atomic "$pkg"
+        for pkg in $(bash scripts/with-dev-env.sh go list -f '{{`{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}`}}' ./...); do
+          bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 -coverprofile=coverage.tmp -covermode=atomic "$pkg"
           if [ -f coverage.tmp ]; then
             tail -n +2 coverage.tmp >> coverage.out
             rm coverage.tmp
@@ -153,15 +152,15 @@ tasks:
     desc: Run golangci-lint
     deps: [libsignal]
     cmds:
-      - golangci-lint run ./...
+      - bash scripts/with-dev-env.sh golangci-lint run ./...
 
   staticcheck:
     desc: Run staticcheck (Phase 8 audit gate)
     deps: [libsignal]
     cmds:
       - |
-        command -v staticcheck >/dev/null || go install honnef.co/go/tools/cmd/staticcheck@latest
-        PKGS=$(go list ./... | grep -v 'internal/proto/gen')
+        command -v staticcheck >/dev/null || bash scripts/with-dev-env.sh go install honnef.co/go/tools/cmd/staticcheck@latest
+        PKGS=$(bash scripts/with-dev-env.sh go list ./... | grep -v 'internal/proto/gen')
         staticcheck $PKGS
 
   fuzz:
@@ -178,7 +177,7 @@ tasks:
             internal/provisioning:FuzzPKCS7Unpad ; do
           pkg=$(echo "$entry" | cut -d: -f1); fn=$(echo "$entry" | cut -d: -f2)
           echo ">> fuzzing $pkg::$fn for {{.FUZZTIME}}"
-          go test -run='^$' -fuzz="^${fn}$" -fuzztime={{.FUZZTIME}} ./$pkg
+          bash scripts/with-dev-env.sh go test -run='^$' -fuzz="^${fn}$" -fuzztime={{.FUZZTIME}} ./$pkg
         done
 
   fmt:

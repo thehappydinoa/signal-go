@@ -3,7 +3,7 @@
 Example script that **crawls Signal groups** from a linked account:
 
 1. Pulls your group list from [storage sync](https://github.com/thehappydinoa/signal-go/blob/main/pkg/signal/storage.go).
-2. For each group, logs title, description, members, and revision (via `SyncGroup`).
+2. For each group, logs title, description, members (with resolved display names), and revision (via `SyncGroup`). Names come from, in order: per-group member labels, Signal profile names (using profile keys from the group roster), then storage contact names.
 3. Scans **group descriptions** and **member profile “about” bios** (when a profile key is known) for `signal.group` invite links.
 4. Listens on the live websocket and logs **inbound messages**, edits, reactions, and group updates.
 5. When an invite link is found, **previews and joins** the group, then repeats for newly discovered groups.

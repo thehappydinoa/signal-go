@@ -47,4 +47,7 @@ func TestDecodeStatePresentationMember(t *testing.T) {
 	if state.Members[0].ACI != memberACI {
 		t.Fatalf("aci = %q", state.Members[0].ACI)
 	}
+	if len(state.Members[0].ProfileKey) != libsignal.ProfileKeyLen {
+		t.Fatalf("profile key length = %d", len(state.Members[0].ProfileKey))
+	}
 }

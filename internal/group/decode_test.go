@@ -71,3 +71,46 @@ func TestDecodeState(t *testing.T) {
 		t.Fatalf("admins = %v", admins)
 	}
 }
+
+func TestDecodeStateMemberLabel(t *testing.T) {
+	master := make([]byte, libsignal.GroupMasterKeyLen)
+	for i := range master {
+		master[i] = byte(i + 30)
+	}
+	secret, err := libsignal.GroupSecretParamsFromMasterKey(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var randomness [libsignal.ZKRandomnessLen]byte
+	for i := range randomness {
+		randomness[i] = byte(i + 40)
+	}
+	labelCT, err := libsignal.GroupSecretParamsEncryptBlob(secret, []byte("Alice in group"), randomness)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userCT, err := EncryptServiceID(secret, "64656667-6869-6a6b-6c6d-6e6f70717273")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire := &groupspb.Group{
+		Version: 1,
+		Members: []*groupspb.Member{
+			{
+				UserId:      userCT,
+				Role:        groupspb.Member_DEFAULT,
+				LabelString: labelCT,
+			},
+		},
+	}
+	state, err := DecodeState(secret, wire)
+	if err != nil {
+		t.Fatalf("DecodeState: %v", err)
+	}
+	if len(state.Members) != 1 {
+		t.Fatalf("members = %d", len(state.Members))
+	}
+	if state.Members[0].Label != "Alice in group" {
+		t.Fatalf("label = %q", state.Members[0].Label)
+	}
+}
