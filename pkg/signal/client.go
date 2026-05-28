@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -191,6 +192,9 @@ type Client struct {
 	cdsiMu      sync.Mutex
 	cdsiTokio   *libsignal.TokioAsyncContext
 	cdsiConnMgr *libsignal.ConnectionManager
+
+	// storeCloser is set by OpenFromStore and closed in Close.
+	storeCloser io.Closer
 }
 
 // Open loads a previously-linked account from opts.AccountStore and
@@ -287,12 +291,18 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 //	}
 func (c *Client) Events() <-chan Event { return c.events }
 
-// Close shuts down the websocket connection and closes the [Events]
-// channel. Blocks until teardown completes.
+// Close shuts down the websocket connection, closes the [Events] channel,
+// and (if opened via [OpenFromStore]) closes the underlying store.
+// Blocks until teardown completes.
 func (c *Client) Close() error {
 	c.closeCDSI()
 	err := c.conn.Close()
 	close(c.events)
+	if c.storeCloser != nil {
+		if cerr := c.storeCloser.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
 	return err
 }
 

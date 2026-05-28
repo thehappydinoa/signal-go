@@ -71,27 +71,35 @@ func (s *SignalStores) LoadIdentity(addr store.Address) ([]byte, error) {
 }
 
 func (s *SignalStores) SaveIdentity(addr store.Address, pub []byte) (store.SaveIdentityResult, error) {
-	var prev []byte
-	err := s.db.QueryRow(`SELECT pub FROM identities WHERE addr = ?`, addr.String()).Scan(&prev)
-	switch {
-	case isNoRows(err):
-		_, insErr := s.db.Exec(`INSERT INTO identities(addr, pub) VALUES(?, ?)`, addr.String(), bytes.Clone(pub))
-		if insErr != nil {
-			return store.IdentityUnchanged, insErr
-		}
-		return store.IdentityUnchanged, nil
-	case err != nil:
+	tx, err := s.db.Begin()
+	if err != nil {
 		return store.IdentityUnchanged, fmt.Errorf("sqlstore: save identity: %w", err)
-	default:
-		_, updErr := s.db.Exec(`UPDATE identities SET pub = ? WHERE addr = ?`, bytes.Clone(pub), addr.String())
-		if updErr != nil {
-			return store.IdentityUnchanged, updErr
-		}
-		if bytes.Equal(prev, pub) {
-			return store.IdentityUnchanged, nil
-		}
-		return store.IdentityReplaced, nil
 	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var prev []byte
+	selectErr := tx.QueryRow(`SELECT pub FROM identities WHERE addr = ?`, addr.String()).Scan(&prev)
+	if selectErr != nil && !isNoRows(selectErr) {
+		return store.IdentityUnchanged, fmt.Errorf("sqlstore: save identity: %w", selectErr)
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO identities(addr, pub) VALUES(?, ?)
+		 ON CONFLICT(addr) DO UPDATE SET pub = excluded.pub`,
+		addr.String(), bytes.Clone(pub),
+	)
+	if err != nil {
+		return store.IdentityUnchanged, fmt.Errorf("sqlstore: save identity: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return store.IdentityUnchanged, fmt.Errorf("sqlstore: save identity: %w", err)
+	}
+
+	if isNoRows(selectErr) || bytes.Equal(prev, pub) {
+		return store.IdentityUnchanged, nil
+	}
+	return store.IdentityReplaced, nil
 }
 
 func (s *SignalStores) IsTrustedIdentity(addr store.Address, pub []byte, _ store.Direction) (bool, error) {
