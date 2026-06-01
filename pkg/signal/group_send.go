@@ -43,7 +43,8 @@ func (c *Client) SendGroup(ctx context.Context, masterKey []byte, text string) (
 	}
 
 	ts := uint64(time.Now().UnixMilli())
-	contentBytes, err := buildGroupDataMessageContent(text, ts, masterKey, grp.Revision)
+	groupIDHex := hex.EncodeToString(masterKey)
+	contentBytes, err := buildGroupDataMessageContent(text, ts, masterKey, grp.Revision, c.expireTimerSeconds(groupIDHex))
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -222,21 +223,23 @@ func (c *Client) sendSenderKeyDistribution(ctx context.Context, recipientACI str
 	return err
 }
 
-func buildGroupDataMessageContent(text string, tsMillis uint64, masterKey []byte, revision uint32) ([]byte, error) {
+func buildGroupDataMessageContent(text string, tsMillis uint64, masterKey []byte, revision uint32, expireTimer uint32) ([]byte, error) {
 	body := text
 	timestamp := tsMillis
 	rev := revision
-	content := &sspb.Content{
-		Content: &sspb.Content_DataMessage{
-			DataMessage: &sspb.DataMessage{
-				Body:      &body,
-				Timestamp: &timestamp,
-				GroupV2: &sspb.GroupContextV2{
-					MasterKey: masterKey,
-					Revision:  &rev,
-				},
-			},
+	dm := &sspb.DataMessage{
+		Body:      &body,
+		Timestamp: &timestamp,
+		GroupV2: &sspb.GroupContextV2{
+			MasterKey: masterKey,
+			Revision:  &rev,
 		},
+	}
+	if expireTimer != 0 {
+		dm.ExpireTimer = &expireTimer
+	}
+	content := &sspb.Content{
+		Content: &sspb.Content_DataMessage{DataMessage: dm},
 	}
 	return proto.Marshal(content)
 }

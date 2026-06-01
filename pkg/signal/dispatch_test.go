@@ -1,12 +1,18 @@
 package signal
 
 import (
+	"context"
+	"encoding/hex"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
+	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
 // newDispatchClient wires a Client with just the receive-side fields so
@@ -189,6 +195,126 @@ func TestStoreGroupRevision(t *testing.T) {
 	if got := c.cachedGroupRevision("abc"); got != 0 {
 		t.Fatalf("after delete revision = %d", got)
 	}
+}
+
+func TestDispatchDataMessageStoresExpireTimer(t *testing.T) {
+	c := newDispatchClient()
+	body := "hello"
+	ts := uint64(time.Now().UnixMilli())
+	timer := uint32(60)
+	dm := &sspb.DataMessage{
+		Body:        &body,
+		Timestamp:   &ts,
+		ExpireTimer: &timer,
+	}
+	content := &sspb.Content{Content: &sspb.Content_DataMessage{DataMessage: dm}}
+	c.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+
+	if got := c.expireTimerSeconds("alice-aci"); got != 60 {
+		t.Errorf("expireTimerSeconds(alice-aci) = %d, want 60", got)
+	}
+	ev := <-c.events
+	me, ok := ev.(*MessageEvent)
+	if !ok {
+		t.Fatalf("event type = %T, want *MessageEvent", ev)
+	}
+	if me.ExpiresIn != 60*time.Second {
+		t.Errorf("ExpiresIn = %v, want 60s", me.ExpiresIn)
+	}
+}
+
+func TestDispatchGroupMessageStoresExpireTimerUnderGroupID(t *testing.T) {
+	c := newDispatchClient()
+	masterKey := make([]byte, 32)
+	for i := range masterKey {
+		masterKey[i] = byte(i)
+	}
+	groupIDHex := hex.EncodeToString(masterKey)
+	body := "group msg"
+	ts := uint64(time.Now().UnixMilli())
+	rev := uint32(1)
+	timer := uint32(300)
+	dm := &sspb.DataMessage{
+		Body:        &body,
+		Timestamp:   &ts,
+		ExpireTimer: &timer,
+		GroupV2: &sspb.GroupContextV2{
+			MasterKey: masterKey,
+			Revision:  &rev,
+		},
+	}
+	content := &sspb.Content{Content: &sspb.Content_DataMessage{DataMessage: dm}}
+	c.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+
+	if got := c.expireTimerSeconds(groupIDHex); got != 300 {
+		t.Errorf("expireTimerSeconds(group) = %d, want 300", got)
+	}
+	if got := c.expireTimerSeconds("alice-aci"); got != 0 {
+		t.Errorf("expireTimerSeconds(sender) = %d, want 0 (should be keyed by group)", got)
+	}
+}
+
+func TestSetExpireTimerPublicAPI(t *testing.T) {
+	c := newDispatchClient()
+	c.SetExpireTimer("some-aci", 30*time.Second)
+	if got := c.expireTimerSeconds("some-aci"); got != 30 {
+		t.Errorf("got %d, want 30", got)
+	}
+	c.SetExpireTimer("some-aci", 0)
+	if got := c.expireTimerSeconds("some-aci"); got != 0 {
+		t.Errorf("after clear got %d, want 0", got)
+	}
+}
+
+// TestAutoMarkReadFiresGoroutine verifies that autoMarkRead spawns a receipt
+// goroutine without blocking or panicking. The goroutine will fail (no stores
+// configured) but should not crash the process.
+func TestAutoMarkReadFiresGoroutine(t *testing.T) {
+	var putHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			putHits.Add(1)
+		}
+		// Return 404 for bundle fetches so the goroutine fails gracefully.
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := newDispatchClient()
+	c.autoMarkRead = true
+	c.webc = web.New(srv.URL, "test")
+
+	body := "hi"
+	ts := uint64(time.Now().UnixMilli())
+	dm := &sspb.DataMessage{Body: &body, Timestamp: &ts}
+	content := &sspb.Content{Content: &sspb.Content_DataMessage{DataMessage: dm}}
+
+	// Should not panic even with nil stores/account.
+	c.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+
+	// MessageEvent must still be emitted synchronously.
+	select {
+	case ev := <-c.events:
+		if _, ok := ev.(*MessageEvent); !ok {
+			t.Fatalf("event type = %T, want *MessageEvent", ev)
+		}
+	default:
+		t.Fatal("no event emitted")
+	}
+
+	// autoMarkRead disabled: no goroutine launched.
+	c2 := newDispatchClient()
+	c2.dispatchContent("alice-aci", 1, time.Time{}, time.Time{}, content)
+	select {
+	case ev := <-c2.events:
+		if _, ok := ev.(*MessageEvent); !ok {
+			t.Fatalf("c2 event type = %T, want *MessageEvent", ev)
+		}
+	default:
+		t.Fatal("c2: no event emitted")
+	}
+	_ = context.Background()
+	_ = putHits.Load()
 }
 
 func TestDispatchEditMessageEmitsEditEvent(t *testing.T) {

@@ -18,6 +18,23 @@ is *what* changed and *when*.
 
 ### Added
 
+- `OpenOptions.AutoMarkRead` — when set, automatically sends a READ receipt to
+  the sender each time a `MessageEvent` is dispatched. Receipts are fire-and-forget
+  and do not block the receive loop.
+- `Client.SetExpireTimer(chatID, duration)` — manually set the disappearing-message
+  timer for a conversation (ACI for 1:1, hex group master key for groups).
+- Outbound `DataMessage` payloads (`Send`, `SendEdit`, `SendReaction`,
+  `SendGroup`, `SendGroupReaction`) now include the `expire_timer` field when a
+  timer is active for the conversation, so bot-sent messages respect the chat's
+  configured disappearing-message setting.
+- `Group.ExpireTimer` — new field on the fetched group snapshot exposing the
+  group-level disappearing-message duration. `FetchGroup` populates the client's
+  internal timer cache automatically, so `SendGroup` picks it up without extra
+  configuration.
+- Inbound `DataMessage` processing now updates the per-conversation expire timer
+  cache whenever a message carries a non-nil `expire_timer` field (including 0 to
+  clear the timer). Both 1:1 and group messages are handled.
+
 - [`docs/guides/creating-a-bot.md`](./docs/guides/creating-a-bot.md) — step-by-step
   guide to linking a device, building a `pkg/bot` bot, groups, middleware, and
   deployment.

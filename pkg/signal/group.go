@@ -48,6 +48,10 @@ type Group struct {
 	AvatarURL   string
 	Revision    uint32
 	Members     []GroupMember
+	// ExpireTimer is the group-level disappearing-message duration (0 means
+	// disabled). Outbound messages to this group should carry this value as
+	// their expire_timer.
+	ExpireTimer time.Duration
 }
 
 // Admins returns ACIs with administrator role.
@@ -132,6 +136,9 @@ func (c *Client) FetchGroup(ctx context.Context, masterKey []byte) (*Group, erro
 		}
 	}
 	c.storeGroupRevision(masterKeyHex, grp.Revision)
+	if grp.ExpireTimer > 0 {
+		c.setExpireTimer(masterKeyHex, uint32(grp.ExpireTimer.Seconds()))
+	}
 	return grp, nil
 }
 

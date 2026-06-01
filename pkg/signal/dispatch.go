@@ -1,6 +1,7 @@
 package signal
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -96,13 +97,26 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 	for _, ap := range dm.GetAttachments() {
 		ev.Attachments = append(ev.Attachments, attachmentFromPointer(ap))
 	}
-	if dm.GetExpireTimer() != 0 {
-		ev.ExpiresIn = time.Duration(dm.GetExpireTimer()) * time.Second
+	if dm.ExpireTimer != nil {
+		ev.ExpiresIn = time.Duration(*dm.ExpireTimer) * time.Second
+		chatID := sender
+		if groupID != "" {
+			chatID = groupID
+		}
+		c.setExpireTimer(chatID, *dm.ExpireTimer)
 	}
 	if pk := dm.GetProfileKey(); len(pk) == libsignal.ProfileKeyLen {
 		c.storeRecipientProfileKey(sender, pk)
 	}
 	c.emit(ev)
+	if c.autoMarkRead && sender != "" {
+		evTS := ts
+		go func() {
+			if _, err := c.SendReceipt(context.Background(), sender, ReceiptRead, []time.Time{evTS}); err != nil {
+				c.log.Warn("auto-mark-read: receipt failed", "sender", sender, "err", err)
+			}
+		}()
+	}
 }
 
 func (c *Client) handleEditMessage(sender string, senderDevice uint32, envTS, srvTS time.Time, em *sspb.EditMessage) {

@@ -102,6 +102,11 @@ type OpenOptions struct {
 	// device requests a storage-manifest fetch-latest sync.
 	AutoSyncStorage bool
 
+	// AutoMarkRead automatically sends a READ receipt to the sender
+	// each time a [MessageEvent] is dispatched. Receipts are sent
+	// asynchronously and do not block the receive loop.
+	AutoMarkRead bool
+
 	// BackupImportStore loads contact/group entries imported during
 	// link-and-sync into the client's profile-key and list caches.
 	BackupImportStore store.BackupImportStore
@@ -181,6 +186,11 @@ type Client struct {
 
 	accountStore    account.Store
 	autoSyncStorage bool
+	autoMarkRead    bool
+
+	// expireTimerMu guards expireTimers.
+	expireTimerMu sync.Mutex
+	expireTimers  map[string]uint32 // ACI for 1:1 chats, group ID hex for groups → seconds
 
 	// storageMu guards manifest version and cached contact/group lists.
 	storageMu              sync.RWMutex
@@ -257,6 +267,7 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 		autoSyncGroupUpdates: opts.AutoSyncGroupUpdates,
 		accountStore:         opts.AccountStore,
 		autoSyncStorage:      opts.AutoSyncStorage,
+		autoMarkRead:         opts.AutoMarkRead,
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{
@@ -334,6 +345,34 @@ func (c *Client) SetRecipientUAK(aci string, uak []byte) {
 
 // Done returns a channel closed when the underlying connection exits.
 func (c *Client) Done() <-chan struct{} { return c.conn.Done() }
+
+// SetExpireTimer sets the disappearing-message timer for a conversation.
+// chatID is the recipient ACI for 1:1 chats or the hex-encoded group
+// master key for group chats (matching [MessageEvent.GroupID]).
+// Pass 0 to disable the timer. The timer is also updated automatically
+// from inbound DataMessages and [FetchGroup].
+func (c *Client) SetExpireTimer(chatID string, d time.Duration) {
+	var seconds uint32
+	if d > 0 {
+		seconds = uint32(d.Seconds())
+	}
+	c.setExpireTimer(chatID, seconds)
+}
+
+func (c *Client) setExpireTimer(chatID string, seconds uint32) {
+	c.expireTimerMu.Lock()
+	defer c.expireTimerMu.Unlock()
+	if c.expireTimers == nil {
+		c.expireTimers = make(map[string]uint32)
+	}
+	c.expireTimers[chatID] = seconds
+}
+
+func (c *Client) expireTimerSeconds(chatID string) uint32 {
+	c.expireTimerMu.Lock()
+	defer c.expireTimerMu.Unlock()
+	return c.expireTimers[chatID]
+}
 
 // handleInbound processes a server-pushed websocket request.
 func (c *Client) handleInbound(ctx context.Context, req *chat.InboundRequest) {

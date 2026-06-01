@@ -76,7 +76,7 @@ func TestBuildTypingContentShape(t *testing.T) {
 func TestBuildReactionContentShape(t *testing.T) {
 	target := time.Now().Add(-time.Minute).Truncate(time.Millisecond)
 	ts := uint64(time.Now().UnixMilli())
-	b, err := buildReactionContent("👍", "bob-aci", target, false, ts)
+	b, err := buildReactionContent("👍", "bob-aci", target, false, ts, 0)
 	if err != nil {
 		t.Fatalf("buildReactionContent: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestBuildGroupReactionContentIncludesGroupV2(t *testing.T) {
 	ts := uint64(time.Now().UnixMilli())
 	const revision uint32 = 7
 
-	b, err := buildGroupReactionContent("👍", "bob-aci", target, false, ts, masterKey, revision)
+	b, err := buildGroupReactionContent("👍", "bob-aci", target, false, ts, masterKey, revision, 0)
 	if err != nil {
 		t.Fatalf("buildGroupReactionContent: %v", err)
 	}
