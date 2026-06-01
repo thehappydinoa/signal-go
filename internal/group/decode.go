@@ -40,6 +40,9 @@ type State struct {
 	Members           []Member
 	AnnouncementsOnly bool
 	Terminated        bool
+	// DisappearingMessagesDuration is the group-level disappearing-message
+	// timer in seconds (0 means disabled).
+	DisappearingMessagesDuration uint32
 }
 
 // Admins returns ACIs with administrator role.
@@ -88,15 +91,29 @@ func DecodeState(secretParams [libsignal.GroupSecretParamsLen]byte, wire *groups
 		members = append(members, dec)
 	}
 
+	timerSecs, err := decryptDisappearingTimer(secretParams, wire.GetDisappearingMessagesTimer())
+	if err != nil {
+		return nil, fmt.Errorf("group.DecodeState: disappearing timer: %w", err)
+	}
+
 	return &State{
-		Title:             strings.TrimSpace(title),
-		Description:       strings.TrimSpace(description),
-		AvatarURL:         wire.GetAvatarUrl(),
-		Revision:          wire.GetVersion(),
-		Members:           members,
-		AnnouncementsOnly: wire.GetAnnouncementsOnly(),
-		Terminated:        wire.GetTerminated(),
+		Title:                        strings.TrimSpace(title),
+		Description:                  strings.TrimSpace(description),
+		AvatarURL:                    wire.GetAvatarUrl(),
+		Revision:                     wire.GetVersion(),
+		Members:                      members,
+		AnnouncementsOnly:            wire.GetAnnouncementsOnly(),
+		Terminated:                   wire.GetTerminated(),
+		DisappearingMessagesDuration: timerSecs,
 	}, nil
+}
+
+func decryptDisappearingTimer(secretParams [libsignal.GroupSecretParamsLen]byte, ciphertext []byte) (uint32, error) {
+	blob, err := decryptAttributeBlob(secretParams, ciphertext)
+	if err != nil || blob == nil {
+		return 0, err
+	}
+	return blob.GetDisappearingMessagesDuration(), nil
 }
 
 func decodeMember(secretParams [libsignal.GroupSecretParamsLen]byte, m *groupspb.Member) (Member, error) {

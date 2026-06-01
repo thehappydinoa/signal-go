@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -191,6 +192,7 @@ func groupFromDecodedState(masterKeyHex string, state *group.State) (*Group, []s
 		AvatarURL:   state.AvatarURL,
 		Revision:    state.Revision,
 		Members:     members,
+		ExpireTimer: time.Duration(state.DisappearingMessagesDuration) * time.Second,
 	}, memberACIs, nil
 }
 

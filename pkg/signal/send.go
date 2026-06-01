@@ -41,7 +41,7 @@ func (c *Client) Send(ctx context.Context, recipientACI, text string) (Receipt, 
 		return Receipt{}, errors.New("signal.Send: empty body")
 	}
 	ts := uint64(time.Now().UnixMilli())
-	contentBytes, err := buildDataMessageContent(text, ts)
+	contentBytes, err := buildDataMessageContent(text, ts, c.expireTimerSeconds(recipientACI))
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -68,7 +68,7 @@ func (c *Client) SendEdit(
 		return Receipt{}, errors.New("signal.SendEdit: zero target timestamp")
 	}
 	ts := uint64(time.Now().UnixMilli())
-	contentBytes, err := buildEditMessageContent(newText, ts, uint64(targetSentTimestamp.UnixMilli()))
+	contentBytes, err := buildEditMessageContent(newText, ts, uint64(targetSentTimestamp.UnixMilli()), c.expireTimerSeconds(recipientACI))
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -140,7 +140,7 @@ func (c *Client) SendReaction(
 		return Receipt{}, errors.New("signal.SendReaction: emoji required when not removing")
 	}
 	ts := uint64(time.Now().UnixMilli())
-	contentBytes, err := buildReactionContent(emoji, targetAuthorACI, targetTimestamp, remove, ts)
+	contentBytes, err := buildReactionContent(emoji, targetAuthorACI, targetTimestamp, remove, ts, c.expireTimerSeconds(recipientACI))
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -717,30 +717,37 @@ func libsignalToWireType(t libsignal.CiphertextMessageType) web.CiphertextType {
 
 // buildDataMessageContent wraps text + ts in a signalservice.Content
 // containing a DataMessage, and returns the marshalled bytes.
-func buildDataMessageContent(text string, tsMillis uint64) ([]byte, error) {
+// expireTimer is the disappearing-message timer in seconds (0 = disabled).
+func buildDataMessageContent(text string, tsMillis uint64, expireTimer uint32) ([]byte, error) {
 	body := text
 	timestamp := tsMillis
+	dm := &sspb.DataMessage{
+		Body:      &body,
+		Timestamp: &timestamp,
+	}
+	if expireTimer != 0 {
+		dm.ExpireTimer = &expireTimer
+	}
 	content := &sspb.Content{
-		Content: &sspb.Content_DataMessage{
-			DataMessage: &sspb.DataMessage{
-				Body:      &body,
-				Timestamp: &timestamp,
-			},
-		},
+		Content: &sspb.Content_DataMessage{DataMessage: dm},
 	}
 	return proto.Marshal(content)
 }
 
-func buildEditMessageContent(newText string, editTSMillis, targetSentMillis uint64) ([]byte, error) {
+func buildEditMessageContent(newText string, editTSMillis, targetSentMillis uint64, expireTimer uint32) ([]byte, error) {
 	body := newText
 	ts := editTSMillis
 	targetTS := targetSentMillis
+	dm := &sspb.DataMessage{
+		Body:      &body,
+		Timestamp: &ts,
+	}
+	if expireTimer != 0 {
+		dm.ExpireTimer = &expireTimer
+	}
 	em := &sspb.EditMessage{
 		TargetSentTimestamp: &targetTS,
-		DataMessage: &sspb.DataMessage{
-			Body:      &body,
-			Timestamp: &ts,
-		},
+		DataMessage:         dm,
 	}
 	content := &sspb.Content{
 		Content: &sspb.Content_EditMessage{EditMessage: em},
@@ -806,7 +813,7 @@ func buildTypingContent(action TypingAction, tsMillis uint64, groupID []byte) ([
 // buildReactionContent wraps a Reaction inside a DataMessage envelope
 // (Signal carries reactions inside DataMessage, not as a top-level
 // Content variant).
-func buildReactionContent(emoji, targetAuthorACI string, targetTS time.Time, remove bool, tsMillis uint64) ([]byte, error) {
+func buildReactionContent(emoji, targetAuthorACI string, targetTS time.Time, remove bool, tsMillis uint64, expireTimer uint32) ([]byte, error) {
 	emo := emoji
 	target := targetAuthorACI
 	rem := remove
@@ -821,6 +828,9 @@ func buildReactionContent(emoji, targetAuthorACI string, targetTS time.Time, rem
 	dm := &sspb.DataMessage{
 		Timestamp: &timestamp,
 		Reaction:  r,
+	}
+	if expireTimer != 0 {
+		dm.ExpireTimer = &expireTimer
 	}
 	content := &sspb.Content{
 		Content: &sspb.Content_DataMessage{DataMessage: dm},

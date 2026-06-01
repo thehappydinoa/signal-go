@@ -777,8 +777,35 @@ func bobDecryptPreKey(t *testing.T, bob *recipientFixture, senderACI string, sen
 	return plain
 }
 
+func TestBuildDataMessageContentExpireTimer(t *testing.T) {
+	b, err := buildDataMessageContent("hi", 1000, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c sspb.Content
+	if err := proto.Unmarshal(b, &c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if c.GetDataMessage().GetExpireTimer() != 30 {
+		t.Errorf("ExpireTimer = %d, want 30", c.GetDataMessage().GetExpireTimer())
+	}
+
+	// Timer == 0 means field absent (proto omitempty).
+	b0, err := buildDataMessageContent("hi", 1000, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c0 sspb.Content
+	if err := proto.Unmarshal(b0, &c0); err != nil {
+		t.Fatalf("unmarshal zero: %v", err)
+	}
+	if c0.GetDataMessage().ExpireTimer != nil {
+		t.Errorf("ExpireTimer field should be absent when 0, got %v", c0.GetDataMessage().ExpireTimer)
+	}
+}
+
 func TestBuildEditMessageContent(t *testing.T) {
-	b, err := buildEditMessageContent("edited", 2000, 1000)
+	b, err := buildEditMessageContent("edited", 2000, 1000, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

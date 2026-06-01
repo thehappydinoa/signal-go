@@ -2,6 +2,7 @@ package signal
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -39,7 +40,8 @@ func (c *Client) SendGroupReaction(
 	}
 
 	ts := uint64(time.Now().UnixMilli())
-	contentBytes, err := buildGroupReactionContent(emoji, targetAuthorACI, targetTimestamp, remove, ts, masterKey, grp.Revision)
+	groupIDHex := hex.EncodeToString(masterKey)
+	contentBytes, err := buildGroupReactionContent(emoji, targetAuthorACI, targetTimestamp, remove, ts, masterKey, grp.Revision, c.expireTimerSeconds(groupIDHex))
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -82,8 +84,9 @@ func buildGroupReactionContent(
 	tsMillis uint64,
 	masterKey []byte,
 	revision uint32,
+	expireTimer uint32,
 ) ([]byte, error) {
-	base, err := buildReactionContent(emoji, targetAuthorACI, targetTS, remove, tsMillis)
+	base, err := buildReactionContent(emoji, targetAuthorACI, targetTS, remove, tsMillis, expireTimer)
 	if err != nil {
 		return nil, err
 	}
