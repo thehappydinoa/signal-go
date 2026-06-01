@@ -209,6 +209,19 @@ else
   git -C "$BUILD_DIR" checkout -q "$LIBSIGNAL_VERSION"
 fi
 
+# libsignal-message-backup/build.rs (json feature) calls prost_build::compile_protos
+# with &[PROTOS_DIR] where PROTOS_DIR="protos" (the output subdir), but the proto
+# files live in "src/". Newer protoc (>=3.21) is strict about --proto_path matching
+# and rejects the mismatch. Patch the include dir to "src" before cargo runs.
+# Safe to apply unconditionally: grep is a no-op when the pattern isn't present.
+_msg_backup_build_rs="$BUILD_DIR/rust/message-backup/build.rs"
+if [[ -f "$_msg_backup_build_rs" ]] && \
+   grep -qF 'compile_protos(PROTOS, &[PROTOS_DIR])' "$_msg_backup_build_rs"; then
+  echo ">> patching rust/message-backup/build.rs: fix prost_build proto include dir (upstream bug)"
+  sed -i 's/compile_protos(PROTOS, \&\[PROTOS_DIR\])/compile_protos(PROTOS, \&["src"])/' \
+    "$_msg_backup_build_rs"
+fi
+
 CARGO_FLAGS=(build --release -p libsignal-ffi)
 if [[ -n "$CARGO_TARGET" ]]; then
   CARGO_FLAGS+=(--target "$CARGO_TARGET")
