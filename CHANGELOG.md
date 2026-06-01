@@ -10,6 +10,12 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
+### Changed
+
+- Bump libsignal to v0.94.3 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.1...v0.94.3)).
+  New FFI surface: `signal_connection_manager_internal_testing_set_reflector_proxy` (testing-only helper, not wrapped).
+  No existing callers required changes.
+
 ### Added
 
 - [`docs/guides/creating-a-bot.md`](./docs/guides/creating-a-bot.md) — step-by-step

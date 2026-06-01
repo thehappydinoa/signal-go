@@ -26,7 +26,7 @@ set -euo pipefail
 # shellcheck source=dev-env.sh
 source "$(dirname "$0")/dev-env.sh"
 
-LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-v0.94.1}"
+LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION:-v0.94.3}"
 REPO_URL="https://github.com/signalapp/libsignal.git"
 
 repo_root() { git -C "$(dirname "$0")/.." rev-parse --show-toplevel; }
