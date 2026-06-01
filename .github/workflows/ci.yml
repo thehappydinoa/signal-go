@@ -89,6 +89,21 @@ jobs:
             echo "Skipping heavy CI jobs: no CI-relevant files changed."
           fi
 
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run shellcheck
+        # SC2034 (unused var) fires on variables exported for child scripts;
+        # SC1091 (not following source) fires on sourced helpers — both are
+        # intentional patterns in this repo.
+        run: |
+          shellcheck --severity=warning --exclude=SC2034,SC1091 \
+            scripts/*.sh .githooks/pre-push
+
   # Builds libsignal_ffi.a (or restores from cache) and uploads it as a
   # workflow artifact. Downstream jobs download instead of rebuilding.
   # See ADR 0013 for the caching rationale.

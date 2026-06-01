@@ -75,6 +75,22 @@ the friction and do it anyway.
   [`internal/libsignal/stores.go`](./internal/libsignal/stores.go) ↔
   [`stores_impl.go`](./internal/libsignal/stores_impl.go) for the pattern).
 
+### Shell scripts
+
+All scripts under `scripts/` and `.githooks/` must run correctly on both
+**GNU/Linux** (Ubuntu CI runners) and **macOS** (Darwin release runners).
+The two most common portability traps:
+
+| Non-portable (GNU-only) | Portable alternative |
+|---|---|
+| `sed -i 's/.../.../' f` | `sed -i.bak 's/.../.../' f && rm f.bak` |
+| `readlink -f path` | `realpath path` (or inline with `cd`/`pwd`) |
+| `stat -c '%s' f` | `wc -c < f` or `stat -f '%z' f` (macOS) — use a helper |
+| `date -d 'string'` | `python3 -c "..."` or avoid entirely |
+
+Run `task lint:shell` (shellcheck) before pushing any `.sh` change.
+CI enforces this on every PR.
+
 ### Tests
 
 - Table-driven by default. One `_test.go` per implementation file, same

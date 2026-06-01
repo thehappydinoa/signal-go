@@ -73,7 +73,8 @@ esac
 
 # prost-build (spqr) and libsignal-net-grpc need well-known protos on the include path.
 if [[ -z "${PROTOC:-}" ]] && command -v protoc >/dev/null 2>&1; then
-  export PROTOC="$(command -v protoc)"
+  PROTOC="$(command -v protoc)"
+  export PROTOC
 fi
 if [[ -z "${PROTOC_INCLUDE:-}" && -n "${PROTOC:-}" ]]; then
   _protoc_dir="$(dirname "$PROTOC")"
@@ -93,8 +94,9 @@ if [[ -z "${PROTOC_INCLUDE:-}" && -n "${PROTOC:-}" ]]; then
     _winget_inc="$(find "${LOCALAPPDATA}/Microsoft/WinGet/Packages" -path '*/include/google/protobuf/duration.proto' 2>/dev/null | head -1)"
     if [[ -n "$_winget_inc" ]]; then
       # .../include/google/protobuf/duration.proto -> .../include
-      export PROTOC_INCLUDE="$(dirname "$(dirname "$(dirname "$_winget_inc")")")"
-      export PROTOC_INCLUDE="${PROTOC_INCLUDE//\\//}"
+      PROTOC_INCLUDE="$(dirname "$(dirname "$(dirname "$_winget_inc")")")"
+      PROTOC_INCLUDE="${PROTOC_INCLUDE//\\//}"
+      export PROTOC_INCLUDE
     fi
   fi
 fi

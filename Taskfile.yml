@@ -154,6 +154,12 @@ tasks:
     cmds:
       - bash scripts/with-dev-env.sh golangci-lint run ./...
 
+  lint:shell:
+    desc: Run shellcheck on all shell scripts (Linux + macOS portability)
+    cmds:
+      - command -v shellcheck >/dev/null || (echo "Install shellcheck: brew install shellcheck / apt-get install shellcheck" && exit 1)
+      - shellcheck --severity=warning --exclude=SC2034,SC1091 scripts/*.sh .githooks/pre-push
+
   staticcheck:
     desc: Run staticcheck (Phase 8 audit gate)
     deps: [libsignal]
