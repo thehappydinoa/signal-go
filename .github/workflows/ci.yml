@@ -126,16 +126,22 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install protoc
+        id: protoc
         if: steps.cache.outputs.cache-hit != 'true'
         # spqr (upstream sparse PQ ratchet) uses prost-build, which calls
         # protoc at *Rust crate build* time. Distinct from our own
         # `task proto` use of protoc to generate Go from .proto files.
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        # Use arduino/setup-protoc (same as libsignal-artifacts.yml) rather
+        # than the older system package from apt to avoid version mismatches.
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build libsignal_ffi.a
         if: steps.cache.outputs.cache-hit != 'true'
         env:
           LIBSIGNAL_VERSION: ${{ steps.version.outputs.version }}
+          PROTOC: ${{ steps.protoc.outputs.path }}/bin/protoc
         run: bash scripts/build-libsignal.sh
 
       - name: Upload artifact
