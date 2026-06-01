@@ -218,8 +218,9 @@ _msg_backup_build_rs="$BUILD_DIR/rust/message-backup/build.rs"
 if [[ -f "$_msg_backup_build_rs" ]] && \
    grep -qF 'compile_protos(PROTOS, &[PROTOS_DIR])' "$_msg_backup_build_rs"; then
   echo ">> patching rust/message-backup/build.rs: fix prost_build proto include dir (upstream bug)"
-  sed -i 's/compile_protos(PROTOS, \&\[PROTOS_DIR\])/compile_protos(PROTOS, \&["src"])/' \
-    "$_msg_backup_build_rs"
+  # sed -i requires an explicit empty extension on BSD/macOS; .bak + rm is portable.
+  sed -i.bak 's/compile_protos(PROTOS, \&\[PROTOS_DIR\])/compile_protos(PROTOS, \&["src"])/' \
+    "$_msg_backup_build_rs" && rm -f "${_msg_backup_build_rs}.bak"
 fi
 
 CARGO_FLAGS=(build --release -p libsignal-ffi)
