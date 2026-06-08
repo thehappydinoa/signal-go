@@ -115,15 +115,15 @@ func (o *MessageBackupValidationOutcome) ErrorMessage() (string, error) {
 	if o == nil || o.raw.raw == nil {
 		return "", errors.New("libsignal.MessageBackupValidationOutcome: nil outcome")
 	}
-	var cstr *C.char
+	var cstr C.SignalCStringPtr
 	if err := checkError(C.signal_message_backup_validation_outcome_get_error_message(&cstr, o.constPtr())); err != nil {
 		return "", err
 	}
 	if cstr == nil {
 		return "", nil
 	}
-	defer C.signal_free_string(cstr)
-	return C.GoString(cstr), nil
+	defer C.signal_free_string((*C.char)(cstr))
+	return C.GoString((*C.char)(cstr)), nil
 }
 
 // UnknownFields lists unknown protobuf fields encountered during validation.

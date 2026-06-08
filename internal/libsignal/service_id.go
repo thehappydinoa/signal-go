@@ -35,12 +35,12 @@ func ParseServiceIDString(s string) (ServiceIDFixedWidth, error) {
 // ServiceIDString renders a fixed-width service id as its canonical string
 // (e.g. "00000000-0000-0000-0000-000000000001").
 func ServiceIDString(id ServiceIDFixedWidth) (string, error) {
-	var cstr *C.char
+	var cstr C.SignalCStringPtr
 	if err := checkError(C.signal_service_id_service_id_string(&cstr, cServiceID(id))); err != nil {
 		return "", err
 	}
-	s := C.GoString(cstr)
-	C.signal_free_string(cstr)
+	s := C.GoString((*C.char)(cstr))
+	C.signal_free_string((*C.char)(cstr))
 	return s, nil
 }
 

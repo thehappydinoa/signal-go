@@ -12,9 +12,21 @@ is *what* changed and *when*.
 
 ### Changed
 
-- Bump libsignal to v0.94.3 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.1...v0.94.3)).
-  New FFI surface: `signal_connection_manager_internal_testing_set_reflector_proxy` (testing-only helper, not wrapped).
-  No existing callers required changes.
+- Bump libsignal to v0.94.4 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.1...v0.94.4)).
+  cbindgen renamed the generated `SignalPairOfc_char*`/`SignalOptionalPairOfc_char*`
+  helper types to `SignalPairOfCStringPtr*`/`SignalOptionalPairOfCStringPtr*` and
+  changed several `const char **out` parameters (e.g. `signal_address_get_name`,
+  `signal_error_get_message`, `signal_account_entropy_pool_generate`,
+  `signal_service_id_service_id_string`,
+  `signal_sender_certificate_get_sender_uuid`,
+  `signal_message_backup_validation_outcome_get_error_message`) to the new
+  `SignalCStringPtr *out` alias; updated the affected `internal/libsignal`
+  wrappers to declare `C.SignalCStringPtr` locals and convert to `*C.char`
+  before calling `C.GoString`/`C.signal_free_string`. New FFI surface adds
+  backup-related promises (`signal_unauthenticated_chat_connection_backup_*`)
+  that we do not yet wrap. The testing-only
+  `signal_connection_manager_internal_testing_set_reflector_proxy` added in
+  v0.94.3 was removed upstream; it was never wrapped.
 
 ### Added
 
