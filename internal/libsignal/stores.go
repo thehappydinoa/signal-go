@@ -59,12 +59,12 @@ func okOrError(err error) C.int {
 // remains owned by libsignal; we only read from it.
 func addressFromC(p C.SignalMutPointerProtocolAddress) (store.Address, error) {
 	cp := C.SignalConstPointerProtocolAddress(p)
-	var cname *C.char
+	var cname C.SignalCStringPtr
 	if err := checkError(C.signal_address_get_name(&cname, cp)); err != nil {
 		return store.Address{}, err
 	}
-	name := C.GoString(cname)
-	C.signal_free_string(cname)
+	name := C.GoString((*C.char)(cname))
+	C.signal_free_string((*C.char)(cname))
 	var dev C.uint32_t
 	if err := checkError(C.signal_address_get_device_id(&dev, cp)); err != nil {
 		return store.Address{}, err

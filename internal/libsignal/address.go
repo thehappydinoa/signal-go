@@ -33,12 +33,12 @@ func NewAddress(serviceID string, deviceID uint32) (*Address, error) {
 
 // ServiceID returns the address's "name" string (ACI or PNI).
 func (a *Address) ServiceID() (string, error) {
-	var cstr *C.char
+	var cstr C.SignalCStringPtr
 	if err := checkError(C.signal_address_get_name(&cstr, a.constPtr())); err != nil {
 		return "", err
 	}
-	s := C.GoString(cstr)
-	C.signal_free_string(cstr)
+	s := C.GoString((*C.char)(cstr))
+	C.signal_free_string((*C.char)(cstr))
 	return s, nil
 }
 

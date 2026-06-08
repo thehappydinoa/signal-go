@@ -282,12 +282,12 @@ func DeserializeSenderCertificate(data []byte) (*SenderCertificate, error) {
 
 // SenderUUID returns the sender's ACI/PNI string.
 func (c *SenderCertificate) SenderUUID() (string, error) {
-	var cstr *C.char
+	var cstr C.SignalCStringPtr
 	if err := checkError(C.signal_sender_certificate_get_sender_uuid(&cstr, c.constPtr())); err != nil {
 		return "", err
 	}
-	s := C.GoString(cstr)
-	C.signal_free_string(cstr)
+	s := C.GoString((*C.char)(cstr))
+	C.signal_free_string((*C.char)(cstr))
 	return s, nil
 }
 

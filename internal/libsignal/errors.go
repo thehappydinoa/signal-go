@@ -38,12 +38,12 @@ func checkError(rawErr *C.SignalFfiError) error {
 	// takes a SignalUnwindSafeArgSignalFfiError which is a struct wrapping a
 	// pointer. Both never themselves return an error.
 	code := ErrorCode(C.signal_error_get_type(rawErr))
-	var cmsg *C.char
+	var cmsg C.SignalCStringPtr
 	// signal_error_get_message returns a SignalFfiError* of its own if the
 	// underlying error has no message; we ignore that and fall back.
 	if e2 := C.signal_error_get_message(&cmsg, rawErr); e2 == nil && cmsg != nil {
-		msg := C.GoString(cmsg)
-		C.signal_free_string(cmsg)
+		msg := C.GoString((*C.char)(cmsg))
+		C.signal_free_string((*C.char)(cmsg))
 		C.signal_error_free(rawErr)
 		return &Error{Code: code, Message: msg}
 	}

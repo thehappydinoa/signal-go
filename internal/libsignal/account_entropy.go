@@ -50,12 +50,12 @@ func DeriveSVRKey(accountEntropyPool string) ([SVRKeyLen]byte, error) {
 
 // GenerateAccountEntropyPool returns a new random AccountEntropyPool string.
 func GenerateAccountEntropyPool() (string, error) {
-	var out *C.char
+	var out C.SignalCStringPtr
 	if err := checkError(C.signal_account_entropy_pool_generate(&out)); err != nil {
 		return "", err
 	}
-	defer C.signal_free_string(out)
-	return C.GoString(out), nil
+	defer C.signal_free_string((*C.char)(out))
+	return C.GoString((*C.char)(out)), nil
 }
 
 // ValidateAccountEntropyPool reports whether accountEntropyPool is a valid
