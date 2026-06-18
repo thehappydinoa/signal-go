@@ -12,6 +12,14 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.96.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.4...v0.96.0)).
+  Purely additive: 19 new FFI functions across two feature areas —
+  `signal_avatar_upload_credential_*` (avatar ZK credential flow) and
+  `signal_zk_credential_key_pair_*` / `signal_zk_credential_public_key_*`
+  (ZK credential key pair generation and public key management). No existing
+  signatures were removed or modified; no internal/libsignal wrapper changes
+  are required.
+
 - Bump libsignal to v0.94.4 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.1...v0.94.4)).
   cbindgen renamed the generated `SignalPairOfc_char*`/`SignalOptionalPairOfc_char*`
   helper types to `SignalPairOfCStringPtr*`/`SignalOptionalPairOfCStringPtr*` and
