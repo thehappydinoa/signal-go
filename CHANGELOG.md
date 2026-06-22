@@ -12,6 +12,13 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.96.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.0...v0.96.2)).
+  Purely additive: `SignalConstPointerServerSecretParams` and
+  `SignalConstPointerServerPublicParams` were reordered earlier in the header
+  (same typedef, no ABI impact), and 15 new `signal_donation_permit_*` functions
+  were added. No existing signatures were removed or modified; no
+  `internal/libsignal` wrapper changes required.
+
 - Bump libsignal to v0.96.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.4...v0.96.0)).
   Purely additive: 19 new FFI functions across two feature areas —
   `signal_avatar_upload_credential_*` (avatar ZK credential flow) and
