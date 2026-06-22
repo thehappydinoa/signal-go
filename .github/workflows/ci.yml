@@ -28,7 +28,7 @@ jobs:
     outputs:
       run_ci: ${{ steps.detect.outputs.run_ci }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -93,7 +93,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Run shellcheck
@@ -115,7 +115,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - id: version
         name: Read pinned libsignal version
@@ -173,7 +173,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -204,7 +204,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -224,7 +224,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -244,7 +244,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -272,7 +272,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -293,7 +293,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -319,7 +319,7 @@ jobs:
     needs: [detect_changes, libsignal]
     if: needs.detect_changes.outputs.run_ci == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -342,7 +342,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

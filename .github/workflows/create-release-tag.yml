@@ -53,7 +53,7 @@ jobs:
       # (classic PAT, repo contents:write) makes `git push` behave like a
       # human push and auto-starts release.yml. Otherwise we dispatch Release
       # explicitly below.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0

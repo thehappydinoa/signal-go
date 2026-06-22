@@ -32,7 +32,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - id: version
         run: |
@@ -80,7 +80,7 @@ jobs:
           - pkg: ./internal/provisioning
             target: FuzzPKCS7Unpad
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
