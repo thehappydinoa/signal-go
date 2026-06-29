@@ -12,6 +12,15 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.96.4 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.0...v0.96.4)).
+  cbindgen introduced `SignalCStringPtr` (a typedef alias for `const char *`) and
+  standardized all string parameters to use it. This is a source-level change only —
+  the ABI is identical, so no `internal/libsignal/` wrapper changes are required.
+  Additive changes: two new error codes (`SignalErrorCodeDeviceIdNotFound`,
+  `SignalErrorCodeUsernameNotAvailable`), new types (`SignalCPromiseu832`,
+  `SignalBorrowedSliceOfu832`, `SignalOwnedBufferOfMaxAlignedc_void`), and new
+  functions for username reservation, device-name update, and donation permits.
+
 - Bump libsignal to v0.96.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.94.4...v0.96.0)).
   Purely additive: 19 new FFI functions across two feature areas —
   `signal_avatar_upload_credential_*` (avatar ZK credential flow) and
