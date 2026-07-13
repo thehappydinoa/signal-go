@@ -12,6 +12,22 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
+  No `internal/libsignal/` wrapper changes were required — everything
+  signal-go currently calls compiled and passed `go test -race` unchanged.
+  Notable upstream changes, none of which touch existing signal-go call
+  sites: `SignalMEDIA_ENCRYPTION_KEY_LEN` is now derived from two new named
+  constants (`SignalMEDIA_ENCRYPTION_AES_KEY_LEN` / `_HMAC_KEY_LEN`, same
+  total of 64 bytes); a new error code
+  (`SignalErrorCodeUsernameNotSet`); the `SignalUnwindSafeArgSignalFfiError`
+  typedef was removed in favor of using `const SignalFfiError *` directly
+  (same underlying C type, so `internal/libsignal/errors.go` needed no
+  change beyond a stale comment); and a new, currently-unused
+  `signal_copy_backup_media_stream_*` / `signal_authenticated_chat_connection_*`
+  device-management and push-token API surface (backup media copy,
+  `get_devices`, `remove_device`, `set_push_token_apns`,
+  `clear_push_token`, `set_username_link`) that signal-go does not wrap yet.
+
 - Bump libsignal to v0.96.4 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.0...v0.96.4)).
   cbindgen introduced `SignalCStringPtr` (a typedef alias for `const char *`) and
   standardized all string parameters to use it. This is a source-level change only —

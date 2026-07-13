@@ -34,9 +34,8 @@ func checkError(rawErr *C.SignalFfiError) error {
 	if rawErr == nil {
 		return nil
 	}
-	// signal_error_get_type takes a *const SignalFfiError; signal_error_get_message
-	// takes a SignalUnwindSafeArgSignalFfiError which is a struct wrapping a
-	// pointer. Both never themselves return an error.
+	// signal_error_get_type and signal_error_get_message both take a
+	// *const SignalFfiError and never themselves return an error.
 	code := ErrorCode(C.signal_error_get_type(rawErr))
 	var cmsg C.SignalCStringPtr
 	// signal_error_get_message returns a SignalFfiError* of its own if the
