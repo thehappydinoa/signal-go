@@ -22,6 +22,16 @@
 //     opaque objects and copy SignalOwnedBuffer contents out immediately.
 //   - Borrowed buffers (SignalBorrowedBuffer) are read-only views the
 //     callee will not retain past the call.
+//   - Fixed-width buffers (keys, ciphertexts, commitments, ...) are typed
+//     as SignalType_FixedArrayN_uint8_t in signal_ffi.h rather than named
+//     #define length constants (cbindgen dropped the latter as of
+//     libsignal v0.99.3). The corresponding Go LenN constants are hardcoded
+//     integers, not derived from the header, so they no longer fail to
+//     compile if upstream changes a size — re-verify each one against the
+//     FixedArrayN suffix on the relevant function signature on every
+//     libsignal bump. See the CHANGELOG [Unreleased] entry for the
+//     v0.97.2→v0.99.3 bump for the full list and the const-vs-out casting
+//     rule this typedef style requires.
 //
 // # Memory-safety contract
 //

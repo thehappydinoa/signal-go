@@ -10,7 +10,81 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
+### Fixed
+
+- **[Security]** `GroupSecretParamsFromMasterKey` and
+  `GroupSecretParamsDecryptServiceID` (`internal/libsignal/zkgroup.go`) were
+  each missing a `keepAlive` call on a `[]byte` argument after its last use
+  in an FFI call, unlike every sibling function in the same file — found
+  during the cgo-boundary review for the libsignal v0.99.3 bump below,
+  pre-existing and unrelated to that bump itself. The GC could in principle
+  reclaim/move the backing array while libsignal still held the borrowed
+  pointer. Both now call `keepAlive` immediately after their last FFI use of
+  the borrowed slice, matching the pattern documented in `doc.go`.
+
 ### Changed
+
+- Bump libsignal to v0.99.3 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.99.3)).
+  The largest `signal_ffi.h` diff to date (9,212 lines vs. ~436 for the
+  previous bump) — cbindgen itself was upgraded upstream, regenerating the
+  entire header in a new style. Required real `internal/libsignal/` changes,
+  unlike the last several bumps:
+  - The header no longer transitively includes `<stdlib.h>` (it now only
+    pulls in `<assert.h>`, `<stdalign.h>`, `<stdbool.h>`, `<stddef.h>`,
+    `<stdint.h>`). Five files that called `C.free`/`C.malloc` while relying
+    on that transitive include (`account_entropy.go`, `cdsi.go`,
+    `connection_manager.go`, `lookup_request.go`, `profile_key.go`) now
+    `#include <stdlib.h>` directly.
+  - Every C string parameter (`SignalCStringPtr`, and raw `const char *`
+    params) changed from a `char`-based type to `const int8_t *`. Go's cgo
+    treats `char` and `int8_t` as distinct types despite the identical ABI,
+    so every `*C.char` obtained from `C.CString` and passed into an FFI call
+    now needs an explicit `(*C.int8_t)(unsafe.Pointer(...))` hop; the reverse
+    (`C.GoString`/`C.signal_free_string` on a returned `SignalCStringPtr`)
+    needs the same treatment in the other direction.
+  - cbindgen stopped emitting the ~17 `#define Signal*_LEN` numeric
+    constants (`SignalBACKUP_KEY_LEN`, `SignalPROFILE_KEY_LEN`,
+    `SignalGROUP_SECRET_PARAMS_LEN`, etc.) entirely, expressing fixed-width
+    buffers via unnamed `SignalType_FixedArrayN_uint8_t` typedefs instead.
+    Every one of signal-go's `C.Signal*_LEN` references was replaced with
+    the equivalent hardcoded Go integer constant (verified against the
+    `FixedArrayN` suffix on each affected function signature — no numeric
+    value changed, only how it's spelled). These constants no longer
+    compile-fail if upstream changes a size; re-verify on the next bump.
+  - Named `SignalType_FixedArrayN_uint8_t` typedefs replaced anonymous
+    inline C arrays (e.g. `uint8_t (*out)[32]`) for every fixed-width
+    buffer parameter. On our GCC/Linux toolchain, cgo's DWARF-based type
+    resolution unwraps `const`-qualified fixed-array *parameters* back to
+    the plain `*[N]C.uint8_t` array type, but keeps the named
+    `C.SignalType_FixedArrayN_uint8_t` type for non-const (`out`)
+    parameters — so every `out`-direction buffer pointer (and the
+    `c*Out`-suffixed helpers in `zkgroup.go` / `profile_key_presentation.go`
+    that build them) needed an explicit
+    `(*C.SignalType_FixedArrayN_uint8_t)(unsafe.Pointer(...))` cast, while
+    `const`-direction (`*In`-suffixed) helpers were left unchanged. This
+    same GCC-vs-clang DWARF asymmetry is already documented for
+    `SignalServiceIdFixedWidthBinaryBytes` in
+    `service_id_cgo_typedef_default.go` / `_darwin.go`; that split needed no
+    changes here since chained typedefs (a typedef of a typedef, as opposed
+    to a typedef of an anonymous array) resolve the same on both
+    toolchains.
+  - `bridge_async.c` (our own C shim for the async CDSI lookup bridge) casts
+    its `const char *username`/`password` parameters to `const int8_t *`
+    at the `signal_cdsi_lookup_new` call site rather than changing its own
+    signature, so `cdsi.go`'s Go-side call needed no change.
+  - Also additive/unrelated-to-us: 9 media-sanitizer functions removed
+    (`signal_mp4_sanitizer_sanitize`, `signal_webp_sanitizer_sanitize`,
+    `signal_sanitized_metadata_*`, `signal_connection_info_destroy` renamed
+    to `signal_chat_connection_info_destroy`) — none referenced by
+    signal-go; 19 new functions added (chat-connection registration-lock
+    and username management, backup-media delete streaming, SVR key
+    derivation helpers, zkc auth-credential-without-PNI variants) that
+    signal-go does not wrap yet.
+  - Verified: `go build ./...`, `go vet ./...`,
+    `go test -race -count=1 ./...` (full suite, all packages pass),
+    `golangci-lint run` (same 2 pre-existing `prealloc` findings in
+    `pkg/signal/group_{endorsement,send}.go` as the last bump, unrelated to
+    this change).
 
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
