@@ -46,3 +46,4 @@ with a new ADR that links back to the one it replaces.
 | 0036 | Linked-device name cipher (Android-compatible)   | Accepted |
 | 0037 | Pre-built libsignal_ffi.a artifacts            | Accepted |
 | 0038 | Groups v2 create and attribute changes           | Accepted |
+| 0039 | Hardcoded libsignal length constants + asserts    | Accepted |

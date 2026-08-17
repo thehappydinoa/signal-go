@@ -12,6 +12,42 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.101.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.101.0)).
+  This skips v0.98–v0.100 and is the largest header change the project has
+  taken: upstream moved to a new cbindgen generator, so `signal_ffi.h` was
+  regenerated in a different style (9340 diff lines, 3247 → 6296 source
+  lines). The underlying ABI is unchanged — the churn is in how the header
+  spells types — but three source-level changes required wrapper updates:
+
+  - **Length `#define`s are gone.** The generator no longer emits
+    `SignalPROFILE_KEY_LEN` and the other 16 `#define`s this package read
+    its sizes from. The Go constants are now literals, each carrying the
+    upstream Rust source path it was copied from, and a new
+    `internal/libsignal/constants_assert.go` re-establishes the
+    compile-time link: every constant is asserted against the
+    corresponding `SignalType_FixedArrayN_uint8_t` typedef the header
+    still emits, so a size change upstream breaks the build rather than
+    silently mis-sizing a buffer.
+  - **`SignalCStringPtr` is now `const int8_t *`** rather than
+    `const char *`. Same ABI, but cgo treats `*C.char` and `*C.int8_t` as
+    distinct Go types, so string arguments and returns go through two new
+    helpers (`cStr` / `goStr` in `buffers.go`).
+  - **Fixed-size array parameters are named types.** `unsigned char (*)[N]`
+    became `SignalType_FixedArrayN_uint8_t *`. cgo decays the typedef for
+    `const` (input) parameters but keeps the named type for non-const
+    (output) parameters, so the `cFooIn` / `cFooOut` helpers now differ in
+    return type accordingly.
+
+  The header also stops including `<stdlib.h>` transitively; the five files
+  that relied on that for `C.free` now include it directly. Ten functions
+  were removed upstream (the mp4/webp sanitizer and `SanitizedMetadata`
+  surface, `signal_connection_info_destroy`, `signal_signal_media_check_available`);
+  none were referenced by signal-go. No cryptographic behavior changed —
+  the constant values, the wire formats, and the call sequences are all
+  identical, and the full `-race` suite (including the published-vector
+  zkgroup, profile-key, sealed-sender and message-backup tests) passes
+  unchanged.
+
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.
