@@ -71,6 +71,14 @@ For every changed or removed function signature in the diff:
 4. **New `signal_T_destroy` function**: This means a new type was added.
    You probably don't need to wrap it unless you're adding a feature,
    but note it.
+5. **Changed length constant**: sizes live in
+   `internal/libsignal/constants_assert.go`, asserted against the
+   header's `SignalType_FixedArrayN_uint8_t` typedefs
+   ([ADR 0039](../../../docs/adr/0039-libsignal-length-constants.md)).
+   A size change upstream shows up as a compile error there naming the
+   constant — fix the Go constant, don't touch the assertion. If you
+   add a new fixed-size constant, add its assertion pair too; an
+   unasserted constant is unchecked.
 
 The diff is the contract. Don't skip any line.
 

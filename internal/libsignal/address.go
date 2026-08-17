@@ -25,7 +25,7 @@ func NewAddress(serviceID string, deviceID uint32) (*Address, error) {
 	cname := C.CString(serviceID)
 	defer C.free(unsafe.Pointer(cname))
 	var out C.SignalMutPointerProtocolAddress
-	if err := checkError(C.signal_address_new(&out, cname, C.uint32_t(deviceID))); err != nil {
+	if err := checkError(C.signal_address_new(&out, cStr(cname), C.uint32_t(deviceID))); err != nil {
 		return nil, err
 	}
 	return wrapAddress(out), nil
@@ -37,8 +37,8 @@ func (a *Address) ServiceID() (string, error) {
 	if err := checkError(C.signal_address_get_name(&cstr, a.constPtr())); err != nil {
 		return "", err
 	}
-	s := C.GoString((*C.char)(cstr))
-	C.signal_free_string((*C.char)(cstr))
+	s := goStr(cstr)
+	C.signal_free_string(cstr)
 	return s, nil
 }
 

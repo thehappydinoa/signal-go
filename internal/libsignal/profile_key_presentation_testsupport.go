@@ -11,7 +11,10 @@ import (
 	"unsafe"
 )
 
-const profileKeyCommitmentLen = C.SignalPROFILE_KEY_COMMITMENT_LEN
+// Hardcoded from rust/zkgroup/src/common/constants.rs
+// PROFILE_KEY_COMMITMENT_LEN (see ProfileKeyLen in profile_key.go for why
+// this is no longer a C constant as of libsignal v0.101.0).
+const profileKeyCommitmentLen = 97
 
 // TestingProfileKeyPresentationRoundTrip builds a valid profile-key
 // credential presentation for unit tests using deterministic server params.
@@ -100,18 +103,18 @@ func TestingProfileKeyPresentationRoundTrip(
 	return CreateExpiringProfileKeyCredentialPresentation(serverParams, secretParams, credential, presRandomness)
 }
 
-func cProfileKeyCredentialRequestIn(b *[ProfileKeyCredentialRequestLen]byte) *[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCredentialRequestIn(b *[ProfileKeyCredentialRequestLen]byte) *[ProfileKeyCredentialRequestLen]C.uint8_t {
+	return (*[ProfileKeyCredentialRequestLen]C.uint8_t)(unsafe.Pointer(b))
 }
 
-func cExpiringProfileKeyCredentialResponseOut(b []byte) *[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar {
-	return (*[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+func cExpiringProfileKeyCredentialResponseOut(b []byte) *C.SignalType_FixedArray497_uint8_t {
+	return (*C.SignalType_FixedArray497_uint8_t)(unsafe.Pointer(&b[0]))
 }
 
-func cProfileKeyCommitmentOut(b *[profileKeyCommitmentLen]byte) *[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCommitmentOut(b *[profileKeyCommitmentLen]byte) *C.SignalType_FixedArray97_uint8_t {
+	return (*C.SignalType_FixedArray97_uint8_t)(unsafe.Pointer(b))
 }
 
-func cProfileKeyCommitmentIn(b *[profileKeyCommitmentLen]byte) *[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCommitmentIn(b *[profileKeyCommitmentLen]byte) *[profileKeyCommitmentLen]C.uint8_t {
+	return (*[profileKeyCommitmentLen]C.uint8_t)(unsafe.Pointer(b))
 }
