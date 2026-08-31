@@ -26,7 +26,7 @@ func ParseServiceIDString(s string) (ServiceIDFixedWidth, error) {
 	cstr := C.CString(s)
 	defer C.free(unsafe.Pointer(cstr))
 	var out C.SignalServiceIdFixedWidthBinaryBytes
-	if err := checkError(C.signal_service_id_parse_from_service_id_string(&out, cstr)); err != nil {
+	if err := checkError(C.signal_service_id_parse_from_service_id_string(&out, cInt8(cstr))); err != nil {
 		return ServiceIDFixedWidth{}, err
 	}
 	return serviceIDFromC(out), nil
@@ -39,8 +39,8 @@ func ServiceIDString(id ServiceIDFixedWidth) (string, error) {
 	if err := checkError(C.signal_service_id_service_id_string(&cstr, cServiceID(id))); err != nil {
 		return "", err
 	}
-	s := C.GoString((*C.char)(cstr))
-	C.signal_free_string((*C.char)(cstr))
+	s := C.GoString(cChar(cstr))
+	C.signal_free_string(cstr)
 	return s, nil
 }
 

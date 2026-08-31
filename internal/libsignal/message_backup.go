@@ -70,7 +70,7 @@ func (k *MessageBackupKey) AesKey() ([32]byte, error) {
 		return [32]byte{}, errors.New("libsignal.MessageBackupKey.AesKey: nil key")
 	}
 	var out [32]C.uint8_t
-	if err := checkError(C.signal_message_backup_key_get_aes_key(&out, C.SignalConstPointerMessageBackupKey{raw: k.raw.raw})); err != nil {
+	if err := checkError(C.signal_message_backup_key_get_aes_key((*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(&out)), C.SignalConstPointerMessageBackupKey{raw: k.raw.raw})); err != nil {
 		return [32]byte{}, err
 	}
 	var key [32]byte
@@ -86,7 +86,7 @@ func (k *MessageBackupKey) HmacKey() ([32]byte, error) {
 		return [32]byte{}, errors.New("libsignal.MessageBackupKey.HmacKey: nil key")
 	}
 	var out [32]C.uint8_t
-	if err := checkError(C.signal_message_backup_key_get_hmac_key(&out, C.SignalConstPointerMessageBackupKey{raw: k.raw.raw})); err != nil {
+	if err := checkError(C.signal_message_backup_key_get_hmac_key((*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(&out)), C.SignalConstPointerMessageBackupKey{raw: k.raw.raw})); err != nil {
 		return [32]byte{}, err
 	}
 	var key [32]byte
@@ -122,8 +122,8 @@ func (o *MessageBackupValidationOutcome) ErrorMessage() (string, error) {
 	if cstr == nil {
 		return "", nil
 	}
-	defer C.signal_free_string((*C.char)(cstr))
-	return C.GoString((*C.char)(cstr)), nil
+	defer C.signal_free_string(cstr)
+	return C.GoString(cChar(cstr)), nil
 }
 
 // UnknownFields lists unknown protobuf fields encountered during validation.

@@ -11,7 +11,11 @@ import (
 	"unsafe"
 )
 
-const profileKeyCommitmentLen = C.SignalPROFILE_KEY_COMMITMENT_LEN
+// profileKeyCommitmentLen mirrors libsignal's `SignalPROFILE_KEY_COMMITMENT_LEN`
+// macro, dropped in v0.101.2's cbindgen output in favor of an anonymous
+// FixedArray97 typedef on the FFI signatures (value confirmed against
+// signal_ffi.h).
+const profileKeyCommitmentLen = 97
 
 // TestingProfileKeyPresentationRoundTrip builds a valid profile-key
 // credential presentation for unit tests using deterministic server params.
@@ -100,18 +104,22 @@ func TestingProfileKeyPresentationRoundTrip(
 	return CreateExpiringProfileKeyCredentialPresentation(serverParams, secretParams, credential, presRandomness)
 }
 
-func cProfileKeyCredentialRequestIn(b *[ProfileKeyCredentialRequestLen]byte) *[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCredentialRequestIn(b *[ProfileKeyCredentialRequestLen]byte) *[ProfileKeyCredentialRequestLen]C.uchar {
+	return (*[ProfileKeyCredentialRequestLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cExpiringProfileKeyCredentialResponseOut(b []byte) *[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar {
-	return (*[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+// cExpiringProfileKeyCredentialResponseOut and cProfileKeyCommitmentOut cast
+// to libsignal v0.101.2's named SignalType_FixedArrayN_uint8_t out-param
+// type; see cGroupMasterKeyOut's doc comment for why this is safe
+// unconditionally, unlike the *In helpers below.
+func cExpiringProfileKeyCredentialResponseOut(b []byte) *C.SignalType_FixedArray497_uint8_t {
+	return (*C.SignalType_FixedArray497_uint8_t)(unsafe.Pointer(&b[0]))
 }
 
-func cProfileKeyCommitmentOut(b *[profileKeyCommitmentLen]byte) *[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCommitmentOut(b *[profileKeyCommitmentLen]byte) *C.SignalType_FixedArray97_uint8_t {
+	return (*C.SignalType_FixedArray97_uint8_t)(unsafe.Pointer(b))
 }
 
-func cProfileKeyCommitmentIn(b *[profileKeyCommitmentLen]byte) *[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCommitmentIn(b *[profileKeyCommitmentLen]byte) *[profileKeyCommitmentLen]C.uchar {
+	return (*[profileKeyCommitmentLen]C.uchar)(unsafe.Pointer(b))
 }

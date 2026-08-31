@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
@@ -25,14 +26,14 @@ func NewLookupRequest() (*LookupRequest, error) {
 func (r *LookupRequest) AddE164(e164 string) error {
 	cstr := C.CString(e164)
 	defer C.free(unsafe.Pointer(cstr))
-	return checkError(C.signal_lookup_request_add_e164(r.cPtr(), cstr))
+	return checkError(C.signal_lookup_request_add_e164(r.cPtr(), cInt8(cstr)))
 }
 
 // AddPreviousE164 adds a previously looked-up E.164 for delta/token reuse.
 func (r *LookupRequest) AddPreviousE164(e164 string) error {
 	cstr := C.CString(e164)
 	defer C.free(unsafe.Pointer(cstr))
-	return checkError(C.signal_lookup_request_add_previous_e164(r.cPtr(), cstr))
+	return checkError(C.signal_lookup_request_add_previous_e164(r.cPtr(), cInt8(cstr)))
 }
 
 // SetToken sets the continuation token from a prior lookup response.

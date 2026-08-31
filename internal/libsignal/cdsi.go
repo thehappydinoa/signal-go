@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 
 extern SignalFfiError *bridge_cdsi_lookup_new(
