@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
@@ -34,7 +35,7 @@ func NewConnectionManager(environment uint8, userAgent string) (*ConnectionManag
 	if err := checkError(C.signal_connection_manager_new(
 		&out,
 		C.uint8_t(environment),
-		cAgent,
+		cInt8(cAgent),
 		configMap,
 		C.uint8_t(BuildVariantProduction),
 	)); err != nil {

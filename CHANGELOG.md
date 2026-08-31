@@ -12,6 +12,51 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.101.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.101.2)).
+  This upstream cbindgen output changed shape substantially (9300+ diff lines
+  in `signal_ffi.h`), in two systemic ways rather than isolated signature
+  changes:
+  - All `#define SignalXXX_LEN N` byte-length macros (e.g.
+    `SignalGROUP_MASTER_KEY_LEN`, `SignalPROFILE_KEY_LEN`,
+    `SignalBACKUP_KEY_LEN`, and 14 others) were removed in favor of
+    anonymous `SignalType_FixedArrayN_uint8_t` typedefs used directly as
+    parameter/return types. Every `internal/libsignal/` reference to one of
+    these macros became a Go integer literal, with the byte length
+    cross-checked against the corresponding `FixedArrayN` type in the new
+    header at each call site — no values changed, only how libsignal
+    exposes them.
+  - Most string parameters (`SignalCStringPtr` and raw C string params)
+    moved from `const char*` to `const int8_t*`. `internal/libsignal/`
+    call sites now reinterpret `C.CString`/`SignalCStringPtr` pointers via
+    two small helpers in `buffers.go` (`cInt8`/`cChar`) rather than the
+    previous direct `*C.char` casts.
+  - Fixed-size array out-parameters (non-const) now resolve via cgo to the
+    named `SignalType_FixedArrayN_uint8_t` type rather than a plain array
+    pointer; the existing `c*Out` cgo helpers across `zkgroup.go`,
+    `profile_key.go`, `profile_key_presentation.go`, and
+    `profile_key_presentation_testsupport.go` were updated to cast to the
+    named type. Const (input) parameters still resolve to the plain array
+    type on GCC hosts — this is the same GCC-vs-clang cgo divergence
+    already documented and handled for `SignalServiceIdFixedWidthBinaryBytes`
+    in `service_id.go`; verified against `signal_ffi.h` for every changed
+    call site.
+  - `signal_ffi.h` no longer transitively includes `<stdlib.h>`; added an
+    explicit include to the handful of `internal/libsignal/*.go` files
+    that call `C.free`/`C.malloc` directly (`account_entropy.go`,
+    `cdsi.go`, `connection_manager.go`, `lookup_request.go`,
+    `profile_key.go`).
+  - No `pkg/signal` public API changes; this is confined to
+    `internal/libsignal/`.
+  - Verified: `go build ./...`, `go vet ./...`, `go test -race -count=1
+    ./...` (full suite, all packages pass), `golangci-lint run` (same 2
+    pre-existing `prealloc` findings in
+    `pkg/signal/group_{endorsement,send}.go` as the last bump, unrelated
+    to this change). Built and tested on linux/amd64 only in this
+    environment — the const-vs-non-const cgo divergence above is reasoned
+    from the existing documented GCC/clang split, not verified on
+    Darwin/Windows; the `libsignal-artifacts` / `release` cross-compile
+    workflows should confirm before the next tag.
+
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.

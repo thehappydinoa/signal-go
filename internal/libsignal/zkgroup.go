@@ -16,19 +16,25 @@ import (
 	"unsafe"
 )
 
+// These byte lengths mirror libsignal's zkgroup FFI wire format. Upstream
+// exposed them as `#define SignalXXX_LEN` macros through v0.97.2; v0.101.2's
+// cbindgen output dropped the named macros in favor of anonymous
+// `SignalType_FixedArrayN_uint8_t` typedefs on each function signature, so
+// these are now plain Go constants (values confirmed against the
+// FixedArrayN parameter/return types in signal_ffi.h).
 const (
 	// GroupMasterKeyLen is the size of a Groups v2 master key.
-	GroupMasterKeyLen = C.SignalGROUP_MASTER_KEY_LEN
+	GroupMasterKeyLen = 32
 	// GroupSecretParamsLen is the serialized GroupSecretParams size.
-	GroupSecretParamsLen = C.SignalGROUP_SECRET_PARAMS_LEN
+	GroupSecretParamsLen = 289
 	// GroupPublicParamsLen is the serialized GroupPublicParams size.
-	GroupPublicParamsLen = C.SignalGROUP_PUBLIC_PARAMS_LEN
+	GroupPublicParamsLen = 97
 	// GroupIdentifierLen is the 32-byte group identifier used in TypingMessage.groupId.
-	GroupIdentifierLen = C.SignalGROUP_IDENTIFIER_LEN
+	GroupIdentifierLen = 32
 	// UUIDCiphertextLen is the encrypted service id ciphertext size.
-	UUIDCiphertextLen = C.SignalUUID_CIPHERTEXT_LEN
+	UUIDCiphertextLen = 65
 	// ZKRandomnessLen is the randomness size for zkgroup deterministic ops.
-	ZKRandomnessLen = C.SignalRANDOMNESS_LEN
+	ZKRandomnessLen = 32
 )
 
 // Production ZK group server public params (Signal production).
@@ -285,42 +291,48 @@ func GroupsV2AuthorizationHeader(publicParams [GroupPublicParamsLen]byte, presen
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(raw))
 }
 
-func cGroupMasterKeyIn(b []byte) *[C.SignalGROUP_MASTER_KEY_LEN]C.uchar {
-	return (*[C.SignalGROUP_MASTER_KEY_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+func cGroupMasterKeyIn(b []byte) *[GroupMasterKeyLen]C.uchar {
+	return (*[GroupMasterKeyLen]C.uchar)(unsafe.Pointer(&b[0]))
 }
 
-func cGroupMasterKeyOut(b *[GroupMasterKeyLen]byte) *[C.SignalGROUP_MASTER_KEY_LEN]C.uchar {
-	return (*[C.SignalGROUP_MASTER_KEY_LEN]C.uchar)(unsafe.Pointer(b))
+// The *Out helpers below cast to libsignal v0.101.2's named
+// SignalType_FixedArrayN_uint8_t out-param type. Unlike the *In helpers
+// (see cServiceID's doc comment), this cast is safe unconditionally: cgo
+// resolves a non-const `T*` parameter to the named typedef consistently
+// across GCC and clang — the divergence only affects const-qualified
+// pointers.
+func cGroupMasterKeyOut(b *[GroupMasterKeyLen]byte) *C.SignalType_FixedArray32_uint8_t {
+	return (*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(b))
 }
 
-func cGroupSecretParamsIn(b *[GroupSecretParamsLen]byte) *[C.SignalGROUP_SECRET_PARAMS_LEN]C.uchar {
-	return (*[C.SignalGROUP_SECRET_PARAMS_LEN]C.uchar)(unsafe.Pointer(b))
+func cGroupSecretParamsIn(b *[GroupSecretParamsLen]byte) *[GroupSecretParamsLen]C.uchar {
+	return (*[GroupSecretParamsLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cGroupSecretParamsOut(b *[GroupSecretParamsLen]byte) *[C.SignalGROUP_SECRET_PARAMS_LEN]C.uchar {
-	return (*[C.SignalGROUP_SECRET_PARAMS_LEN]C.uchar)(unsafe.Pointer(b))
+func cGroupSecretParamsOut(b *[GroupSecretParamsLen]byte) *C.SignalType_FixedArray289_uint8_t {
+	return (*C.SignalType_FixedArray289_uint8_t)(unsafe.Pointer(b))
 }
 
-func cGroupPublicParamsOut(b *[GroupPublicParamsLen]byte) *[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar {
-	return (*[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar)(unsafe.Pointer(b))
+func cGroupPublicParamsOut(b *[GroupPublicParamsLen]byte) *C.SignalType_FixedArray97_uint8_t {
+	return (*C.SignalType_FixedArray97_uint8_t)(unsafe.Pointer(b))
 }
 
-func cGroupPublicParamsIn(b *[GroupPublicParamsLen]byte) *[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar {
-	return (*[C.SignalGROUP_PUBLIC_PARAMS_LEN]C.uchar)(unsafe.Pointer(b))
+func cGroupPublicParamsIn(b *[GroupPublicParamsLen]byte) *[GroupPublicParamsLen]C.uchar {
+	return (*[GroupPublicParamsLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cGroupIdentifierOut(b *[GroupIdentifierLen]byte) *[C.SignalGROUP_IDENTIFIER_LEN]C.uchar {
-	return (*[C.SignalGROUP_IDENTIFIER_LEN]C.uchar)(unsafe.Pointer(b))
+func cGroupIdentifierOut(b *[GroupIdentifierLen]byte) *C.SignalType_FixedArray32_uint8_t {
+	return (*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(b))
 }
 
-func cUUIDCiphertextIn(b []byte) *[C.SignalUUID_CIPHERTEXT_LEN]C.uchar {
-	return (*[C.SignalUUID_CIPHERTEXT_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+func cUUIDCiphertextIn(b []byte) *[UUIDCiphertextLen]C.uchar {
+	return (*[UUIDCiphertextLen]C.uchar)(unsafe.Pointer(&b[0]))
 }
 
-func cUUIDCiphertextOut(b *[UUIDCiphertextLen]byte) *[C.SignalUUID_CIPHERTEXT_LEN]C.uchar {
-	return (*[C.SignalUUID_CIPHERTEXT_LEN]C.uchar)(unsafe.Pointer(b))
+func cUUIDCiphertextOut(b *[UUIDCiphertextLen]byte) *C.SignalType_FixedArray65_uint8_t {
+	return (*C.SignalType_FixedArray65_uint8_t)(unsafe.Pointer(b))
 }
 
-func cRandomnessIn(b *[ZKRandomnessLen]byte) *[C.SignalRANDOMNESS_LEN]C.uint8_t {
-	return (*[C.SignalRANDOMNESS_LEN]C.uint8_t)(unsafe.Pointer(b))
+func cRandomnessIn(b *[ZKRandomnessLen]byte) *[ZKRandomnessLen]C.uint8_t {
+	return (*[ZKRandomnessLen]C.uint8_t)(unsafe.Pointer(b))
 }
