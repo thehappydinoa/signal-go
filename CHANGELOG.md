@@ -12,6 +12,62 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.102.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.102.0)).
+  This is a five-minor-version jump (the canary workflow had been red since
+  2026-07-13 without a maintainer picking it up), and cbindgen changed its
+  header codegen substantially in that span, so this was a real audit, not
+  a rubber stamp. Everything signal-go calls still exists upstream — 171
+  `internal/libsignal/` call sites checked against the new header, zero
+  removed — but three codegen changes needed real `internal/libsignal/`
+  wrapper changes:
+  - cbindgen no longer emits `#define SignalXXX_LEN N` macros for
+    fixed-size buffer lengths at all (60 macros gone, e.g.
+    `SignalPROFILE_KEY_LEN`, `SignalGROUP_SECRET_PARAMS_LEN`); sizes are now
+    inlined straight into each function's C array-type parameter. The 17
+    macros signal-go referenced were replaced with literal `const`s (values
+    cross-checked against every inlined occurrence in the new header, e.g.
+    `SignalGROUP_SECRET_PARAMS_LEN` → `289` everywhere it's used).
+  - Fixed-size array parameters changed from plain C array syntax
+    (`uint8_t (*out)[32]`) to a cbindgen-generated named typedef
+    (`SignalType_FixedArray32_uint8_t *out`). Same C layout, but cgo treats
+    the two spellings as distinct Go types for *mutable* ("out") pointer
+    parameters, so every out-parameter call site needed an explicit
+    `unsafe.Pointer` conversion to the new typedef'd type; the existing
+    per-field `cXxxIn`/`cXxxOut` helpers already isolated the unsafe casts,
+    so most of this was mechanical. Const ("in") parameters were
+    unaffected — cgo resolves those to the same Go type as before.
+  - String parameters changed from `const char *` (often via the
+    `SignalCStringPtr` typedef) to `const int8_t *`; likewise an
+    ABI-identical spelling change that cgo nonetheless treats as a
+    distinct Go type. Added two small helpers in `errors.go`
+    (`cInt8`/`goCString`) used at every string-argument call site instead
+    of scattering `unsafe.Pointer` casts inline.
+  - Five files (`account_entropy.go`, `cdsi.go`, `connection_manager.go`,
+    `lookup_request.go`, `profile_key.go`) called `C.free`/`C.CString`
+    without `#include <stdlib.h>` in their cgo preamble; this worked only
+    because the old `signal_ffi.h` transitively pulled in `<stdlib.h>`
+    itself. The new header doesn't, so each file now includes it directly.
+  - Also removed upstream and confirmed unused by signal-go: the media
+    sanitizer API (`signal_mp4_sanitizer_sanitize`,
+    `signal_webp_sanitizer_sanitize`, `signal_sanitized_metadata_*`),
+    `signal_connection_info_destroy`, and
+    `signal_register_account_response_get_identity`. New and also unused:
+    a large `signal_authenticated_chat_connection_*` account-management
+    surface (registration lock, TOTP/MFA, username/device management),
+    backup-media deletion (`signal_delete_backup_media_stream_*`,
+    `signal_unauthenticated_chat_connection_backup_delete_media`), and SVR
+    key derivation helpers (`signal_svr_key_derive_*`).
+  Verified: `go build ./...`, `go vet ./...`,
+  `go test -race -count=1 ./...` and `-tags=component` (full suite, all
+  packages pass — including `internal/libsignal` itself, which exercises
+  the profile-key/zkgroup/backup-key/entropy-pool paths touched here),
+  `golangci-lint run` (same 2 pre-existing `prealloc` findings in
+  `pkg/signal/group_{endorsement,send}.go` as the last bump, unrelated),
+  `gofmt -s -l` clean, `bin/signal-go --help` smoke test. `govulncheck`
+  could not run in this sandbox (its vulnerability-DB fetch is blocked by
+  network policy); nothing in this diff adds a dependency, so risk is low,
+  but a maintainer should still run it before the next release.
+
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.

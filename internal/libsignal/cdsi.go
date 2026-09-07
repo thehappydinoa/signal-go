@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include <stdlib.h>
 
 extern SignalFfiError *bridge_cdsi_lookup_new(
 	SignalConstPointerTokioAsyncContext async_runtime,

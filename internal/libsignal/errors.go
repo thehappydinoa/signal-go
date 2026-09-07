@@ -41,13 +41,29 @@ func checkError(rawErr *C.SignalFfiError) error {
 	// signal_error_get_message returns a SignalFfiError* of its own if the
 	// underlying error has no message; we ignore that and fall back.
 	if e2 := C.signal_error_get_message(&cmsg, rawErr); e2 == nil && cmsg != nil {
-		msg := C.GoString((*C.char)(cmsg))
-		C.signal_free_string((*C.char)(cmsg))
+		msg := C.GoString(goCString(cmsg))
+		C.signal_free_string(cmsg)
 		C.signal_error_free(rawErr)
 		return &Error{Code: code, Message: msg}
 	}
 	C.signal_error_free(rawErr)
 	return &Error{Code: code, Message: "(no message)"}
+}
+
+// cInt8 converts a Go-owned NUL-terminated C string (from C.CString) to the
+// *C.int8_t type libsignal's FFI functions expect for string arguments.
+// cbindgen v0.102+ spells input string parameters as `const int8_t *`
+// instead of `const char *`; both are a signed byte pointer with the same
+// representation, just a different C typedef name, but cgo treats them as
+// distinct Go types and requires an explicit conversion.
+func cInt8(s *C.char) *C.int8_t {
+	return (*C.int8_t)(unsafe.Pointer(s))
+}
+
+// goCString converts a SignalCStringPtr (now `const int8_t *` upstream)
+// back to *C.char for use with C.GoString / C.signal_free_string.
+func goCString(s C.SignalCStringPtr) *C.char {
+	return (*C.char)(unsafe.Pointer(s))
 }
 
 // goBytesFromOwnedBuffer copies the data out of a SignalOwnedBuffer and frees
