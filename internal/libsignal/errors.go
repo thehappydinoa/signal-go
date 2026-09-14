@@ -41,8 +41,8 @@ func checkError(rawErr *C.SignalFfiError) error {
 	// signal_error_get_message returns a SignalFfiError* of its own if the
 	// underlying error has no message; we ignore that and fall back.
 	if e2 := C.signal_error_get_message(&cmsg, rawErr); e2 == nil && cmsg != nil {
-		msg := C.GoString((*C.char)(cmsg))
-		C.signal_free_string((*C.char)(cmsg))
+		msg := C.GoString(fromCInt8Ptr(cmsg))
+		C.signal_free_string(cmsg)
 		C.signal_error_free(rawErr)
 		return &Error{Code: code, Message: msg}
 	}
@@ -83,4 +83,20 @@ func borrowed(b []byte) C.SignalBorrowedBuffer {
 // inside a C struct.
 func keepAlive(b []byte) {
 	runtime.KeepAlive(b)
+}
+
+// toCInt8Ptr converts a Go-owned C string (from C.CString) into the pointer
+// type libsignal's FFI declares string parameters as. libsignal's
+// cbindgen output represents C strings via `const int8_t*` rather than
+// `const char*` as of v0.102.2; char and int8_t share representation but
+// are distinct types to cgo, so call sites bridge them through
+// unsafe.Pointer.
+func toCInt8Ptr(s *C.char) *C.int8_t {
+	return (*C.int8_t)(unsafe.Pointer(s))
+}
+
+// fromCInt8Ptr converts a libsignal-owned C string pointer (SignalCStringPtr)
+// back to *C.char for use with C.GoString.
+func fromCInt8Ptr(s C.SignalCStringPtr) *C.char {
+	return (*C.char)(unsafe.Pointer(s))
 }
