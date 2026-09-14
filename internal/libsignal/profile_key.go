@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
@@ -12,18 +13,18 @@ import (
 )
 
 // ProfileKeyLen is the byte length of a Signal profile encryption key.
-const ProfileKeyLen = int(C.SignalPROFILE_KEY_LEN)
+const ProfileKeyLen = len(C.SignalType_FixedArray32_uint8_t{})
 
 // AccessKeyLen is the byte length of an unidentified access key (UAK).
-const AccessKeyLen = int(C.SignalACCESS_KEY_LEN)
+const AccessKeyLen = len(C.SignalType_FixedArray16_uint8_t{})
 
 // ProfileKeyVersionEncodedLen is the hex-encoded profile key version string
 // length returned by [ProfileKeyVersion].
-const ProfileKeyVersionEncodedLen = int(C.SignalPROFILE_KEY_VERSION_ENCODED_LEN)
+const ProfileKeyVersionEncodedLen = len(C.SignalType_FixedArray64_uint8_t{})
 
-func copyProfileKey(pk *[C.SignalPROFILE_KEY_LEN]C.uchar, src []byte) {
+func copyProfileKey(pk *[32]C.uint8_t, src []byte) {
 	for i, b := range src {
-		pk[i] = C.uchar(b)
+		pk[i] = C.uint8_t(b)
 	}
 }
 
@@ -35,9 +36,9 @@ func DeriveAccessKey(profileKey []byte) ([AccessKeyLen]byte, error) {
 	if len(profileKey) != ProfileKeyLen {
 		return out, fmt.Errorf("libsignal.DeriveAccessKey: profile key length %d, want %d", len(profileKey), ProfileKeyLen)
 	}
-	var pk [C.SignalPROFILE_KEY_LEN]C.uchar
+	var pk [32]C.uint8_t
 	copyProfileKey(&pk, profileKey)
-	var uak [C.SignalACCESS_KEY_LEN]C.uint8_t
+	var uak C.SignalType_FixedArray16_uint8_t
 	if err := checkError(C.signal_profile_key_derive_access_key(&uak, &pk)); err != nil {
 		return out, err
 	}
@@ -55,15 +56,15 @@ func ProfileKeyVersion(profileKey []byte, aci string) (string, error) {
 	if aci == "" {
 		return "", errors.New("libsignal.ProfileKeyVersion: empty aci")
 	}
-	cstr := C.CString(aci)
-	defer C.free(unsafe.Pointer(cstr))
+	cstr := cString(aci)
+	defer freeCString(cstr)
 	var sid C.SignalServiceIdFixedWidthBinaryBytes
 	if err := checkError(C.signal_service_id_parse_from_service_id_string(&sid, cstr)); err != nil {
 		return "", err
 	}
-	var pk [C.SignalPROFILE_KEY_LEN]C.uchar
+	var pk [32]C.uint8_t
 	copyProfileKey(&pk, profileKey)
-	var version [C.SignalPROFILE_KEY_VERSION_ENCODED_LEN]C.uint8_t
+	var version C.SignalType_FixedArray64_uint8_t
 	if err := checkError(C.signal_profile_key_get_profile_key_version(
 		&version,
 		&pk,

@@ -159,6 +159,19 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to **v0.102.2** from v0.94.1
+  ([compare](https://github.com/signalapp/libsignal/compare/v0.94.1...v0.102.2)).
+  Eight minor releases; upstream treats pre-1.0 minors as breaking. No function
+  we call was removed, but 161 signatures changed shape in the cbindgen surface
+  and all 17 `Signal*_LEN` macros were dropped. `internal/libsignal` was rewired
+  accordingly ([ADR 0004](./docs/adr/0004-libsignal-pin.md)):
+  - C strings are now `int8_t *` / `SignalCStringPtr` rather than `char *`;
+    all string crossings go through `cString`/`freeCString`/`goStringFromC`.
+  - Fixed-width byte arrays are now `SignalType_FixedArrayN_uint8_t` typedefs;
+    length constants are derived from those types instead of removed macros.
+  - `signal_ffi.h` no longer pulls in `<stdlib.h>`; cgo preambles using
+    `C.free` include it explicitly.
+  - No change to any `pkg/signal` public API.
 - CI workflow ignores markdown-only changes in pushes and PRs, avoiding
   unnecessary `libsignal_ffi.a` rebuilds on doc-only commits.
 

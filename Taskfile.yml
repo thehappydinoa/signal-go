@@ -3,7 +3,7 @@ version: '3'
 dotenv: ['.env']
 
 vars:
-  LIBSIGNAL_VERSION: v0.94.1
+  LIBSIGNAL_VERSION: v0.102.2
   # -trimpath only for build outputs (reproducibility + no dev paths in binaries).
   # Tests don't need it and it breaks cgo preprocessing on Windows (Go cgo/trimpath
   # interaction bug on windows/amd64 with go test).

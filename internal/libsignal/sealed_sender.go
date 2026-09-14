@@ -286,8 +286,7 @@ func (c *SenderCertificate) SenderUUID() (string, error) {
 	if err := checkError(C.signal_sender_certificate_get_sender_uuid(&cstr, c.constPtr())); err != nil {
 		return "", err
 	}
-	s := C.GoString((*C.char)(cstr))
-	C.signal_free_string((*C.char)(cstr))
+	s := goStringFromC(cstr)
 	return s, nil
 }
 

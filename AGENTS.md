@@ -33,7 +33,7 @@ The static library at `internal/libsignal/lib/libsignal_ffi.a` must exist before
 Go compilation involving cgo packages works. Build it once with:
 
 ```sh
-LIBSIGNAL_VERSION=v0.94.1 bash scripts/build-libsignal.sh
+LIBSIGNAL_VERSION=v0.102.2 bash scripts/build-libsignal.sh
 ```
 
 Or via task: `task libsignal`. The script is idempotent (skips if already built for

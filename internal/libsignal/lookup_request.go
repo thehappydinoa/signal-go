@@ -1,11 +1,10 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
-
-import "unsafe"
 
 // LookupRequest is a libsignal CDSI phone-number lookup request.
 type LookupRequest struct {
@@ -23,15 +22,15 @@ func NewLookupRequest() (*LookupRequest, error) {
 
 // AddE164 adds an E.164 phone number (e.g. "+15551234567") to the request.
 func (r *LookupRequest) AddE164(e164 string) error {
-	cstr := C.CString(e164)
-	defer C.free(unsafe.Pointer(cstr))
+	cstr := cString(e164)
+	defer freeCString(cstr)
 	return checkError(C.signal_lookup_request_add_e164(r.cPtr(), cstr))
 }
 
 // AddPreviousE164 adds a previously looked-up E.164 for delta/token reuse.
 func (r *LookupRequest) AddPreviousE164(e164 string) error {
-	cstr := C.CString(e164)
-	defer C.free(unsafe.Pointer(cstr))
+	cstr := cString(e164)
+	defer freeCString(cstr)
 	return checkError(C.signal_lookup_request_add_previous_e164(r.cPtr(), cstr))
 }
 

@@ -16,7 +16,7 @@ the "Link this device?" prompt; we won't yet complete the link).
 
 - [x] Project layout + Go module
 - [x] Vendor canonical `.proto` files from Signal-Android (`proto/`)
-- [x] Vendor cbindgen-generated `signal_ffi.h` from libsignal v0.94.1
+- [x] Vendor cbindgen-generated `signal_ffi.h` from libsignal v0.102.2
 - [x] `scripts/build-libsignal.sh` — pinned, reproducible static-lib build
 - [x] Taskfile (`task libsignal`, `task proto`, `task build`, `task test`, `task lint`)
 - [x] `.golangci.yml`, `.editorconfig`, test conventions
