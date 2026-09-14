@@ -9,7 +9,6 @@ import "C"
 import (
 	"errors"
 	"runtime"
-	"unsafe"
 )
 
 // Address is a libsignal-owned ProtocolAddress (service id + device id).
@@ -22,8 +21,8 @@ func NewAddress(serviceID string, deviceID uint32) (*Address, error) {
 	if serviceID == "" {
 		return nil, errors.New("libsignal.NewAddress: empty service id")
 	}
-	cname := C.CString(serviceID)
-	defer C.free(unsafe.Pointer(cname))
+	cname := cString(serviceID)
+	defer freeCString(cname)
 	var out C.SignalMutPointerProtocolAddress
 	if err := checkError(C.signal_address_new(&out, cname, C.uint32_t(deviceID))); err != nil {
 		return nil, err
@@ -37,8 +36,7 @@ func (a *Address) ServiceID() (string, error) {
 	if err := checkError(C.signal_address_get_name(&cstr, a.constPtr())); err != nil {
 		return "", err
 	}
-	s := C.GoString((*C.char)(cstr))
-	C.signal_free_string((*C.char)(cstr))
+	s := goStringFromC(cstr)
 	return s, nil
 }
 

@@ -18,8 +18,8 @@ void bridge_cdsi_response_complete(SignalFfiError *err, const SignalFfiCdsiLooku
 SignalFfiError *bridge_cdsi_lookup_new(
     SignalConstPointerTokioAsyncContext async_runtime,
     SignalConstPointerConnectionManager connection_manager,
-    const char *username,
-    const char *password,
+    const int8_t *username,
+    const int8_t *password,
     SignalConstPointerLookupRequest request,
     void *ctx
 ) {

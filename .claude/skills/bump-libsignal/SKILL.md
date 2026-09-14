@@ -80,6 +80,23 @@ After auditing, rebuild to confirm the cgo compilation is clean:
 go build ./internal/libsignal/...
 ```
 
+## Step 3b — Re-check the repo-local upstream patches
+
+`scripts/build-libsignal.sh` carries guarded patches against the upstream
+source tree: `patch_gnu_stack`, `patch_windows_fiat_adx_stubs`, and the
+`message-backup` `build.rs` proto-include fix. Each no-ops when its target no
+longer matches, so upstream fixing a problem silently disables our workaround —
+which is correct, but means a patch can go stale without failing anything.
+
+After a successful build, check whether each still fired:
+
+```bash
+task libsignal FORCE=1 2>&1 | grep '>> patching'
+```
+
+If a patch stopped firing, confirm upstream fixed the underlying issue and
+delete the patch (and update its ADR) rather than leaving dead code behind.
+
 ## Step 4 — Run the full test suite
 
 ```bash

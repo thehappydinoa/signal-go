@@ -9,7 +9,6 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"unsafe"
 )
 
 // ServiceIDFixedWidthLen is the libsignal fixed-width service id encoding size.
@@ -23,8 +22,8 @@ func ParseServiceIDString(s string) (ServiceIDFixedWidth, error) {
 	if s == "" {
 		return ServiceIDFixedWidth{}, errors.New("libsignal.ParseServiceIDString: empty input")
 	}
-	cstr := C.CString(s)
-	defer C.free(unsafe.Pointer(cstr))
+	cstr := cString(s)
+	defer freeCString(cstr)
 	var out C.SignalServiceIdFixedWidthBinaryBytes
 	if err := checkError(C.signal_service_id_parse_from_service_id_string(&out, cstr)); err != nil {
 		return ServiceIDFixedWidth{}, err
@@ -39,8 +38,7 @@ func ServiceIDString(id ServiceIDFixedWidth) (string, error) {
 	if err := checkError(C.signal_service_id_service_id_string(&cstr, cServiceID(id))); err != nil {
 		return "", err
 	}
-	s := C.GoString((*C.char)(cstr))
-	C.signal_free_string((*C.char)(cstr))
+	s := goStringFromC(cstr)
 	return s, nil
 }
 

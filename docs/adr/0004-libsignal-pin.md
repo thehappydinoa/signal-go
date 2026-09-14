@@ -14,7 +14,7 @@ or always build from source.
 ## Decision
 
 - Pin to a specific upstream tag in `scripts/build-libsignal.sh`. Current
-  pin: **`v0.94.1`**.
+  pin: **`v0.102.2`**.
 - `task libsignal` clones at the pinned tag and `cargo build --release -p
   libsignal-ffi`. Build is reproducible from source.
 - Output `libsignal_ffi.a` is written to `internal/libsignal/lib/` and is
@@ -22,12 +22,16 @@ or always build from source.
 - The cbindgen-generated `signal_ffi.h` is **committed** under
   `internal/libsignal/include/`. It is small (~2.8k LOC, plain C header),
   reviewable, and version-locked to the pinned tag. `task libsignal` will
-  overwrite it during builds, and CI checks for drift.
+  overwrite it during builds, and CI checks for drift. (As of `v0.102.2` the
+  header is ~6.8k LOC — cbindgen now emits one parameter per line plus
+  `static_assert` layout checks.)
 - Upgrading libsignal:
   1. Bump `LIBSIGNAL_VERSION` default in `scripts/build-libsignal.sh`.
   2. Run `task libsignal` to refresh the header.
   3. Commit the header diff in the same PR as any cgo-binding changes.
   4. Add a note to `CHANGELOG.md`.
+  5. Re-check the repo-local upstream source patches in the build script
+     ([ADR 0041](./0041-libsignal-message-backup-proto-patch.md)).
 
 ## Consequences
 

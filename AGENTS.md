@@ -11,7 +11,7 @@ notes and environment quirks. If guidance here conflicts with
 ## Cursor Cloud specific instructions
 
 This is a Go + cgo project that statically links Rust's `libsignal_ffi.a`. The build
-requires Go 1.25+, Rust/Cargo, gcc/g++, nasm, and protoc as system deps.
+requires Go 1.26+, Rust/Cargo, gcc/g++, nasm, and protoc as system deps.
 
 ### Key commands
 
@@ -33,7 +33,7 @@ The static library at `internal/libsignal/lib/libsignal_ffi.a` must exist before
 Go compilation involving cgo packages works. Build it once with:
 
 ```sh
-LIBSIGNAL_VERSION=v0.94.1 bash scripts/build-libsignal.sh
+LIBSIGNAL_VERSION=v0.102.2 bash scripts/build-libsignal.sh
 ```
 
 Or via task: `task libsignal`. The script is idempotent (skips if already built for

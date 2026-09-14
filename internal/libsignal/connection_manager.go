@@ -1,11 +1,10 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
-
-import "unsafe"
 
 const (
 	// NetworkEnvironmentProduction is Signal's production service environment.
@@ -27,8 +26,8 @@ func NewConnectionManager(environment uint8, userAgent string) (*ConnectionManag
 	if err := checkError(C.signal_bridged_string_map_new(&configMap, 0)); err != nil {
 		return nil, err
 	}
-	cAgent := C.CString(userAgent)
-	defer C.free(unsafe.Pointer(cAgent))
+	cAgent := cString(userAgent)
+	defer freeCString(cAgent)
 
 	var out C.SignalMutPointerConnectionManager
 	if err := checkError(C.signal_connection_manager_new(

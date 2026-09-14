@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.25.11'
+  GO_VERSION: '1.26.8'
 
 jobs:
   detect_changes:
@@ -190,12 +190,15 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          # Pinned to golangci-lint v2: golangci-lint refuses to lint
-          # a `go 1.25` module if the binary was built with an older
-          # Go (our go.mod targets 1.25 via x/crypto). v2 binaries are
-          # built with go1.25+. The action major must be v7+ to install
-          # v2; v6 only knows about v1.x releases.
-          version: v2.12.2
+          # golangci-lint refuses to lint a module whose targeted Go
+          # version is newer than the Go that built the linter binary.
+          # The action installs a *prebuilt* release, so the pin must be a
+          # release built with Go >= our `toolchain` directive: v2.12.2 ships
+          # built with go1.26.2, which is below our go1.26.8 and is rejected;
+          # v2.13.2 ships built with go1.27.0. Verify with
+          # `go version $(which golangci-lint)` before lowering this pin.
+          # The action major must be v7+ to install v2; v6 only knows v1.x.
+          version: v2.13.2
           args: --config .golangci.yml
 
   vet:
