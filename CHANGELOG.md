@@ -12,6 +12,23 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.102.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.102.2)).
+  cbindgen regenerated `signal_ffi.h` from scratch across this five-release
+  jump: anonymous `uint8_t (*)[N]` output parameters became named
+  `SignalType_FixedArrayN_uint8_t` typedefs, the `#define SignalXXX_LEN N`
+  size macros were dropped entirely (values unchanged — verified against
+  the pinned Rust source; signal-go now defines equivalent constants
+  itself in `internal/libsignal/lengths.go`), C string parameters changed
+  from `const char *` to `const int8_t *`, and the header stopped
+  transitively including `<stdlib.h>`. All of `internal/libsignal/`'s ~170
+  call sites were audited against the new signatures and updated
+  mechanically; no signal-go public API, wire format, or protocol
+  behavior changed. No libsignal function signal-go calls was removed.
+  New upstream surface not yet wrapped: registration without a phone
+  number, several `AuthenticatedChatConnection` account-management
+  endpoints (MFA keys, registration lock, discoverability, sticker/backup
+  uploads), and SVR-derived key helpers (`svr_key_derive_*`).
+
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.
