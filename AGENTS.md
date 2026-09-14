@@ -11,7 +11,7 @@ notes and environment quirks. If guidance here conflicts with
 ## Cursor Cloud specific instructions
 
 This is a Go + cgo project that statically links Rust's `libsignal_ffi.a`. The build
-requires Go 1.25+, Rust/Cargo, gcc/g++, nasm, and protoc as system deps.
+requires Go 1.26+, Rust/Cargo, gcc/g++, nasm, and protoc as system deps.
 
 ### Key commands
 

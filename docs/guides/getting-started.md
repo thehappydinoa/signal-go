@@ -6,7 +6,7 @@ automatic sealed-sender when a profile key is known (Phase 4).
 
 ## Prerequisites
 
-- **Go 1.25+** (we use `crypto/hkdf` and other stdlib bits from recent releases)
+- **Go 1.26+** (we use `crypto/hkdf` and other stdlib bits from recent releases)
 - **A C toolchain** (gcc/clang on Linux/macOS; on Windows use **MSYS2
   MinGW-w64**, not MSVC — see below)
 - **Rust** — only required if a pre-built `libsignal_ffi.a` is unavailable

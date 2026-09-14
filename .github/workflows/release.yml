@@ -32,7 +32,7 @@ permissions:
   attestations: write   # ditto — records the attestation on the run
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
   # Resolved version string used in archive names. `${{ github.ref_name }}`
   # is the tag for `on.push.tags` events; manual dispatch falls back to the
   # `tag` input.

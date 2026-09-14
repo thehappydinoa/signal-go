@@ -59,8 +59,8 @@ CI matrix: `ubuntu-latest` only at first. macOS + Windows are tracked
 as follow-ups; they need their own libsignal builds (different `.a`
 ABIs / paths) and that's a complication best handled separately.
 
-Go version pinned to `1.25` (the toolchain in `go.mod`). We do not
-matrix multiple Go versions; if `go.mod` says `1.25`, that's what we
+Go version pinned to `1.26` (the toolchain in `go.mod`). We do not
+matrix multiple Go versions; if `go.mod` says `1.26`, that's what we
 support. Bumping is a deliberate PR.
 
 ### Failure policy

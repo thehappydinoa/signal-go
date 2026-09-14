@@ -4,7 +4,7 @@
 [![CodeQL](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/thehappydinoa/signal-go/actions/workflows/codeql.yml)
 [![Latest release](https://img.shields.io/github/v/release/thehappydinoa/signal-go)](https://github.com/thehappydinoa/signal-go/releases/latest)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](./LICENSE)
-[![Go version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](./go.mod)
+[![Go version](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)](./go.mod)
 [![libsignal](https://img.shields.io/badge/libsignal-v0.102.2-orange)](./scripts/build-libsignal.sh)
 [![Threat model](https://img.shields.io/badge/security-threat--model-2e7d32)](./docs/security.md)
 

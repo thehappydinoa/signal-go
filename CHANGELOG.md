@@ -159,11 +159,12 @@ is *what* changed and *when*.
 
 ### Changed
 
-- Bump libsignal to **v0.102.2** from v0.94.1
-  ([compare](https://github.com/signalapp/libsignal/compare/v0.94.1...v0.102.2)).
-  Eight minor releases; upstream treats pre-1.0 minors as breaking. No function
-  we call was removed, but 161 signatures changed shape in the cbindgen surface
-  and all 17 `Signal*_LEN` macros were dropped. `internal/libsignal` was rewired
+- Bump libsignal to **v0.102.2**
+  ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.102.2)).
+  Unlike the v0.94-v0.97 bumps below, this one is not source-compatible: the
+  cbindgen surface changed shape. No function signal-go calls was removed, but
+  all 17 `Signal*_LEN` macros were dropped and the string and fixed-array
+  parameter spellings changed. `internal/libsignal` was rewired
   accordingly ([ADR 0004](./docs/adr/0004-libsignal-pin.md)):
   - C strings are now `int8_t *` / `SignalCStringPtr` rather than `char *`;
     all string crossings go through `cString`/`freeCString`/`goStringFromC`.
@@ -172,6 +173,26 @@ is *what* changed and *when*.
   - `signal_ffi.h` no longer pulls in `<stdlib.h>`; cgo preambles using
     `C.free` include it explicitly.
   - No change to any `pkg/signal` public API.
+- **BREAKING (toolchain)**: minimum Go is now **1.26** (`go 1.26.0`,
+  `toolchain go1.26.8`); consumers of `pkg/signal` must be on Go 1.26+
+  ([ADR 0041](./docs/adr/0041-go-1-26-toolchain-floor.md)). All CI workflows
+  move to `GO_VERSION: '1.26.8'`.
+- Cleared 7 standard-library vulnerabilities that `govulncheck` reported as
+  reachable from our code, including `crypto/tls` (GO-2026-6090,
+  GO-2026-5856) and `crypto/x509` (GO-2026-5037) on the TLS path covered by
+  [ADR 0034](./docs/adr/0034-signal-tls-root-pinning.md). `govulncheck ./...`
+  now reports 0 affected, and module-level advisories drop from 4 to 1.
+- Dependency updates unblocked by the floor: `golang.org/x/crypto` v0.53.0 ->
+  v0.57.0, `golang.org/x/crypto/x509roots/fallback` refreshed from the
+  2026-05-22 to the 2026-09-08 CA bundle, `golang.org/x/sys` v0.46.0 ->
+  v0.48.0, `golang.org/x/term` v0.44.0 -> v0.46.0, `modernc.org/sqlite`
+  v1.53.0 -> v1.58.0, `google.golang.org/protobuf` v1.36.11 -> v1.36.12,
+  `github.com/mattn/go-isatty` v0.0.20 -> v0.0.24. Each of these was
+  previously pinned back by `go >= 1.26` requirements.
+- `golangci-lint` pin v2.12.2 -> **v2.13.2**. The action installs a prebuilt
+  binary, and v2.12.2 ships built with go1.26.2 — below our `toolchain`
+  directive — so it refuses to lint the module. v2.13.2 ships built with
+  go1.27.0.
 - CI workflow ignores markdown-only changes in pushes and PRs, avoiding
   unnecessary `libsignal_ffi.a` rebuilds on doc-only commits.
 
