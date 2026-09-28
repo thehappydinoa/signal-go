@@ -1,13 +1,14 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 
 extern SignalFfiError *bridge_cdsi_lookup_new(
 	SignalConstPointerTokioAsyncContext async_runtime,
 	SignalConstPointerConnectionManager connection_manager,
-	const char *username,
-	const char *password,
+	const int8_t *username,
+	const int8_t *password,
 	SignalConstPointerLookupRequest request,
 	void *ctx
 );
@@ -97,8 +98,8 @@ func cdsiLookupNew(
 	if err := checkError(C.bridge_cdsi_lookup_new(
 		tokio.cPtr(),
 		connMgr.cPtr(),
-		cUser,
-		cPass,
+		cStr(cUser),
+		cStr(cPass),
 		request.cPtr(),
 		ctx,
 	)); err != nil {
