@@ -12,6 +12,51 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.103.1 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.103.1)),
+  closing out ten weeks of failing canary runs across six upstream releases
+  (v0.98.0 through v0.103.1). This required real `internal/libsignal/`
+  wrapper changes, not just a version-string edit:
+  - **cbindgen upgrade (bundled with this libsignal release) changed how
+    `signal_ffi.h` represents fixed-size byte arrays and C strings.** Every
+    `#define SignalXXX_LEN N` size constant was removed from the header
+    (replaced by a family of generated `SignalType_FixedArrayN_uint8_t`
+    typedefs); `internal/libsignal`'s Go constants that read those macros
+    (`ProfileKeyLen`, `GroupSecretParamsLen`, `ZKRandomnessLen`, `AccessKeyLen`,
+    etc. — 17 in total) now hardcode the same literal values, each verified
+    against the new header's generated array-size typedefs at every call
+    site that uses it. Every non-`const` (output) fixed-array function
+    parameter now needs the exact named `SignalType_FixedArrayN_uint8_t` cgo
+    type rather than an anonymous `[N]C.uchar` array (this toolchain's cgo
+    keeps `const`-qualified array-typedef parameters unwrapped to anonymous
+    arrays, but not non-const ones) — updated every affected helper in
+    `zkgroup.go`, `profile_key.go`, `profile_key_presentation.go`,
+    `profile_key_presentation_testsupport.go`, `account_entropy.go`,
+    `backup_key.go`, and `message_backup.go`.
+  - `const char *` string parameters (`signal_free_string`, account-entropy,
+    CDSI, service-id, address, connection-manager, lookup-request functions)
+    are now declared as `const int8_t *`; added `cStr`/`signalCStr`/`freeCStr`
+    conversion helpers in `errors.go` and updated every call site, including
+    `bridge_async.c`'s hand-written `bridge_cdsi_lookup_new`.
+  - The new header no longer transitively includes `<stdlib.h>`; added an
+    explicit `#include <stdlib.h>` to the five files that called `C.free` /
+    `C.CString` without it (`account_entropy.go`, `cdsi.go`,
+    `connection_manager.go`, `lookup_request.go`, `profile_key.go`).
+  - No libsignal *behavioral* API changes required a code change: v0.99.0's
+    removal of the deprecated `ExpiringProfileKeyPresentation` format,
+    v0.100.0's SPQR change requiring a post-quantum ratchet on all sessions,
+    and v0.101.0's `GenericServerSecretParams`/`CallLinkAuthCredential`
+    zkgroup versioning change all affect libsignal APIs signal-go does not
+    call (signal-go already always builds prekey bundles with a Kyber key,
+    satisfying the v0.100.0 change by construction). v0.103.0 renamed the
+    `OneTimePasswordNotVerified` error code to `MfaNotVerified`; signal-go
+    only matches on `SignalErrorCodeSealedSenderSelfSend` by name, so this
+    is not load-bearing.
+  - Verified against `go build ./...`, `go vet ./...`,
+    `go test -race -count=1 ./...` (all packages pass), and
+    `golangci-lint run ./...` (clean save for two pre-existing `prealloc`
+    findings in `pkg/signal/group_endorsement.go` / `group_send.go`,
+    unrelated to this change).
+
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.

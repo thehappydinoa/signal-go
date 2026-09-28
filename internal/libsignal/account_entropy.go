@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
@@ -13,7 +14,7 @@ import (
 
 // SVRKeyLen is the byte length of a Signal SVR / master key derived from
 // an AccountEntropyPool.
-const SVRKeyLen = int(C.SignalSVR_KEY_LEN)
+const SVRKeyLen = int(32)
 
 // DeriveBackupKey derives the 32-byte backup key from an AccountEntropyPool.
 func DeriveBackupKey(accountEntropyPool string) ([BackupKeyLen]byte, error) {
@@ -23,8 +24,8 @@ func DeriveBackupKey(accountEntropyPool string) ([BackupKeyLen]byte, error) {
 	}
 	cstr := C.CString(accountEntropyPool)
 	defer C.free(unsafe.Pointer(cstr))
-	var key [C.SignalBACKUP_KEY_LEN]C.uint8_t
-	if err := checkError(C.signal_account_entropy_pool_derive_backup_key(&key, cstr)); err != nil {
+	var key C.SignalType_FixedArray32_uint8_t
+	if err := checkError(C.signal_account_entropy_pool_derive_backup_key(&key, cStr(cstr))); err != nil {
 		return out, err
 	}
 	copy(out[:], C.GoBytes(unsafe.Pointer(&key), C.int(BackupKeyLen)))
@@ -40,8 +41,8 @@ func DeriveSVRKey(accountEntropyPool string) ([SVRKeyLen]byte, error) {
 	}
 	cstr := C.CString(accountEntropyPool)
 	defer C.free(unsafe.Pointer(cstr))
-	var key [C.SignalSVR_KEY_LEN]C.uint8_t
-	if err := checkError(C.signal_account_entropy_pool_derive_svr_key(&key, cstr)); err != nil {
+	var key C.SignalType_FixedArray32_uint8_t
+	if err := checkError(C.signal_account_entropy_pool_derive_svr_key(&key, cStr(cstr))); err != nil {
 		return out, err
 	}
 	copy(out[:], C.GoBytes(unsafe.Pointer(&key), C.int(SVRKeyLen)))
@@ -54,8 +55,9 @@ func GenerateAccountEntropyPool() (string, error) {
 	if err := checkError(C.signal_account_entropy_pool_generate(&out)); err != nil {
 		return "", err
 	}
-	defer C.signal_free_string((*C.char)(out))
-	return C.GoString((*C.char)(out)), nil
+	cstr := signalCStr(out)
+	defer freeCStr(cstr)
+	return C.GoString(cstr), nil
 }
 
 // ValidateAccountEntropyPool reports whether accountEntropyPool is a valid
@@ -67,7 +69,7 @@ func ValidateAccountEntropyPool(accountEntropyPool string) error {
 	cstr := C.CString(accountEntropyPool)
 	defer C.free(unsafe.Pointer(cstr))
 	var ok C.bool
-	if err := checkError(C.signal_account_entropy_pool_is_valid(&ok, cstr)); err != nil {
+	if err := checkError(C.signal_account_entropy_pool_is_valid(&ok, cStr(cstr))); err != nil {
 		return err
 	}
 	if !ok {
