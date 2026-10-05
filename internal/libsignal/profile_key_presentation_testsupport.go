@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
@@ -11,7 +12,7 @@ import (
 	"unsafe"
 )
 
-const profileKeyCommitmentLen = C.SignalPROFILE_KEY_COMMITMENT_LEN
+const profileKeyCommitmentLen = ffiProfileKeyCommitmentLen
 
 // TestingProfileKeyPresentationRoundTrip builds a valid profile-key
 // credential presentation for unit tests using deterministic server params.
@@ -62,7 +63,7 @@ func TestingProfileKeyPresentationRoundTrip(
 
 	var commitment [profileKeyCommitmentLen]byte
 	if err := checkError(C.signal_profile_key_get_commitment(
-		cProfileKeyCommitmentOut(&commitment),
+		(*C.SignalType_FixedArray97_uint8_t)(unsafe.Pointer(cProfileKeyCommitmentOut(&commitment))),
 		cProfileKeyIn(profileKey),
 		cServiceID(user),
 	)); err != nil {
@@ -77,7 +78,7 @@ func TestingProfileKeyPresentationRoundTrip(
 	expiration := uint64(17 * 24 * 60 * 60)
 	currentTime := expiration - 2*24*60*60
 	if err := checkError(C.signal_server_secret_params_issue_expiring_profile_key_credential_deterministic(
-		cExpiringProfileKeyCredentialResponseOut(response[:]),
+		(*C.SignalType_FixedArray497_uint8_t)(unsafe.Pointer(cExpiringProfileKeyCredentialResponseOut(response[:]))),
 		serverSecretConst,
 		cRandomnessIn(&issueRandomness),
 		cProfileKeyCredentialRequestIn(&request),
@@ -100,18 +101,18 @@ func TestingProfileKeyPresentationRoundTrip(
 	return CreateExpiringProfileKeyCredentialPresentation(serverParams, secretParams, credential, presRandomness)
 }
 
-func cProfileKeyCredentialRequestIn(b *[ProfileKeyCredentialRequestLen]byte) *[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCredentialRequestIn(b *[ProfileKeyCredentialRequestLen]byte) *[ffiProfileKeyCredentialRequestLen]C.uchar {
+	return (*[ffiProfileKeyCredentialRequestLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cExpiringProfileKeyCredentialResponseOut(b []byte) *[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar {
-	return (*[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+func cExpiringProfileKeyCredentialResponseOut(b []byte) *[ffiExpiringProfileKeyCredentialResponseLen]C.uchar {
+	return (*[ffiExpiringProfileKeyCredentialResponseLen]C.uchar)(unsafe.Pointer(&b[0]))
 }
 
-func cProfileKeyCommitmentOut(b *[profileKeyCommitmentLen]byte) *[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCommitmentOut(b *[profileKeyCommitmentLen]byte) *[ffiProfileKeyCommitmentLen]C.uchar {
+	return (*[ffiProfileKeyCommitmentLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cProfileKeyCommitmentIn(b *[profileKeyCommitmentLen]byte) *[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_COMMITMENT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCommitmentIn(b *[profileKeyCommitmentLen]byte) *[ffiProfileKeyCommitmentLen]C.uchar {
+	return (*[ffiProfileKeyCommitmentLen]C.uchar)(unsafe.Pointer(b))
 }

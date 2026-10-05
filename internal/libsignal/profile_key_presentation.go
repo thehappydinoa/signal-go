@@ -16,15 +16,15 @@ import (
 
 const (
 	// ProfileKeyCredentialRequestLen is the serialized credential request size.
-	ProfileKeyCredentialRequestLen = C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN
+	ProfileKeyCredentialRequestLen = ffiProfileKeyCredentialRequestLen
 	// ProfileKeyCredentialRequestContextLen is the request context size.
-	ProfileKeyCredentialRequestContextLen = C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_CONTEXT_LEN
+	ProfileKeyCredentialRequestContextLen = ffiProfileKeyCredentialRequestContextLen
 	// ExpiringProfileKeyCredentialLen is a received expiring profile key credential.
-	ExpiringProfileKeyCredentialLen = C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_LEN
+	ExpiringProfileKeyCredentialLen = ffiExpiringProfileKeyCredentialLen
 	// ExpiringProfileKeyCredentialResponseLen is the server credential response.
-	ExpiringProfileKeyCredentialResponseLen = C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN
+	ExpiringProfileKeyCredentialResponseLen = ffiExpiringProfileKeyCredentialResponseLen
 	// ProfileKeyCiphertextLen is the encrypted profile key in a presentation.
-	ProfileKeyCiphertextLen = C.SignalPROFILE_KEY_CIPHERTEXT_LEN
+	ProfileKeyCiphertextLen = ffiProfileKeyCiphertextLen
 )
 
 // CreateProfileKeyCredentialRequestContext builds a zkgroup request context
@@ -43,7 +43,7 @@ func CreateProfileKeyCredentialRequestContext(
 		return out, fmt.Errorf("libsignal.CreateProfileKeyCredentialRequestContext: profile key length %d, want %d", len(profileKey), ProfileKeyLen)
 	}
 	if err := checkError(C.signal_server_public_params_create_profile_key_credential_request_context_deterministic(
-		cProfileKeyCredentialRequestContextOut(&out),
+		(*C.SignalType_FixedArray473_uint8_t)(unsafe.Pointer(cProfileKeyCredentialRequestContextOut(&out))),
 		serverParams.constPtr(),
 		cRandomnessIn(&randomness),
 		cServiceID(user),
@@ -61,7 +61,7 @@ func CreateProfileKeyCredentialRequestContext(
 func ProfileKeyCredentialRequestFromContext(context [ProfileKeyCredentialRequestContextLen]byte) ([ProfileKeyCredentialRequestLen]byte, error) {
 	var out [ProfileKeyCredentialRequestLen]byte
 	if err := checkError(C.signal_profile_key_credential_request_context_get_request(
-		cProfileKeyCredentialRequestOut(&out),
+		(*C.SignalType_FixedArray329_uint8_t)(unsafe.Pointer(cProfileKeyCredentialRequestOut(&out))),
 		cProfileKeyCredentialRequestContextIn(&context),
 	)); err != nil {
 		return out, err
@@ -85,7 +85,7 @@ func ReceiveExpiringProfileKeyCredential(
 		return out, fmt.Errorf("libsignal.ReceiveExpiringProfileKeyCredential: response length %d, want %d", len(response), ExpiringProfileKeyCredentialResponseLen)
 	}
 	if err := checkError(C.signal_server_public_params_receive_expiring_profile_key_credential(
-		cExpiringProfileKeyCredentialOut(&out),
+		(*C.SignalType_FixedArray153_uint8_t)(unsafe.Pointer(cExpiringProfileKeyCredentialOut(&out))),
 		serverParams.constPtr(),
 		cProfileKeyCredentialRequestContextIn(&context),
 		cExpiringProfileKeyCredentialResponseIn(response),
@@ -134,7 +134,7 @@ func ProfileKeyPresentationProfileKeyCiphertext(presentation []byte) ([ProfileKe
 		return out, err
 	}
 	if err := checkError(C.signal_profile_key_credential_presentation_get_profile_key_ciphertext(
-		cProfileKeyCiphertextIn(&out),
+		(*C.SignalType_FixedArray65_uint8_t)(unsafe.Pointer(cProfileKeyCiphertextIn(&out))),
 		borrowed(presentation),
 	)); err != nil {
 		return out, err
@@ -154,7 +154,7 @@ func ProfileKeyPresentationUUIDCiphertext(presentation []byte) ([UUIDCiphertextL
 		return out, err
 	}
 	if err := checkError(C.signal_profile_key_credential_presentation_get_uuid_ciphertext(
-		cUUIDCiphertextOut(&out),
+		(*C.SignalType_FixedArray65_uint8_t)(unsafe.Pointer(cUUIDCiphertextOut(&out))),
 		borrowed(presentation),
 	)); err != nil {
 		return out, err
@@ -172,7 +172,7 @@ func GroupSecretParamsDecryptProfileKey(
 ) ([ProfileKeyLen]byte, error) {
 	var out [ProfileKeyLen]byte
 	if err := checkError(C.signal_group_secret_params_decrypt_profile_key(
-		cProfileKeyOut(&out),
+		(*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(cProfileKeyOut(&out))),
 		cGroupSecretParamsIn(&secretParams),
 		cProfileKeyCiphertextIn(&ciphertext),
 		cServiceID(user),
@@ -182,38 +182,38 @@ func GroupSecretParamsDecryptProfileKey(
 	return out, nil
 }
 
-func cProfileKeyIn(b []byte) *[C.SignalPROFILE_KEY_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+func cProfileKeyIn(b []byte) *[ffiProfileKeyLen]C.uchar {
+	return (*[ffiProfileKeyLen]C.uchar)(unsafe.Pointer(&b[0]))
 }
 
-func cProfileKeyOut(b *[ProfileKeyLen]byte) *[C.SignalPROFILE_KEY_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyOut(b *[ProfileKeyLen]byte) *[ffiProfileKeyLen]C.uchar {
+	return (*[ffiProfileKeyLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cProfileKeyCredentialRequestContextIn(b *[ProfileKeyCredentialRequestContextLen]byte) *[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_CONTEXT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_CONTEXT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCredentialRequestContextIn(b *[ProfileKeyCredentialRequestContextLen]byte) *[ffiProfileKeyCredentialRequestContextLen]C.uchar {
+	return (*[ffiProfileKeyCredentialRequestContextLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cProfileKeyCredentialRequestContextOut(b *[ProfileKeyCredentialRequestContextLen]byte) *[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_CONTEXT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_CONTEXT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCredentialRequestContextOut(b *[ProfileKeyCredentialRequestContextLen]byte) *[ffiProfileKeyCredentialRequestContextLen]C.uchar {
+	return (*[ffiProfileKeyCredentialRequestContextLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cProfileKeyCredentialRequestOut(b *[ProfileKeyCredentialRequestLen]byte) *[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CREDENTIAL_REQUEST_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCredentialRequestOut(b *[ProfileKeyCredentialRequestLen]byte) *[ffiProfileKeyCredentialRequestLen]C.uchar {
+	return (*[ffiProfileKeyCredentialRequestLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cExpiringProfileKeyCredentialOut(b *[ExpiringProfileKeyCredentialLen]byte) *[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_LEN]C.uchar {
-	return (*[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_LEN]C.uchar)(unsafe.Pointer(b))
+func cExpiringProfileKeyCredentialOut(b *[ExpiringProfileKeyCredentialLen]byte) *[ffiExpiringProfileKeyCredentialLen]C.uchar {
+	return (*[ffiExpiringProfileKeyCredentialLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cExpiringProfileKeyCredentialIn(b *[ExpiringProfileKeyCredentialLen]byte) *[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_LEN]C.uchar {
-	return (*[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_LEN]C.uchar)(unsafe.Pointer(b))
+func cExpiringProfileKeyCredentialIn(b *[ExpiringProfileKeyCredentialLen]byte) *[ffiExpiringProfileKeyCredentialLen]C.uchar {
+	return (*[ffiExpiringProfileKeyCredentialLen]C.uchar)(unsafe.Pointer(b))
 }
 
-func cExpiringProfileKeyCredentialResponseIn(b []byte) *[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar {
-	return (*[C.SignalEXPIRING_PROFILE_KEY_CREDENTIAL_RESPONSE_LEN]C.uchar)(unsafe.Pointer(&b[0]))
+func cExpiringProfileKeyCredentialResponseIn(b []byte) *[ffiExpiringProfileKeyCredentialResponseLen]C.uchar {
+	return (*[ffiExpiringProfileKeyCredentialResponseLen]C.uchar)(unsafe.Pointer(&b[0]))
 }
 
-func cProfileKeyCiphertextIn(b *[ProfileKeyCiphertextLen]byte) *[C.SignalPROFILE_KEY_CIPHERTEXT_LEN]C.uchar {
-	return (*[C.SignalPROFILE_KEY_CIPHERTEXT_LEN]C.uchar)(unsafe.Pointer(b))
+func cProfileKeyCiphertextIn(b *[ProfileKeyCiphertextLen]byte) *[ffiProfileKeyCiphertextLen]C.uchar {
+	return (*[ffiProfileKeyCiphertextLen]C.uchar)(unsafe.Pointer(b))
 }
