@@ -1,6 +1,7 @@
 package libsignal
 
 /*
+#include <stdlib.h>
 #include "signal_ffi.h"
 */
 import "C"
@@ -11,7 +12,7 @@ import (
 )
 
 // BackupKeyLen is the byte length of a Signal backup key.
-const BackupKeyLen = int(C.SignalBACKUP_KEY_LEN)
+const BackupKeyLen = int(ffiBackupKeyLen)
 
 // BackupIDLen is the byte length of a derived backup ID.
 const BackupIDLen = 16
@@ -25,7 +26,7 @@ func DeriveBackupID(backupKey [BackupKeyLen]byte, aci string) ([BackupIDLen]byte
 	}
 	cKey := (*[BackupKeyLen]C.uint8_t)(unsafe.Pointer(&backupKey[0]))
 	var cOut [BackupIDLen]C.uint8_t
-	if err := checkError(C.signal_backup_key_derive_backup_id(&cOut, cKey, cServiceID(sid))); err != nil {
+	if err := checkError(C.signal_backup_key_derive_backup_id((*C.SignalType_FixedArray16_uint8_t)(unsafe.Pointer(&cOut)), cKey, cServiceID(sid))); err != nil {
 		return out, err
 	}
 	for i := range out {

@@ -41,8 +41,8 @@ func checkError(rawErr *C.SignalFfiError) error {
 	// signal_error_get_message returns a SignalFfiError* of its own if the
 	// underlying error has no message; we ignore that and fall back.
 	if e2 := C.signal_error_get_message(&cmsg, rawErr); e2 == nil && cmsg != nil {
-		msg := C.GoString((*C.char)(cmsg))
-		C.signal_free_string((*C.char)(cmsg))
+		msg := C.GoString((*C.char)(unsafe.Pointer(cmsg)))
+		C.signal_free_string(cmsg)
 		C.signal_error_free(rawErr)
 		return &Error{Code: code, Message: msg}
 	}

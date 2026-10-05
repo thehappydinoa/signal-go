@@ -12,6 +12,14 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.104.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.104.0)).
+  Upstream replaced the cbindgen-generated `signal_ffi.h` with a new
+  auto-generated header, so the cgo wrappers in `internal/libsignal/` were
+  ported: C strings are now `const int8_t *` (was `char *`), fixed-size
+  byte arrays are `SignalType_FixedArrayN_uint8_t` typedefs, `<stdlib.h>`
+  is no longer pulled in transitively, and the `Signal*_LEN` `#define`s are
+  gone (mirrored in `internal/libsignal/ffi_consts.go`). No `pkg/signal`
+  API change. `go build`, `go vet` and `go test -race ./...` pass.
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.
