@@ -24,5 +24,6 @@ package libsignal
 
 #include <stdlib.h>
 #include "signal_ffi.h"
+#include "signalgo_compat.h"
 */
 import "C"

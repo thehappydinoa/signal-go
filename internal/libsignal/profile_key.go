@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include "signalgo_compat.h"
 */
 import "C"
 
@@ -38,7 +39,7 @@ func DeriveAccessKey(profileKey []byte) ([AccessKeyLen]byte, error) {
 	var pk [C.SignalPROFILE_KEY_LEN]C.uchar
 	copyProfileKey(&pk, profileKey)
 	var uak [C.SignalACCESS_KEY_LEN]C.uint8_t
-	if err := checkError(C.signal_profile_key_derive_access_key(&uak, &pk)); err != nil {
+	if err := checkError(C.signal_profile_key_derive_access_key((*C.SignalType_FixedArray16_uint8_t)(unsafe.Pointer(&uak)), &pk)); err != nil {
 		return out, err
 	}
 	copy(out[:], C.GoBytes(unsafe.Pointer(&uak), C.int(AccessKeyLen)))
@@ -58,14 +59,14 @@ func ProfileKeyVersion(profileKey []byte, aci string) (string, error) {
 	cstr := C.CString(aci)
 	defer C.free(unsafe.Pointer(cstr))
 	var sid C.SignalServiceIdFixedWidthBinaryBytes
-	if err := checkError(C.signal_service_id_parse_from_service_id_string(&sid, cstr)); err != nil {
+	if err := checkError(C.signal_service_id_parse_from_service_id_string(&sid, (*C.int8_t)(unsafe.Pointer(cstr)))); err != nil {
 		return "", err
 	}
 	var pk [C.SignalPROFILE_KEY_LEN]C.uchar
 	copyProfileKey(&pk, profileKey)
 	var version [C.SignalPROFILE_KEY_VERSION_ENCODED_LEN]C.uint8_t
 	if err := checkError(C.signal_profile_key_get_profile_key_version(
-		&version,
+		(*C.SignalType_FixedArray64_uint8_t)(unsafe.Pointer(&version)),
 		&pk,
 		cServiceIDPtr(&sid),
 	)); err != nil {

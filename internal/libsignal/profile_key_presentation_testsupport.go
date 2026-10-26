@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include "signalgo_compat.h"
 */
 import "C"
 
@@ -62,7 +63,7 @@ func TestingProfileKeyPresentationRoundTrip(
 
 	var commitment [profileKeyCommitmentLen]byte
 	if err := checkError(C.signal_profile_key_get_commitment(
-		cProfileKeyCommitmentOut(&commitment),
+		(*C.SignalType_FixedArray97_uint8_t)(unsafe.Pointer(cProfileKeyCommitmentOut(&commitment))),
 		cProfileKeyIn(profileKey),
 		cServiceID(user),
 	)); err != nil {
@@ -77,7 +78,7 @@ func TestingProfileKeyPresentationRoundTrip(
 	expiration := uint64(17 * 24 * 60 * 60)
 	currentTime := expiration - 2*24*60*60
 	if err := checkError(C.signal_server_secret_params_issue_expiring_profile_key_credential_deterministic(
-		cExpiringProfileKeyCredentialResponseOut(response[:]),
+		(*C.SignalType_FixedArray497_uint8_t)(unsafe.Pointer(cExpiringProfileKeyCredentialResponseOut(response[:]))),
 		serverSecretConst,
 		cRandomnessIn(&issueRandomness),
 		cProfileKeyCredentialRequestIn(&request),

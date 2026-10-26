@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include "signalgo_compat.h"
 #include <stdlib.h>
 
 extern int signalgo_input_stream_read(void *ctx, size_t *out, SignalBorrowedMutableBuffer buf);
