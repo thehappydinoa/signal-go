@@ -12,6 +12,12 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.106.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.106.0)).
+  Upstream switched `signal_ffi.h` generators: size `#define`s and
+  `<stdlib.h>` are gone, C strings are `int8_t *`, and fixed buffers use
+  `SignalType_FixedArray<N>_uint8_t`. Added `signalgo_compat.h`
+  ([ADR 0039](./docs/adr/0039-libsignal-header-compat-shim.md)) and
+  `unsafe.Pointer` casts in `internal/libsignal/`; no `pkg/signal` API change.
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.

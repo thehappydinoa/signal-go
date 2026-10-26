@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include "signalgo_compat.h"
 */
 import "C"
 
@@ -63,8 +64,8 @@ func addressFromC(p C.SignalMutPointerProtocolAddress) (store.Address, error) {
 	if err := checkError(C.signal_address_get_name(&cname, cp)); err != nil {
 		return store.Address{}, err
 	}
-	name := C.GoString((*C.char)(cname))
-	C.signal_free_string((*C.char)(cname))
+	name := C.GoString((*C.char)(unsafe.Pointer(cname)))
+	C.signal_free_string((*C.int8_t)(unsafe.Pointer((*C.char)(unsafe.Pointer(cname)))))
 	var dev C.uint32_t
 	if err := checkError(C.signal_address_get_device_id(&dev, cp)); err != nil {
 		return store.Address{}, err

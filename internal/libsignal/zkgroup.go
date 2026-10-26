@@ -2,6 +2,7 @@ package libsignal
 
 /*
 #include "signal_ffi.h"
+#include "signalgo_compat.h"
 #include <stdlib.h>
 */
 import "C"
@@ -83,14 +84,14 @@ func GenerateGroupMasterKey() (masterKey []byte, secretParams [GroupSecretParams
 		return nil, secretParams, err
 	}
 	if err := checkError(C.signal_group_secret_params_generate_deterministic(
-		cGroupSecretParamsOut(&secretParams),
+		(*C.SignalType_FixedArray289_uint8_t)(unsafe.Pointer(cGroupSecretParamsOut(&secretParams))),
 		cRandomnessIn(&randomness),
 	)); err != nil {
 		return nil, secretParams, err
 	}
 	var mk [GroupMasterKeyLen]byte
 	if err := checkError(C.signal_group_secret_params_get_master_key(
-		cGroupMasterKeyOut(&mk),
+		(*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(cGroupMasterKeyOut(&mk))),
 		cGroupSecretParamsIn(&secretParams),
 	)); err != nil {
 		return nil, secretParams, err
@@ -110,7 +111,7 @@ func GroupSecretParamsFromMasterKey(masterKey []byte) ([GroupSecretParamsLen]byt
 	}
 	keepAlive(masterKey)
 	if err := checkError(C.signal_group_secret_params_derive_from_master_key(
-		cGroupSecretParamsOut(&out),
+		(*C.SignalType_FixedArray289_uint8_t)(unsafe.Pointer(cGroupSecretParamsOut(&out))),
 		cGroupMasterKeyIn(masterKey),
 	)); err != nil {
 		return out, err
@@ -131,7 +132,7 @@ func GroupIdentifierFromMasterKey(masterKey []byte) ([GroupIdentifierLen]byte, e
 		return out, err
 	}
 	if err := checkError(C.signal_group_public_params_get_group_identifier(
-		cGroupIdentifierOut(&out),
+		(*C.SignalType_FixedArray32_uint8_t)(unsafe.Pointer(cGroupIdentifierOut(&out))),
 		cGroupPublicParamsIn(&publicParams),
 	)); err != nil {
 		return out, err
@@ -143,7 +144,7 @@ func GroupIdentifierFromMasterKey(masterKey []byte) ([GroupIdentifierLen]byte, e
 func GroupSecretParamsPublicParams(secretParams [GroupSecretParamsLen]byte) ([GroupPublicParamsLen]byte, error) {
 	var out [GroupPublicParamsLen]byte
 	if err := checkError(C.signal_group_secret_params_get_public_params(
-		cGroupPublicParamsOut(&out),
+		(*C.SignalType_FixedArray97_uint8_t)(unsafe.Pointer(cGroupPublicParamsOut(&out))),
 		cGroupSecretParamsIn(&secretParams),
 	)); err != nil {
 		return out, err
@@ -266,7 +267,7 @@ func Randomness() ([ZKRandomnessLen]byte, error) {
 func GroupSecretParamsEncryptServiceID(secretParams [GroupSecretParamsLen]byte, serviceID ServiceIDFixedWidth) ([UUIDCiphertextLen]byte, error) {
 	var out [UUIDCiphertextLen]byte
 	if err := checkError(C.signal_group_secret_params_encrypt_service_id(
-		cUUIDCiphertextOut(&out),
+		(*C.SignalType_FixedArray65_uint8_t)(unsafe.Pointer(cUUIDCiphertextOut(&out))),
 		cGroupSecretParamsIn(&secretParams),
 		cServiceID(serviceID),
 	)); err != nil {
