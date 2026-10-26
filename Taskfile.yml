@@ -165,7 +165,7 @@ tasks:
     deps: [libsignal]
     cmds:
       - |
-        command -v staticcheck >/dev/null || bash scripts/with-dev-env.sh go install honnef.co/go/tools/cmd/staticcheck@latest
+        command -v staticcheck >/dev/null || bash scripts/with-dev-env.sh go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
         PKGS=$(bash scripts/with-dev-env.sh go list ./... | grep -v 'internal/proto/gen')
         staticcheck $PKGS
 
