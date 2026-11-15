@@ -233,12 +233,13 @@ func TestLookupUsernameHash_404(t *testing.T) {
 }
 
 func TestLookupUsernameLink_Happy(t *testing.T) {
+	const handle = "11111111-2222-3333-4444-555555555555"
 	ciphertext := []byte("stuff")
 	c := newUsernameServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" {
 			t.Fatal("lookup must not send Authorization")
 		}
-		if r.URL.Path != "/v1/accounts/username_link/some-handle" {
+		if r.URL.Path != "/v1/accounts/username_link/"+handle {
 			t.Fatalf("path %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -246,7 +247,7 @@ func TestLookupUsernameLink_Happy(t *testing.T) {
 			UsernameLinkEncryptedValue: base64.RawURLEncoding.EncodeToString(ciphertext),
 		})
 	})
-	got, err := c.LookupUsernameLink(context.Background(), "some-handle")
+	got, err := c.LookupUsernameLink(context.Background(), handle)
 	if err != nil {
 		t.Fatalf("LookupUsernameLink: %v", err)
 	}
@@ -255,9 +256,22 @@ func TestLookupUsernameLink_Happy(t *testing.T) {
 	}
 }
 
-func TestLookupUsernameLink_ValidatesHandle(t *testing.T) {
+func TestLookupUsernameLink_RejectsBadHandle(t *testing.T) {
 	c := New("http://unused", "test")
-	if _, err := c.LookupUsernameLink(context.Background(), ""); err == nil {
-		t.Fatal("expected error on empty handle")
+	cases := []string{
+		"",
+		"not-a-uuid",
+		"../../attack",
+		"11111111-2222-3333-4444-55555555555",   // short
+		"11111111-2222-3333-4444-5555555555555", // long
+		"11111111-2222-3333-4444-55555555555z",  // bad char
+		"11111111-2222-3333-4444-555555555555/extra",
+	}
+	for _, tc := range cases {
+		t.Run(tc, func(t *testing.T) {
+			if _, err := c.LookupUsernameLink(context.Background(), tc); err == nil {
+				t.Fatalf("expected error for handle %q", tc)
+			}
+		})
 	}
 }

@@ -200,6 +200,7 @@ func TestLookupUsername_FetchDecryptRoundTrip(t *testing.T) {
 	// Build a real username link locally, then have the server return
 	// the ciphertext under a given handle. LookupUsername decrypts.
 	const plaintext = "dan.55555"
+	const handle = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	link, err := username.NewLink(plaintext)
 	if err != nil {
 		t.Fatalf("NewLink: %v", err)
@@ -208,7 +209,7 @@ func TestLookupUsername_FetchDecryptRoundTrip(t *testing.T) {
 		if r.Header.Get("Authorization") != "" {
 			t.Fatal("lookup must be unauthenticated")
 		}
-		if r.URL.Path != "/v1/accounts/username_link/some-handle" {
+		if r.URL.Path != "/v1/accounts/username_link/"+handle {
 			t.Fatalf("path %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -216,7 +217,7 @@ func TestLookupUsername_FetchDecryptRoundTrip(t *testing.T) {
 			"usernameLinkEncryptedValue": base64.RawURLEncoding.EncodeToString(link.Ciphertext),
 		})
 	})
-	got, err := cli.LookupUsername(context.Background(), "some-handle", link.Entropy)
+	got, err := cli.LookupUsername(context.Background(), handle, link.Entropy)
 	if err != nil {
 		t.Fatalf("LookupUsername: %v", err)
 	}
@@ -230,7 +231,10 @@ func TestLookupUsername_ValidatesInputs(t *testing.T) {
 	if _, err := cli.LookupUsername(context.Background(), "", make([]byte, 32)); err == nil {
 		t.Fatal("expected empty handle error")
 	}
-	if _, err := cli.LookupUsername(context.Background(), "h", []byte{1, 2, 3}); err == nil {
+	if _, err := cli.LookupUsername(context.Background(), "../../attack", make([]byte, 32)); err == nil {
+		t.Fatal("expected path-injection handle to be rejected")
+	}
+	if _, err := cli.LookupUsername(context.Background(), "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", []byte{1, 2, 3}); err == nil {
 		t.Fatal("expected bad entropy length error")
 	}
 }

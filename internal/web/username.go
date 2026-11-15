@@ -6,7 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 )
+
+// uuidPattern matches the canonical 8-4-4-4-12 hex UUID format. The
+// server echoes this back for username link handles; keeping the check
+// strict prevents a hostile handle from reshaping the URL path.
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // ReserveUsernameHashResult is what the server returns from
 // PUT /v1/accounts/username_hash/reserve: the single 32-byte hash it
@@ -269,10 +275,12 @@ type lookupUsernameLinkResponseBody struct {
 
 // LookupUsernameLink fetches the ciphertext stored under a link handle.
 // Enforced-unauthenticated like LookupUsernameHash. handle is a UUID
-// string as returned by [ConfirmUsernameHash] or [SetUsernameLink].
+// string as returned by [ConfirmUsernameHash] or [SetUsernameLink];
+// it is validated against the canonical UUID format before being
+// spliced into the request path.
 func (c *Client) LookupUsernameLink(ctx context.Context, handle string) (*LookupUsernameLinkResult, error) {
-	if handle == "" {
-		return nil, errors.New("web.LookupUsernameLink: empty handle")
+	if !uuidPattern.MatchString(handle) {
+		return nil, fmt.Errorf("web.LookupUsernameLink: handle %q is not a canonical UUID", handle)
 	}
 	path := "/v1/accounts/username_link/" + handle
 	var out lookupUsernameLinkResponseBody

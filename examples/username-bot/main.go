@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -33,6 +34,8 @@ import (
 	sg "github.com/thehappydinoa/signal-go/pkg/signal"
 	"github.com/thehappydinoa/signal-go/pkg/signal/username"
 )
+
+var handleRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func main() {
 	log.SetFlags(0)
@@ -239,6 +242,9 @@ func parseShareURL(raw string) (handle string, entropy []byte, err error) {
 	parts := strings.SplitN(frag, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", nil, errors.New("fragment must be eu/<handle>/<entropy>")
+	}
+	if !handleRe.MatchString(parts[0]) {
+		return "", nil, fmt.Errorf("handle %q is not a canonical UUID", parts[0])
 	}
 	entropy, err = base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
