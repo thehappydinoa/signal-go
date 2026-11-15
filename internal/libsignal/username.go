@@ -114,11 +114,13 @@ func UsernameProof(username string, randomness [32]byte) ([]byte, error) {
 	defer C.free(unsafe.Pointer(cUser))
 
 	var raw C.SignalOwnedBuffer
-	if err := checkError(C.signal_username_proof(
+	err := checkError(C.signal_username_proof(
 		&raw,
 		(*C.int8_t)(unsafe.Pointer(cUser)),
 		(*[32]C.uint8_t)(unsafe.Pointer(&randomness[0])),
-	)); err != nil {
+	))
+	keepAlive(randomness[:])
+	if err != nil {
 		return nil, err
 	}
 	return goBytesFromOwnedBuffer(raw), nil
@@ -132,7 +134,10 @@ func VerifyUsernameProof(proof []byte, hash [UsernameHashLen]byte) error {
 	}
 	hashBuf := make([]byte, UsernameHashLen)
 	copy(hashBuf, hash[:])
-	return checkError(C.signal_username_verify(borrowed(proof), borrowed(hashBuf)))
+	err := checkError(C.signal_username_verify(borrowed(proof), borrowed(hashBuf)))
+	keepAlive(proof)
+	keepAlive(hashBuf)
+	return err
 }
 
 // UsernameLinkCreate encrypts username with entropy and returns the
@@ -151,11 +156,13 @@ func UsernameLinkCreate(username string, entropy []byte) ([]byte, error) {
 	defer C.free(unsafe.Pointer(cUser))
 
 	var raw C.SignalOwnedBuffer
-	if err := checkError(C.signal_username_link_create(
+	err := checkError(C.signal_username_link_create(
 		&raw,
 		(*C.int8_t)(unsafe.Pointer(cUser)),
 		borrowed(entropy),
-	)); err != nil {
+	))
+	keepAlive(entropy)
+	if err != nil {
 		return nil, err
 	}
 	return goBytesFromOwnedBuffer(raw), nil
@@ -169,11 +176,14 @@ func UsernameLinkDecrypt(entropy, encryptedUsername []byte) (string, error) {
 		return "", errors.New("libsignal.UsernameLinkDecrypt: empty entropy or ciphertext")
 	}
 	var cstr C.SignalCStringPtr
-	if err := checkError(C.signal_username_link_decrypt_username(
+	err := checkError(C.signal_username_link_decrypt_username(
 		&cstr,
 		borrowed(entropy),
 		borrowed(encryptedUsername),
-	)); err != nil {
+	))
+	keepAlive(entropy)
+	keepAlive(encryptedUsername)
+	if err != nil {
 		return "", err
 	}
 	defer C.signal_free_string((*C.int8_t)(unsafe.Pointer(cstr)))
