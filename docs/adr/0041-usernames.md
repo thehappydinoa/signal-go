@@ -1,6 +1,6 @@
 # ADR 0041 — Username management
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-14
 
 ## Context

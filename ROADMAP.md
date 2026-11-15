@@ -345,7 +345,9 @@ v0.1.0 scope boundary:
 
 - We will not implement the Signal protocol cryptography in Go. All crypto goes
   through libsignal.
-- We will not target headless registration (creating a brand-new Signal account
-  by phone number). Only linking as a secondary device.
+- We will not target SMS-verified primary registration (creating a brand-new
+  Signal account by phone number). Linking as a secondary device remains the
+  default path; paid phone-numberless primary registration is supported via
+  `pkg/signal/register.Primary` ([ADR 0042](docs/adr/0042-paid-no-number-registration.md)).
 - We will not ship a REST/HTTP wrapper in this repo (that can live in a separate
   repo on top of `pkg/signal`).

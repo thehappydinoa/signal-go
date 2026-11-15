@@ -46,5 +46,5 @@ with a new ADR that links back to the one it replaces.
 | 0036 | Linked-device name cipher (Android-compatible)   | Accepted |
 | 0037 | Pre-built libsignal_ffi.a artifacts            | Accepted |
 | 0038 | Groups v2 create and attribute changes           | Accepted |
-| 0041 | Username management                               | Proposed |
-| 0042 | Paid phone-numberless primary registration       | Proposed |
+| 0041 | Username management                               | Accepted |
+| 0042 | Paid phone-numberless primary registration       | Accepted |

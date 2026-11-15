@@ -1,6 +1,6 @@
 # ADR 0042 — Paid phone-numberless primary registration
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-14
 
 ## Context
