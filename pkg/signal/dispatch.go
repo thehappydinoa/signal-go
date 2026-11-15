@@ -108,6 +108,11 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 	if pk := dm.GetProfileKey(); len(pk) == libsignal.ProfileKeyLen {
 		c.storeRecipientProfileKey(sender, pk)
 	}
+	if c.acct != nil && groupID == "" && sender != c.acct.ACI {
+		c.maybeWriteStorageContact(sender)
+	} else if gv2 := dm.GetGroupV2(); gv2 != nil && len(gv2.GetMasterKey()) > 0 {
+		c.maybeWriteStorageGroup(gv2.GetMasterKey())
+	}
 	c.emit(ev)
 	if c.autoMarkRead && sender != "" {
 		evTS := ts

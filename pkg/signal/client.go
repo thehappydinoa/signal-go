@@ -115,6 +115,12 @@ type OpenOptions struct {
 	// When nil, profile keys are in-memory only.
 	ProfileKeyStore store.ProfileKeyStore
 
+	// DisableSyncStorageWrites turns off publishing bot conversations to the
+	// storage service so the primary device chat list stays in sync. When
+	// false (default), successful DM sends and group membership changes
+	// upsert CONTACT / GROUPV2 records via PUT /v1/storage/.
+	DisableSyncStorageWrites bool
+
 	// DialFunc overrides websocket dial for testing.
 	DialFunc chat.DialFunc
 }
@@ -188,19 +194,28 @@ type Client struct {
 	groupRevision        map[string]uint32 // hex master key → revision
 	autoSyncGroupUpdates bool
 
-	accountStore    account.Store
-	autoSyncStorage bool
-	autoMarkRead    bool
+	accountStore             account.Store
+	autoSyncStorage          bool
+	disableSyncStorageWrites bool
+	autoMarkRead             bool
 
 	// expireTimerMu guards expireTimers.
 	expireTimerMu sync.Mutex
 	expireTimers  map[string]uint32 // ACI for 1:1 chats, group ID hex for groups → seconds
 
-	// storageMu guards manifest version and cached contact/group lists.
+	// storageMu guards manifest version, cached contact/group lists,
+	// in-flight write dedup, and cached storage credentials.
 	storageMu              sync.RWMutex
 	storageManifestVersion uint64
 	storedContacts         []StoredContact
 	storedGroups           []StoredGroup
+	// storageWriteInFlight tracks background write goroutines to avoid
+	// spawning duplicates for the same contact/group key. Keys are prefixed:
+	// "c:"+aci for contacts, "g:"+hexMasterKey for groups.
+	storageWriteInFlight map[string]struct{}
+	// storageCredsCache holds the last-fetched storage-service credentials
+	// so write goroutines can skip the per-write auth round trip.
+	storageCredsCache web.Credentials
 
 	// cdsiMu guards lazy CDSI tokio runtime + connection manager.
 	cdsiMu      sync.Mutex
@@ -261,20 +276,22 @@ func Open(ctx context.Context, opts OpenOptions) (*Client, error) {
 	}
 
 	c := &Client{
-		acct:                 acct,
-		events:               events,
-		log:                  log,
-		dec:                  dec,
-		webc:                 webc,
-		storageWebc:          storageWebc,
-		stores:               opts.SignalStores,
-		groupDistStore:       opts.GroupDistributionStore,
-		groupEndorseStore:    opts.GroupEndorsementStore,
-		autoSyncGroupUpdates: opts.AutoSyncGroupUpdates,
-		accountStore:         opts.AccountStore,
-		autoSyncStorage:      opts.AutoSyncStorage,
-		autoMarkRead:         opts.AutoMarkRead,
-		profileKeyStore:      opts.ProfileKeyStore,
+		acct:                     acct,
+		events:                   events,
+		log:                      log,
+		dec:                      dec,
+		webc:                     webc,
+		storageWebc:              storageWebc,
+		stores:                   opts.SignalStores,
+		groupDistStore:           opts.GroupDistributionStore,
+		groupEndorseStore:        opts.GroupEndorsementStore,
+		autoSyncGroupUpdates:     opts.AutoSyncGroupUpdates,
+		accountStore:             opts.AccountStore,
+		autoSyncStorage:          opts.AutoSyncStorage,
+		autoMarkRead:             opts.AutoMarkRead,
+		disableSyncStorageWrites: opts.DisableSyncStorageWrites,
+		profileKeyStore:          opts.ProfileKeyStore,
+		storageWriteInFlight:     make(map[string]struct{}),
 	}
 
 	conn, err := chat.Connect(ctx, chat.Options{

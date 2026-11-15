@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -139,4 +140,66 @@ func (c *Client) ReadStorageRecords(
 		return nil, fmt.Errorf("web.ReadStorageRecords: unmarshal: %w", err)
 	}
 	return &items, nil
+}
+
+// WriteStorageRecords issues PUT /v1/storage/ with a WriteOperation protobuf
+// body and returns the updated manifest.
+func (c *Client) WriteStorageRecords(
+	ctx context.Context,
+	storageCreds Credentials,
+	op *storagepb.WriteOperation,
+) (*storagepb.StorageManifest, error) {
+	if storageCreds.Username == "" || storageCreds.Password == "" {
+		return nil, errors.New("web.WriteStorageRecords: credentials required")
+	}
+	if op == nil {
+		return nil, errors.New("web.WriteStorageRecords: nil operation")
+	}
+	raw, err := proto.Marshal(op)
+	if err != nil {
+		return nil, fmt.Errorf("web.WriteStorageRecords: marshal: %w", err)
+	}
+	full, err := c.buildURL("/v1/storage/", nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPut, full, bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("web.WriteStorageRecords: build request: %w", err)
+	}
+	httpReq.Header.Set("User-Agent", c.UserAgent)
+	httpReq.Header.Set("X-Signal-Agent", c.UserAgent)
+	httpReq.Header.Set("Authorization", storageCreds.Header())
+	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	httpReq.Header.Set("Accept", "application/x-protobuf")
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("web.WriteStorageRecords: do: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fmt.Errorf("web.WriteStorageRecords: read body: %w", err)
+	}
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		if len(body) == 0 {
+			return nil, nil
+		}
+		var manifest storagepb.StorageManifest
+		if err := proto.Unmarshal(body, &manifest); err != nil {
+			return nil, fmt.Errorf("web.WriteStorageRecords: unmarshal: %w", err)
+		}
+		return &manifest, nil
+	case http.StatusConflict:
+		var manifest storagepb.StorageManifest
+		if err := proto.Unmarshal(body, &manifest); err != nil {
+			return nil, &Error{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+		}
+		return &manifest, &Error{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+	default:
+		return nil, &Error{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+	}
 }

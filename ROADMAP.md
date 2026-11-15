@@ -176,6 +176,8 @@ See [ADR 0008](./docs/adr/0008-bot-framework.md) for the API sketch.
       ([ADR 0026](docs/adr/0026-attachment-cipher.md))
 - [x] Storage Service sync (contacts, group list)
       ([ADR 0027](docs/adr/0027-storage-service-sync.md))
+- [x] Storage Service chat list writes (CONTACT / GROUPV2 upserts to primary)
+      ([ADR 0040](docs/adr/0040-storage-chat-list-writes.md))
 - [x] CDSI contact discovery ([ADR 0028](docs/adr/0028-cdsi-contact-discovery.md))
 - [x] SQLite-backed store ([ADR 0029](docs/adr/0029-sqlite-backed-store.md))
 - [x] Backup/restore (linked-device "synchronized start") — receive, validate, and import v1 ([ADR 0030](docs/adr/0030-linked-device-transfer-archive.md), [ADR 0031](docs/adr/0031-transfer-archive-frame-import.md)); optional `OnChatItem` stream for `ChatItem` protobuf frames; durable in-app message history still deferred

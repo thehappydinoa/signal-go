@@ -116,6 +116,7 @@ func (c *Client) CreateGroup(ctx context.Context, opts CreateGroupOptions) (*Cre
 	if err := c.sendGroupChangeNotification(ctx, masterKey, grp, nil); err != nil {
 		c.log.Warn("group create notification failed", "err", err)
 	}
+	c.maybeWriteStorageGroup(masterKey)
 
 	return &CreateGroupResult{
 		Group:     grp,

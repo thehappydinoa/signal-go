@@ -115,10 +115,20 @@ func (c *Client) JoinGroupViaInviteLink(ctx context.Context, inviteURL string) (
 		if errors.As(err, &werr) && werr.StatusCode == 400 {
 			msg := strings.ToLower(string(werr.Body))
 			if strings.Contains(msg, "adding member already in group") {
-				return c.FetchGroup(ctx, parsed.MasterKey)
+				grp, fetchErr := c.FetchGroup(ctx, parsed.MasterKey)
+				if fetchErr != nil {
+					return nil, fetchErr
+				}
+				c.maybeWriteStorageGroup(parsed.MasterKey)
+				return grp, nil
 			}
 		}
 		return nil, err
 	}
-	return c.FetchGroup(ctx, parsed.MasterKey)
+	grp, err := c.FetchGroup(ctx, parsed.MasterKey)
+	if err != nil {
+		return nil, err
+	}
+	c.maybeWriteStorageGroup(parsed.MasterKey)
+	return grp, nil
 }

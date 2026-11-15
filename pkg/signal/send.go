@@ -193,11 +193,19 @@ func (c *Client) sendContent(
 
 	if len(uak) > 0 && allowSealed {
 		if cert, certErr := c.cachedSenderCert(ctx, creds); certErr == nil {
-			return c.deliverSealed(ctx, creds, recipientACI, addrs, padded, ts, opts, cert, uak)
+			receipt, err := c.deliverSealed(ctx, creds, recipientACI, addrs, padded, ts, opts, cert, uak)
+			if err == nil {
+				c.maybeWriteStorageContact(recipientACI)
+			}
+			return receipt, err
 		}
 		c.log.Debug("sender cert unavailable; falling back to basic auth", "recipient", recipientACI)
 	}
-	return c.deliverBasicAuth(ctx, creds, recipientACI, addrs, padded, ts, opts)
+	receipt, err := c.deliverBasicAuth(ctx, creds, recipientACI, addrs, padded, ts, opts)
+	if err == nil {
+		c.maybeWriteStorageContact(recipientACI)
+	}
+	return receipt, err
 }
 
 // deliverBasicAuth sends using HTTP Basic auth. The server sees the sender's ACI.

@@ -50,11 +50,15 @@ func (c *Client) SendGroup(ctx context.Context, masterKey []byte, text string) (
 		return Receipt{}, err
 	}
 
-	return c.deliverGroupPayload(ctx, masterKey, grp, contentBytes, ts, groupDeliveryOpts{
+	receipt, err := c.deliverGroupPayload(ctx, masterKey, grp, contentBytes, ts, groupDeliveryOpts{
 		online:         false,
 		urgent:         true,
 		distributeSKDM: true,
 	})
+	if err == nil {
+		c.maybeWriteStorageGroup(masterKey)
+	}
+	return receipt, err
 }
 
 type groupDeliveryOpts struct {

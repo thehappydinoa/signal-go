@@ -102,7 +102,7 @@ tasks:
       TEMP: ./.build/tmp
     cmds:
       - mkdir -p .build/tmp
-      - bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement)$' ./...
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -count=1 -tags=e2e -timeout=10m -run 'TestE2E_(Open|Send|Recv|GroupManagement|StorageWrite)$' ./...
 
   test:e2e:link:
     desc: Interactive e2e device link (requires empty SIGNAL_E2E_STORE_DIR; sets SIGNAL_E2E_LINK=1)

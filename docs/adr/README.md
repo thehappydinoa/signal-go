@@ -47,5 +47,6 @@ with a new ADR that links back to the one it replaces.
 | 0037 | Pre-built libsignal_ffi.a artifacts            | Accepted |
 | 0038 | Groups v2 create and attribute changes           | Accepted |
 | 0039 | Persist recipient profile keys                   | Accepted |
+| 0040 | Storage service chat list writes                 | Accepted |
 | 0041 | Username management                               | Accepted |
 | 0042 | Paid phone-numberless primary registration       | Accepted |

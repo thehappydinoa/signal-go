@@ -138,6 +138,13 @@ is *what* changed and *when*.
   ([ADR 0039](./docs/adr/0039-persist-profile-keys.md)).
 - `OpenOptions.ProfileKeyStore` — wire `db.ProfileKeyStore()` alongside other
   sqlstore helpers; `OpenFromStore` enables this automatically.
+- Storage service **write** path (`PUT /v1/storage/`) — bot DM sends and group
+  membership changes upsert CONTACT / GROUPV2 records so the primary device chat
+  list stays in sync ([ADR 0040](./docs/adr/0040-storage-chat-list-writes.md)).
+  Opt out with `OpenOptions.DisableSyncStorageWrites`.
+- Fix storage chat-list writes treating an empty `PUT /v1/storage/` ack as a
+  manifest decrypt failure (peer saw new groups via Gv2 membership; bot primary
+  chat list did not update).
 
 ## [0.3.0] - 2026-05-28
 

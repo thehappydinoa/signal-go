@@ -387,6 +387,58 @@ func TestE2E_GroupCreateAndChat(t *testing.T) {
 	}
 }
 
+// TestE2E_StorageWrite verifies the storage chat-list write path (PUT
+// /v1/storage/) succeeds against the real server. The Signal server responds
+// with 200+empty body or 204 — the fix under test ensures we don't try to
+// decrypt that empty body as a StorageManifest proto.
+func TestE2E_StorageWrite(t *testing.T) {
+	e2eEnabled(t)
+	peerACI := requireEnv(t, "SIGNAL_E2E_PEER_ACI")
+	db := openE2EDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx, cancel := e2eContext(t)
+	defer cancel()
+
+	client, err := signal.Open(ctx, e2eOpenOptions(db))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer client.Close()
+
+	syncResult, err := client.SyncStorage(ctx)
+	if err != nil {
+		if errors.Is(err, signal.ErrStorageNotConfigured) {
+			t.Skip("linked account has no AccountEntropyPool — storage not configured")
+		}
+		t.Fatalf("SyncStorage (initial): %v", err)
+	}
+	vBefore := client.StorageManifestVersion()
+	t.Logf("initial manifest version %d (contacts=%d groups=%d)", vBefore, len(syncResult.Contacts), len(syncResult.Groups))
+
+	// Send fires maybeWriteStorageContact in the background, which
+	// exercises the PUT /v1/storage/ path that had the empty-body bug.
+	_, err = client.Send(ctx, peerACI, fmt.Sprintf("signal-go e2e storage write %d", time.Now().UnixNano()))
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	t.Log("sent trigger message; polling for manifest version advance...")
+
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		if _, pollErr := client.SyncStorage(ctx); pollErr != nil {
+			t.Logf("SyncStorage poll: %v", pollErr)
+			continue
+		}
+		if v := client.StorageManifestVersion(); v > vBefore {
+			t.Logf("storage write confirmed: manifest version %d → %d", vBefore, v)
+			return
+		}
+	}
+	t.Fatalf("manifest version did not advance beyond %d within 30s", vBefore)
+}
+
 func TestE2E_Link(t *testing.T) {
 	e2eLinkEnabled(t)
 	dir := requireEnv(t, "SIGNAL_E2E_STORE_DIR")

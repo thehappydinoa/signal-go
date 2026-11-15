@@ -271,6 +271,30 @@ pending invites.
 See [Getting started — Groups v2](./getting-started.md#groups-v2-membership) and
 [ADR 0038](../adr/0038-groups-v2-create.md).
 
+### Phone chat list sync
+
+When the linked account has `AccountEntropyPool` (set at link time), signal-go
+**automatically writes** CONTACT and GROUPV2 records to Signal's storage service
+after DMs and group operations so conversations show up on the primary phone's
+chat list — not only on the bot process.
+
+This runs in the background after:
+
+- Outbound or inbound 1:1 messages
+- `CreateGroup`, `AddMember`, `JoinGroupViaInviteLink`, and `SendGroup`
+
+No extra bot code is required. Opt out with
+`signal.OpenOptions{DisableSyncStorageWrites: true}` if you manage storage
+yourself.
+
+If chats still do not appear on the phone, confirm storage pull works
+(`SyncStorage`) and check logs for `storage contact write skipped` /
+`storage group write skipped` (usually missing `AccountEntropyPool` or no remote
+manifest yet).
+
+See [Getting started — Storage Service sync](./getting-started.md#storage-service-sync-contacts--group-list)
+and [ADR 0040](../adr/0040-storage-chat-list-writes.md).
+
 ### Group commands in the bot layer
 
 ```go

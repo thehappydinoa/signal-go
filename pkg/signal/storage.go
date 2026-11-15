@@ -103,13 +103,23 @@ func (c *Client) SyncStorage(ctx context.Context) (*StorageSyncResult, error) {
 		result.Groups = append(result.Groups, storedGroupFromInternal(group))
 	}
 
+	// FetchManifest always issues a fresh auth call, so storageCreds is
+	// populated regardless of whether the manifest changed. Cache them for
+	// the write path so background write goroutines skip the auth round trip.
+	fetcher.credsMu.Lock()
+	freshCreds := fetcher.storageCreds
+	fetcher.credsMu.Unlock()
+
+	c.storageMu.Lock()
+	if freshCreds.Username != "" {
+		c.storageCredsCache = freshCreds
+	}
 	if !pulled.Unchanged {
-		c.storageMu.Lock()
 		c.storageManifestVersion = pulled.Version
 		c.storedContacts = append([]StoredContact(nil), result.Contacts...)
 		c.storedGroups = append([]StoredGroup(nil), result.Groups...)
-		c.storageMu.Unlock()
 	}
+	c.storageMu.Unlock()
 	return result, nil
 }
 
