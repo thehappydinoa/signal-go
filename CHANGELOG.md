@@ -19,9 +19,23 @@ is *what* changed and *when*.
   `signal_username_candidates_from`, `signal_username_hash`,
   `signal_username_hash_from_parts`, `signal_username_proof`,
   `signal_username_verify`, `signal_username_link_create`, and
-  `signal_username_link_decrypt_username`. Server-facing operations
-  (reserve / confirm / set-link / lookup / delete) still land on
-  `signal.Client` in a follow-up.
+  `signal_username_link_decrypt_username`.
+- `signal.Client` username server ops: `ReserveUsername`, `ConfirmUsername`,
+  `DeleteUsername`, `RotateUsernameLink`, `DeleteUsernameLink`,
+  `LookupUsernameHash`, `LookupUsername`. Reserve/confirm run as a pair
+  within the server's ~5-minute reservation window; confirm generates
+  the proof + link locally, uploads them, and returns a
+  `PublishedUsernameLink` with a `ShareURL()` for signal.me links.
+  Lookup methods use unauthenticated requests per server policy.
+  REST endpoints under `/v1/accounts/username_hash/*` and
+  `/v1/accounts/username_link/*`; Signal's own clients have migrated to
+  gRPC via libsignal's chat connection, but the REST surface is still
+  supported server-side and avoids pulling in libsignal's async-promise
+  scaffolding.
+- `examples/username-bot` — reserve/lookup/delete CLI against an
+  already-linked store. Demonstrates the full share-URL round trip
+  (reserve + confirm + print signal.me URL + parse URL + decrypt
+  + resolve to ACI).
 
 ### Changed
 

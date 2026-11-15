@@ -38,9 +38,17 @@ parallel). This ADR covers only the username surface.
 
 ## Decision
 
-Add a new public package `pkg/signal/username` and a small
-`internal/username` cgo wrapper layer around the libsignal calls listed
-above. The public shape:
+Add a new public package `pkg/signal/username` and extend
+`*signal.Client` with the server-facing methods. Local helpers wrap the
+sync libsignal FFI listed above; server operations go through
+`internal/web` against the Signal-Server REST endpoints
+(`/v1/accounts/username_hash/*`, `/v1/accounts/username_link/*`) rather
+than libsignal's async `AuthenticatedChatConnection` abstraction. Signal
+clients have since migrated to gRPC via that abstraction, but the REST
+surface is still live server-side and avoids pulling the async-promise +
+tokio scaffolding into signal-go for one feature.
+
+The public shape:
 
 ```go
 package username
@@ -51,24 +59,35 @@ type Candidate struct { Nickname string; Discriminator uint64 }
 func Candidates(nickname string, minLen, maxLen int) ([]Candidate, error)
 func Verify(candidate Candidate, proof []byte) error
 
-// Bound to a Client (uses its authenticated chat connection).
-func (c *signal.Client) ReserveUsername(ctx, []Candidate) (reserved Candidate, token []byte, err error)
-func (c *signal.Client) ConfirmUsername(ctx, token []byte) error
+// Bound to a *signal.Client. Uses its authenticated web client.
+func (c *signal.Client) ReserveUsername(ctx, []username.Candidate) (username.Candidate, error)
+func (c *signal.Client) ConfirmUsername(ctx, reserved username.Candidate) (*signal.PublishedUsernameLink, error)
 func (c *signal.Client) DeleteUsername(ctx) error
-func (c *signal.Client) SetUsernameLink(ctx) (handle uuid.UUID, link []byte, err error)
+func (c *signal.Client) RotateUsernameLink(ctx, current username.Candidate, keepHandle bool) (*signal.PublishedUsernameLink, error)
 func (c *signal.Client) DeleteUsernameLink(ctx) error
 
-// Discovery — uses an unauthenticated chat connection.
-func (c *signal.Client) LookupUsernameHash(ctx, hash []byte) (aci string, err error)
-func (c *signal.Client) LookupUsernameLink(ctx, handle uuid.UUID) (encryptedUsername []byte, err error)
-func DecryptUsernameLink(link, encryptedUsername []byte) (string, error)
+// Discovery — unauthenticated requests on the web client.
+func (c *signal.Client) LookupUsernameHash(ctx, hash [signal.HashLen]byte) (aci string, err error)
+func (c *signal.Client) LookupUsername(ctx, handle string, entropy []byte) (username.Candidate, error)
+
+type signal.PublishedUsernameLink struct { Handle string; Entropy []byte }
+func (p signal.PublishedUsernameLink) ShareURL() string // https://signal.me/#eu/...
 ```
 
-Reserve/confirm follows libsignal's two-step dance — the caller picks
-one of the candidates returned by `Candidates` (local, deterministic),
-asks the server to reserve its hash, confirms with the server-returned
-token, and only then is the username live on the account. This matches
-Signal Desktop and Android.
+Reserve/confirm follows libsignal's two-step dance — the caller hashes
+each candidate locally (`Candidate.Hash`), submits hashes in priority
+order, the server returns the one it will hold for ~5 minutes, and
+the caller finalizes it by generating a zero-knowledge proof + a fresh
+link ciphertext and PUTing them in one `confirm` round trip. Matches
+Signal-Desktop and Signal-Android behavior.
+
+Server-facing methods on `*signal.Client` use `internal/web` directly
+rather than wrapping libsignal's `signal_authenticated_chat_connection_*`
+promise FFI; keeps the signal-go architecture (direct REST over the
+authenticated websocket) consistent and avoids importing async-promise
+scaffolding for one feature. The REST surface is a stable published
+interface on Signal-Server even though upstream clients have migrated
+to the gRPC path.
 
 Rejected alternatives:
 
