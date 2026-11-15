@@ -12,6 +12,20 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump libsignal to v0.108.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.108.0)).
+  Upstream regenerated `signal_ffi.h` with a new format in v0.98: every
+  `SignalXXX_LEN` macro was removed, anonymous `uint8_t[N]` array params
+  became named `SignalType_FixedArrayN_uint8_t` typedefs, `const char *`
+  parameters became `const int8_t *`, and `SignalFfiIdentityKeyStoreStruct`
+  grew a required `record_received_identity_key` field — a missing wiring
+  for the last one SIGSEGV'd `signal_process_prekey_bundle`. The wrapper
+  layer was updated accordingly: length constants are now Go-side literals,
+  FFI call sites cast through `unsafe.Pointer` where cgo DWARF unwrapping
+  diverges, every cgo file that uses `C.CString`/`C.free` now includes
+  `<stdlib.h>` in its own preamble, and a no-op
+  `signalgo_record_received_identity_key` export satisfies the new store
+  hook (trust/persistence still flow through `save_identity_key` +
+  `is_trusted_identity`).
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.

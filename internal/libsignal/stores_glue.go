@@ -16,6 +16,7 @@ extern int  signalgo_get_local_registration_id(void*, uint32_t*);
 extern int  signalgo_get_identity_key(void*, SignalMutPointerPublicKey*, SignalMutPointerProtocolAddress);
 extern int  signalgo_save_identity_key(void*, uint8_t*, SignalMutPointerProtocolAddress, SignalMutPointerPublicKey);
 extern int  signalgo_is_trusted_identity(void*, bool*, SignalMutPointerProtocolAddress, SignalMutPointerPublicKey, uint32_t);
+extern int  signalgo_record_received_identity_key(void*, SignalMutPointerProtocolAddress, SignalMutPointerPublicKey);
 
 extern int  signalgo_load_pre_key(void*, SignalMutPointerPreKeyRecord*, uint32_t);
 extern int  signalgo_store_pre_key(void*, uint32_t, SignalMutPointerPreKeyRecord);
@@ -52,6 +53,7 @@ static inline SignalIdentityKeyStore signalgo_identity_key_store(void) {
     s.get_identity_key            = signalgo_get_identity_key;
     s.save_identity_key           = signalgo_save_identity_key;
     s.is_trusted_identity         = signalgo_is_trusted_identity;
+    s.record_received_identity_key = signalgo_record_received_identity_key;
     s.destroy                     = signalgo_destroy_store_handle;
     return s;
 }
