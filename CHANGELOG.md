@@ -10,6 +10,19 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
+### Added
+
+- `pkg/signal/username` — local-only helpers for Signal's username
+  feature: candidate generation from a nickname, server-hash derivation,
+  zero-knowledge proof of ownership, username-link encrypt / rotate /
+  decrypt ([ADR 0041](./docs/adr/0041-usernames.md)). Wraps libsignal
+  `signal_username_candidates_from`, `signal_username_hash`,
+  `signal_username_hash_from_parts`, `signal_username_proof`,
+  `signal_username_verify`, `signal_username_link_create`, and
+  `signal_username_link_decrypt_username`. Server-facing operations
+  (reserve / confirm / set-link / lookup / delete) still land on
+  `signal.Client` in a follow-up.
+
 ### Changed
 
 - Bump libsignal to v0.108.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.108.0)).
