@@ -187,7 +187,5 @@ func TestUsernameLinkDecryptRejectsGarbage(t *testing.T) {
 		t.Fatal("expected decrypt failure on garbage")
 	}
 	var e *Error
-	if !errors.As(err, &e) {
-		// not fatal — just confirms we're surfacing typed errors
-	}
+	_ = errors.As(err, &e) // not fatal — just confirms we're surfacing typed errors
 }

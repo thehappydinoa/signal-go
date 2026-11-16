@@ -5,15 +5,15 @@
 // It assumes the store is already linked (use echo-bot's `link`
 // subcommand against the same -store directory first), then exercises:
 //
-//   username-bot reserve -store .signal-bot -nickname alice
-//       pick a candidate the server will hold, confirm it, publish a
-//       link, and print the signal.me share URL.
+//	username-bot reserve -store .signal-bot -nickname alice
+//	    pick a candidate the server will hold, confirm it, publish a
+//	    link, and print the signal.me share URL.
 //
-//   username-bot lookup -store .signal-bot -url https://signal.me/#eu/...
-//       parse a share URL, fetch the ciphertext, decrypt, resolve to ACI.
+//	username-bot lookup -store .signal-bot -url https://signal.me/#eu/...
+//	    parse a share URL, fetch the ciphertext, decrypt, resolve to ACI.
 //
-//   username-bot delete -store .signal-bot
-//       clear the username and any link.
+//	username-bot delete -store .signal-bot
+//	    clear the username and any link.
 package main
 
 import (
