@@ -86,11 +86,10 @@ func openClient(ctx context.Context, storeDir, passphraseFile *string, plaintext
 		return nil, nil, fmt.Errorf("open store: %w", err)
 	}
 	sgClient, err := sg.Open(ctx, sg.OpenOptions{
-		AccountStore:    db,
-		SignalStores:    db.SignalStores(),
-		ProfileKeyStore: db.ProfileKeyStore(),
-		ClientProfile:   client.Profile,
-		UserAgent:       client.UserAgent,
+		AccountStore:  db,
+		SignalStores:  db.SignalStores(),
+		ClientProfile: client.Profile,
+		UserAgent:     client.UserAgent,
 	})
 	if err != nil {
 		_ = db.Close()
