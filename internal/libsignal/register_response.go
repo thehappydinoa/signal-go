@@ -152,17 +152,13 @@ func (r *RegisterAccountResponse) EntitlementBadges() ([]RegisterResponseBadge, 
 	if err := checkError(C.signal_register_account_response_get_entitlement_badges(&out, r.cPtr())); err != nil {
 		return nil, err
 	}
-	badgeSize := C.size_t(unsafe.Sizeof(C.SignalFfiRegisterResponseBadge{}))
+	// Use the dedicated deallocator so the outer typed buffer and each
+	// inner id CString are freed with the matching Rust allocator layout
+	// instead of signal_free_buffer with hand-computed byte sizes.
+	defer C.signal_free_list_of_register_response_badges(out)
 	if out.base == nil || out.length == 0 {
-		if out.base != nil {
-			C.signal_free_buffer((*C.uchar)(unsafe.Pointer(out.base)), out.length*badgeSize)
-		}
 		return nil, nil
 	}
-	defer C.signal_free_buffer(
-		(*C.uchar)(unsafe.Pointer(out.base)),
-		out.length*badgeSize,
-	)
 	badges := unsafe.Slice(out.base, int(out.length))
 	res := make([]RegisterResponseBadge, len(badges))
 	for i := range badges {

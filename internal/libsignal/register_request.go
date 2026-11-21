@@ -8,6 +8,7 @@ import "C"
 
 import (
 	"errors"
+	"runtime"
 	"unsafe"
 )
 
@@ -89,9 +90,11 @@ func (r *RegisterAccountRequest) SetIdentityPublicKey(id IdentityType, key *Publ
 	if key == nil {
 		return errors.New("libsignal.RegisterAccountRequest.SetIdentityPublicKey: nil public key")
 	}
-	return checkError(C.signal_register_account_request_set_identity_public_key(
+	err := checkError(C.signal_register_account_request_set_identity_public_key(
 		r.cPtr(), C.uint8_t(id), key.constPtr(),
 	))
+	runtime.KeepAlive(key)
+	return err
 }
 
 // SetIdentitySignedPreKey sets the EC signed pre-key for the given identity.
@@ -111,6 +114,7 @@ func (r *RegisterAccountRequest) SetIdentitySignedPreKey(id IdentityType, pk Sig
 	err := checkError(C.signal_register_account_request_set_identity_signed_pre_key(
 		r.cPtr(), C.uint8_t(id), cPk,
 	))
+	runtime.KeepAlive(pk.PublicKey)
 	keepAlive(pk.Signature)
 	return err
 }
@@ -133,6 +137,7 @@ func (r *RegisterAccountRequest) SetIdentityPQLastResortPreKey(id IdentityType, 
 	err := checkError(C.signal_register_account_request_set_identity_pq_last_resort_pre_key(
 		r.cPtr(), C.uint8_t(id), cPk,
 	))
+	runtime.KeepAlive(pk.PublicKey)
 	keepAlive(pk.Signature)
 	return err
 }
