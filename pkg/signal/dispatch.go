@@ -52,38 +52,11 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 		groupID = hex.EncodeToString(dm.GetGroupV2().GetMasterKey())
 	}
 
-	if r := dm.GetReaction(); r != nil {
-		c.emit(&ReactionEvent{
-			Sender:          sender,
-			SenderDevice:    senderDevice,
-			Timestamp:       ts,
-			ServerTimestamp: srvTS,
-			Emoji:           r.GetEmoji(),
-			Remove:          r.GetRemove(),
-			TargetAuthorACI: r.GetTargetAuthorAci(),
-			TargetTimestamp: msToTime(r.GetTargetSentTimestamp()),
-			GroupID:         groupID,
-		})
+	if c.emitReaction(sender, senderDevice, ts, srvTS, groupID, dm.GetReaction()) {
 		return
 	}
-
-	if gv2 := dm.GetGroupV2(); gv2 != nil && len(gv2.GetGroupChange()) > 0 {
-		rev := gv2.GetRevision()
-		c.emit(&GroupUpdateEvent{
-			Sender:          sender,
-			SenderDevice:    senderDevice,
-			Timestamp:       ts,
-			ServerTimestamp: srvTS,
-			GroupID:         groupID,
-			Revision:        rev,
-			GroupChange:     append([]byte(nil), gv2.GetGroupChange()...),
-		})
-		if len(gv2.GetMasterKey()) > 0 {
-			c.maybeAutoSyncGroupUpdate(gv2.GetMasterKey(), rev)
-		}
-		if dm.GetBody() == "" {
-			return
-		}
+	if c.emitGroupUpdate(sender, senderDevice, ts, srvTS, groupID, dm) && dm.GetBody() == "" {
+		return
 	}
 
 	ev := &MessageEvent{
@@ -108,6 +81,11 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 	if pk := dm.GetProfileKey(); len(pk) == libsignal.ProfileKeyLen {
 		c.storeRecipientProfileKey(sender, pk)
 	}
+	if c.acct != nil && groupID == "" && sender != c.acct.ACI {
+		c.maybeWriteStorageContact(sender)
+	} else if gv2 := dm.GetGroupV2(); gv2 != nil && len(gv2.GetMasterKey()) > 0 {
+		c.maybeWriteStorageGroup(gv2.GetMasterKey())
+	}
 	c.emit(ev)
 	if c.autoMarkRead && sender != "" {
 		evTS := ts
@@ -117,6 +95,49 @@ func (c *Client) handleDataMessage(sender string, senderDevice uint32, envTS, sr
 			}
 		}()
 	}
+}
+
+// emitReaction emits a ReactionEvent for a reaction-only DataMessage.
+// Returns true when the message was a reaction (caller should return).
+func (c *Client) emitReaction(sender string, senderDevice uint32, ts, srvTS time.Time, groupID string, r *sspb.DataMessage_Reaction) bool {
+	if r == nil {
+		return false
+	}
+	c.emit(&ReactionEvent{
+		Sender:          sender,
+		SenderDevice:    senderDevice,
+		Timestamp:       ts,
+		ServerTimestamp: srvTS,
+		Emoji:           r.GetEmoji(),
+		Remove:          r.GetRemove(),
+		TargetAuthorACI: r.GetTargetAuthorAci(),
+		TargetTimestamp: msToTime(r.GetTargetSentTimestamp()),
+		GroupID:         groupID,
+	})
+	return true
+}
+
+// emitGroupUpdate emits a GroupUpdateEvent when the DataMessage carries a
+// non-empty GroupV2 change. Returns true when a group update was emitted.
+func (c *Client) emitGroupUpdate(sender string, senderDevice uint32, ts, srvTS time.Time, groupID string, dm *sspb.DataMessage) bool {
+	gv2 := dm.GetGroupV2()
+	if gv2 == nil || len(gv2.GetGroupChange()) == 0 {
+		return false
+	}
+	rev := gv2.GetRevision()
+	c.emit(&GroupUpdateEvent{
+		Sender:          sender,
+		SenderDevice:    senderDevice,
+		Timestamp:       ts,
+		ServerTimestamp: srvTS,
+		GroupID:         groupID,
+		Revision:        rev,
+		GroupChange:     append([]byte(nil), gv2.GetGroupChange()...),
+	})
+	if len(gv2.GetMasterKey()) > 0 {
+		c.maybeAutoSyncGroupUpdate(gv2.GetMasterKey(), rev)
+	}
+	return true
 }
 
 func (c *Client) handleEditMessage(sender string, senderDevice uint32, envTS, srvTS time.Time, em *sspb.EditMessage) {

@@ -173,6 +173,7 @@ func (c *Client) AddMember(ctx context.Context, masterKey []byte, memberACI stri
 	if err := c.sendGroupChangeNotification(ctx, masterKey, updated, changeBytes); err != nil {
 		c.log.Warn("group change notification failed", "err", err)
 	}
+	c.maybeWriteStorageGroup(masterKey)
 	return updated, nil
 }
 

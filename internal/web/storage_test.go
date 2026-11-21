@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -115,5 +116,50 @@ func TestReadStorageRecords(t *testing.T) {
 	}
 	if len(got.GetItems()) != 1 {
 		t.Fatalf("items = %+v", got)
+	}
+}
+
+func TestWriteStorageRecordsEmptySuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/v1/storage/" {
+			t.Fatalf("method=%q path=%q", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test")
+	got, err := c.WriteStorageRecords(context.Background(), Credentials{Username: "u", Password: "p"}, &storagepb.WriteOperation{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("manifest = %+v, want nil", got)
+	}
+}
+
+func TestWriteStorageRecordsConflictReturnsManifest(t *testing.T) {
+	manifest := &storagepb.StorageManifest{Version: 7, Value: []byte{1, 2, 3}}
+	raw, err := proto.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write(raw)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test")
+	got, err := c.WriteStorageRecords(context.Background(), Credentials{Username: "u", Password: "p"}, &storagepb.WriteOperation{})
+	if err == nil {
+		t.Fatal("expected conflict error")
+	}
+	var werr *Error
+	if !errors.As(err, &werr) || werr.StatusCode != http.StatusConflict {
+		t.Fatalf("err = %v", err)
+	}
+	if got == nil || got.GetVersion() != 7 {
+		t.Fatalf("manifest = %+v", got)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -101,6 +102,27 @@ func DecryptRecord(key [libsignal.SVRKeyLen]byte, data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("storage.DecryptRecord: %w", err)
 	}
 	return plain, nil
+}
+
+// EncryptRecord encrypts plaintext with AES-256-GCM using a random 12-byte IV.
+func EncryptRecord(key [libsignal.SVRKeyLen]byte, plaintext []byte) ([]byte, error) {
+	iv := make([]byte, ivLen)
+	if _, err := rand.Read(iv); err != nil {
+		return nil, fmt.Errorf("storage.EncryptRecord: iv: %w", err)
+	}
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, fmt.Errorf("storage.EncryptRecord: aes: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("storage.EncryptRecord: gcm: %w", err)
+	}
+	ct := gcm.Seal(nil, iv, plaintext, nil)
+	out := make([]byte, ivLen+len(ct))
+	copy(out, iv)
+	copy(out[ivLen:], ct)
+	return out, nil
 }
 
 // EncryptRecordForTest encrypts plaintext with AES-256-GCM for unit tests.

@@ -542,6 +542,10 @@ for _, g := range result.Groups {
 ```
 
 Contact profile keys are cached automatically for sealed-sender send.
+By default, successful DM sends and group operations also **write** CONTACT /
+GROUPV2 records back to storage so the primary phone chat list stays current.
+Disable with `OpenOptions{DisableSyncStorageWrites: true}`.
+
 Enable background sync when a linked device requests it:
 
 ```go
@@ -552,7 +556,8 @@ client, err := signal.Open(ctx, signal.OpenOptions{
 })
 ```
 
-See [ADR 0027](../adr/0027-storage-service-sync.md).
+See [ADR 0027](../adr/0027-storage-service-sync.md) and
+[ADR 0040](../adr/0040-storage-chat-list-writes.md).
 
 ### CDSI contact discovery
 
