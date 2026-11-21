@@ -257,7 +257,9 @@ jobs:
           path: internal/libsignal/lib
 
       - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+        # Pinned: v0.8.x requires Go 1.26; v0.7.0 is the last release
+        # compatible with the Go 1.25 toolchain this workflow uses.
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
 
       - name: Run staticcheck
         # Skip generated proto packages — autogen code is exempt from
@@ -332,7 +334,9 @@ jobs:
           path: internal/libsignal/lib
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        # Pinned: v1.8.0+ requires Go 1.26; v1.7.0 is the last release
+        # compatible with the Go 1.25 toolchain this workflow uses.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Run govulncheck
         run: govulncheck ./...
