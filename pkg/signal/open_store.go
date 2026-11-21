@@ -46,6 +46,7 @@ func OpenFromStore(ctx context.Context, opts StoreOpenOptions) (*Client, error) 
 		SignalStores:           db.SignalStores(),
 		GroupDistributionStore: db.GroupDistributionStore(),
 		GroupEndorsementStore:  db.GroupEndorsementStore(),
+		ProfileKeyStore:        db.ProfileKeyStore(),
 		ClientProfile:          opts.ClientProfile,
 		UserAgent:              opts.UserAgent,
 		Logger:                 opts.Logger,

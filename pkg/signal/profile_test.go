@@ -12,6 +12,7 @@ import (
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	"github.com/thehappydinoa/signal-go/internal/profile"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
+	"github.com/thehappydinoa/signal-go/internal/store/memstore"
 )
 
 func TestFetchProfileDecryptsName(t *testing.T) {
@@ -80,6 +81,33 @@ func TestSetRecipientProfileKeyDerivesUAK(t *testing.T) {
 	c.mu.Unlock()
 	if !bytes.Equal(got, want[:]) {
 		t.Errorf("UAK = %x, want %x", got, want[:])
+	}
+}
+
+func TestProfileKeyStorePersistsRecipientKey(t *testing.T) {
+	pks := memstore.NewProfileKeyStore()
+	c := newSenderClient(t, "")
+	c.profileKeyStore = pks
+	key := bytes.Repeat([]byte{0x44}, 32)
+	aci := testRecipientACI
+	c.SetRecipientProfileKey(aci, key)
+
+	loaded, err := pks.LoadProfileKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(loaded[aci], key) {
+		t.Fatalf("stored key = %x, want %x", loaded[aci], key)
+	}
+
+	c2 := newSenderClient(t, "")
+	c2.profileKeyStore = pks
+	c2.loadPersistedProfileKeys(pks)
+	c2.mu.Lock()
+	got := append([]byte(nil), c2.knownProfileKeys[aci]...)
+	c2.mu.Unlock()
+	if !bytes.Equal(got, key) {
+		t.Fatalf("reloaded key = %x, want %x", got, key)
 	}
 }
 

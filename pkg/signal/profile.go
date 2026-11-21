@@ -45,7 +45,8 @@ func (p *Profile) DisplayName() string {
 // delivery automatically.
 //
 // If profileKey is nil, FetchProfile looks up a key previously stored from
-// an inbound DataMessage ([Client] caches profile keys automatically).
+// an inbound DataMessage ([Client] caches profile keys automatically) or from
+// [OpenOptions.ProfileKeyStore] when using a persistent backend.
 func (c *Client) FetchProfile(ctx context.Context, recipientACI string, profileKey []byte) (*Profile, error) {
 	if recipientACI == "" {
 		return nil, errors.New("signal.FetchProfile: empty recipient")
@@ -137,6 +138,11 @@ func (c *Client) SetRecipientProfileKey(aci string, profileKey []byte) {
 		delete(c.knownProfileKeys, aci)
 		delete(c.knownUAKs, aci)
 		c.mu.Unlock()
+		if c.profileKeyStore != nil {
+			if err := c.profileKeyStore.DeleteProfileKey(aci); err != nil {
+				c.log.Warn("failed to delete persisted profile key", "aci", aci, "err", err)
+			}
+		}
 		return
 	}
 	c.storeRecipientProfileKey(aci, profileKey)
@@ -151,16 +157,23 @@ func (c *Client) storeRecipientProfileKey(aci string, profileKey []byte) {
 		c.log.Debug("profile key UAK derivation failed", "aci", aci, "err", err)
 		return
 	}
+	keyCopy := append([]byte(nil), profileKey...)
 	c.mu.Lock()
 	if c.knownProfileKeys == nil {
 		c.knownProfileKeys = make(map[string][]byte)
 	}
-	c.knownProfileKeys[aci] = append([]byte(nil), profileKey...)
+	c.knownProfileKeys[aci] = keyCopy
 	if c.knownUAKs == nil {
 		c.knownUAKs = make(map[string][]byte)
 	}
 	c.knownUAKs[aci] = uak[:]
 	c.mu.Unlock()
+
+	if c.profileKeyStore != nil {
+		if err := c.profileKeyStore.StoreProfileKey(aci, keyCopy); err != nil {
+			c.log.Warn("failed to persist profile key", "aci", aci, "err", err)
+		}
+	}
 }
 
 // ensureRecipientUAK populates knownUAKs from a stored profile key when the

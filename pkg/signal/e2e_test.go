@@ -193,6 +193,101 @@ func TestE2E_GroupManagement(t *testing.T) {
 	t.Logf("SendGroup ok at %s", receipt.Timestamp)
 }
 
+// TestE2E_GroupAdminLifecycle creates a group, adds the peer, promotes and
+// demotes them, then removes them from the group.
+func TestE2E_GroupAdminLifecycle(t *testing.T) {
+	e2eGroupAdminEnabled(t)
+	peerACI := requireEnv(t, "SIGNAL_E2E_PEER_ACI")
+	db := openE2EDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx, cancel := e2eGroupAdminContext(t)
+	defer cancel()
+
+	client, err := signal.Open(ctx, e2eOpenOptions(db))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer client.Close()
+	stopDrain := e2eDrainEvents(client)
+	defer stopDrain()
+
+	selfACI := client.Account().ACI
+	if selfACI == "" {
+		t.Fatal("linked account has empty ACI")
+	}
+	if selfACI == peerACI {
+		t.Fatal("SIGNAL_E2E_PEER_ACI must not equal the linked bot ACI")
+	}
+
+	title := fmt.Sprintf("signal-go e2e admin %d", time.Now().UnixNano())
+	result, err := client.CreateGroup(ctx, signal.CreateGroupOptions{Title: title})
+	if err != nil {
+		t.Fatalf("CreateGroup: %v", err)
+	}
+	masterKey := result.MasterKey
+	grp := result.Group
+	if grp == nil {
+		t.Fatal("CreateGroup: nil group")
+	}
+	if len(masterKey) != libsignal.GroupMasterKeyLen {
+		t.Fatalf("CreateGroup: master key length %d, want %d", len(masterKey), libsignal.GroupMasterKeyLen)
+	}
+	if !grp.IsAdmin(selfACI) {
+		t.Fatalf("CreateGroup: bot %s is not admin in %q", selfACI, grp.ID)
+	}
+	if groupHasMember(grp, peerACI) {
+		t.Fatalf("CreateGroup: peer %s should not be a member yet", peerACI)
+	}
+	t.Logf("created group %q title=%q revision=%d members=%d", grp.ID, grp.Title, grp.Revision, len(grp.Members))
+
+	profileKey := e2ePeerProfileKeyOptional(t)
+	grp, err = client.AddMember(ctx, masterKey, peerACI, profileKey, signal.GroupRoleDefault)
+	if err != nil {
+		if profileKey == nil && isMissingProfileKeyErr(err) {
+			t.Skip("peer profile key unavailable: send a DM from the peer to the bot first, or set SIGNAL_E2E_PEER_PROFILE_KEY (64 hex chars)")
+		}
+		t.Fatalf("AddMember: %v", err)
+	}
+	if !groupHasMember(grp, peerACI) {
+		t.Fatalf("AddMember: peer %s not in group %q", peerACI, grp.ID)
+	}
+	if grp.IsAdmin(peerACI) {
+		t.Fatal("AddMember: peer should not be admin yet")
+	}
+	t.Logf("added peer %s; revision=%d members=%d", peerACI, grp.Revision, len(grp.Members))
+
+	grp, err = client.PromoteMember(ctx, masterKey, peerACI)
+	if err != nil {
+		t.Fatalf("PromoteMember: %v", err)
+	}
+	if !grp.IsAdmin(peerACI) {
+		t.Fatalf("PromoteMember: peer %s is not admin", peerACI)
+	}
+	t.Logf("promoted peer %s to admin; revision=%d", peerACI, grp.Revision)
+
+	grp, err = client.DemoteMember(ctx, masterKey, peerACI)
+	if err != nil {
+		t.Fatalf("DemoteMember: %v", err)
+	}
+	if grp.IsAdmin(peerACI) {
+		t.Fatalf("DemoteMember: peer %s is still admin", peerACI)
+	}
+	t.Logf("demoted peer %s; revision=%d", peerACI, grp.Revision)
+
+	grp, err = client.RemoveMember(ctx, masterKey, peerACI)
+	if err != nil {
+		t.Fatalf("RemoveMember: %v", err)
+	}
+	if groupHasMember(grp, peerACI) {
+		t.Fatalf("RemoveMember: peer %s still in group %q", peerACI, grp.ID)
+	}
+	if !grp.IsAdmin(selfACI) {
+		t.Fatalf("RemoveMember: bot %s lost admin role", selfACI)
+	}
+	t.Logf("removed peer %s; revision=%d members=%d", peerACI, grp.Revision, len(grp.Members))
+}
+
 // TestE2E_GroupCreateAndChat joins a fresh peer-created group invite,
 // verifies peer membership, sends a bot message, and waits for a peer reply
 // in that same group thread.
@@ -356,6 +451,56 @@ func e2eGroupCreateEnabled(t *testing.T) {
 	}
 }
 
+// e2eGroupAdminEnabled gates the bot-side group admin lifecycle test.
+// Use task test:e2e:group-admin or set SIGNAL_E2E_GROUP_ADMIN=1.
+func e2eGroupAdminEnabled(t *testing.T) {
+	t.Helper()
+	e2eEnabled(t)
+	if os.Getenv("SIGNAL_E2E_GROUP_ADMIN") != "1" {
+		t.Skip("group admin lifecycle test skipped (run task test:e2e:group-admin or set SIGNAL_E2E_GROUP_ADMIN=1)")
+	}
+}
+
+func e2eGroupAdminContext(t *testing.T) (context.Context, context.CancelFunc) {
+	t.Helper()
+	d := 5 * time.Minute
+	if s := strings.TrimSpace(os.Getenv("SIGNAL_E2E_TIMEOUT")); s != "" {
+		parsed, err := time.ParseDuration(s)
+		if err != nil {
+			t.Fatalf("SIGNAL_E2E_TIMEOUT: %v", err)
+		}
+		d = parsed
+	}
+	return context.WithTimeout(context.Background(), d)
+}
+
+func e2ePeerProfileKeyOptional(t *testing.T) []byte {
+	t.Helper()
+	raw := strings.TrimSpace(os.Getenv("SIGNAL_E2E_PEER_PROFILE_KEY"))
+	if raw == "" {
+		return nil
+	}
+	raw = strings.TrimPrefix(raw, "0x")
+	key, err := hex.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("SIGNAL_E2E_PEER_PROFILE_KEY: decode hex: %v", err)
+	}
+	if len(key) != libsignal.ProfileKeyLen {
+		t.Fatalf("SIGNAL_E2E_PEER_PROFILE_KEY: length %d, want %d", len(key), libsignal.ProfileKeyLen)
+	}
+	return key
+}
+
+func isMissingProfileKeyErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "profile key") ||
+		strings.Contains(msg, "no profile key") ||
+		strings.Contains(msg, "validateprofilekey")
+}
+
 func requireEnv(t *testing.T, key string) string {
 	t.Helper()
 	v := strings.TrimSpace(os.Getenv(key))
@@ -422,6 +567,7 @@ func e2eOpenOptions(db *sqlstore.DB) signal.OpenOptions {
 		SignalStores:           db.SignalStores(),
 		GroupDistributionStore: db.GroupDistributionStore(),
 		GroupEndorsementStore:  db.GroupEndorsementStore(),
+		ProfileKeyStore:        db.ProfileKeyStore(),
 		BackupImportStore:      db,
 	}
 }
@@ -471,6 +617,30 @@ func truncateRunes(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "…"
+}
+
+// e2eDrainEvents discards inbound client events so rapid group operations
+// do not fill the default event buffer during admin lifecycle tests.
+func e2eDrainEvents(client *signal.Client) func() {
+	drainCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-drainCtx.Done():
+				return
+			case _, ok := <-client.Events():
+				if !ok {
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func groupHasMember(grp *signal.Group, aci string) bool {

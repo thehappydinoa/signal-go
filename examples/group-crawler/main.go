@@ -77,6 +77,7 @@ func run(args []string) int {
 		SignalStores:           db.SignalStores(),
 		GroupDistributionStore: db.GroupDistributionStore(),
 		GroupEndorsementStore:  db.GroupEndorsementStore(),
+		ProfileKeyStore:        db.ProfileKeyStore(),
 		ClientProfile:          client.Profile,
 		UserAgent:              client.UserAgent,
 		AutoSyncStorage:        true,

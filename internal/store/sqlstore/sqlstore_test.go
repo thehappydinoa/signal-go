@@ -97,6 +97,54 @@ func TestGroupStoresRoundTrip(t *testing.T) {
 	}
 }
 
+func TestProfileKeyStoreRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sqlstore.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	pks := db.ProfileKeyStore()
+	aci := "00000000-0000-4000-8000-000000000001"
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	if err := pks.StoreProfileKey(aci, key); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := pks.LoadProfileKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytesEqual(loaded[aci], key) {
+		t.Fatalf("loaded key = %v, want %v", loaded[aci], key)
+	}
+	if err := pks.DeleteProfileKey(aci); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = pks.LoadProfileKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("expected empty after delete, got %d", len(loaded))
+	}
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func validAccount(t *testing.T) *account.Account {
 	t.Helper()
 	// Minimal valid account for store round-trip tests.

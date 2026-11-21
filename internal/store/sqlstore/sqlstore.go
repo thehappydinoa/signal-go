@@ -136,6 +136,10 @@ func (s *DB) migrate() error {
 			title TEXT,
 			blocked INTEGER NOT NULL DEFAULT 0
 		)`,
+		`CREATE TABLE IF NOT EXISTS recipient_profile_keys (
+			aci TEXT PRIMARY KEY,
+			profile_key BLOB NOT NULL
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {

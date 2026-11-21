@@ -238,6 +238,7 @@ sgClient, err := signal.Open(ctx, signal.OpenOptions{
  SignalStores:           db.SignalStores(),
  GroupDistributionStore: db.GroupDistributionStore(),
  GroupEndorsementStore:  db.GroupEndorsementStore(),
+ ProfileKeyStore:        db.ProfileKeyStore(),
  AutoSyncGroupUpdates:   true,
 })
 b := bot.WrapWithOptions(sgClient, bot.WrapOptions{Logger: slog.Default()})

@@ -132,6 +132,20 @@ tasks:
       - mkdir -p .build/tmp
       - bash scripts/with-dev-env.sh go test {{.RACE}} -v -count=1 -tags=e2e -timeout=15m -run '^TestE2E_GroupCreateAndChat$' ./pkg/signal/...
 
+  test:e2e:group-admin:
+    desc: E2e bot-side group create, add peer, promote, demote, and remove (runs with -v)
+    deps: [libsignal]
+    env:
+      SIGNAL_GO_E2E: '1'
+      SIGNAL_E2E_GROUP_ADMIN: '1'
+      GOTMPDIR: ./.build/tmp
+      TMPDIR: ./.build/tmp
+      TMP: ./.build/tmp
+      TEMP: ./.build/tmp
+    cmds:
+      - mkdir -p .build/tmp
+      - bash scripts/with-dev-env.sh go test {{.RACE}} -v -count=1 -tags=e2e -timeout=15m -run '^TestE2E_GroupAdminLifecycle$' ./pkg/signal/...
+
   cover:
     desc: Run tests with coverage report
     deps: [libsignal]

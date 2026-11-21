@@ -11,6 +11,7 @@ import (
 
 	"github.com/thehappydinoa/signal-go/internal/libsignal"
 	sspb "github.com/thehappydinoa/signal-go/internal/proto/gen/signalservicepb"
+	"github.com/thehappydinoa/signal-go/internal/store"
 	"github.com/thehappydinoa/signal-go/internal/web"
 )
 
@@ -86,7 +87,15 @@ func (c *Client) deliverGroupPayload(
 	h := libsignal.NewStoreHandle(c.stores)
 	defer h.Release()
 
-	if opts.distributeSKDM {
+	needSKDM := opts.distributeSKDM
+	if !needSKDM {
+		hasKey, err := c.hasLocalSenderKey(distID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		needSKDM = !hasKey
+	}
+	if needSKDM {
 		skdm, err := libsignal.CreateSenderKeyDistributionMessage(local, distID, h)
 		if err != nil {
 			return Receipt{}, fmt.Errorf("signal: create SKDM: %w", err)
@@ -98,6 +107,13 @@ func (c *Client) deliverGroupPayload(
 		if err := c.distributeSenderKeyToMembers(ctx, grp, skdmBytes); err != nil {
 			return Receipt{}, err
 		}
+	}
+
+	if !c.groupHasOtherMembers(grp) {
+		return Receipt{
+			Timestamp:    time.UnixMilli(int64(ts)),
+			RecipientACI: grp.ID,
+		}, nil
 	}
 
 	creds := c.credentials()
@@ -114,6 +130,27 @@ func (c *Client) deliverGroupPayload(
 		Timestamp:    time.UnixMilli(int64(ts)),
 		RecipientACI: grp.ID,
 	}, nil
+}
+
+func (c *Client) hasLocalSenderKey(distID string) (bool, error) {
+	addr := store.Address{ServiceID: c.acct.ACI, DeviceID: c.acct.DeviceID}
+	_, err := c.stores.LoadSenderKey(addr, distID)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, store.ErrRecordNotFound) {
+		return false, nil
+	}
+	return false, fmt.Errorf("signal: load sender key: %w", err)
+}
+
+func (c *Client) groupHasOtherMembers(grp *Group) bool {
+	for _, m := range grp.Members {
+		if m.ACI != c.acct.ACI {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) distributeSenderKeyToMembers(ctx context.Context, grp *Group, skdmBytes []byte) error {
