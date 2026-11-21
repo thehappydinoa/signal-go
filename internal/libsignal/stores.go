@@ -63,8 +63,8 @@ func addressFromC(p C.SignalMutPointerProtocolAddress) (store.Address, error) {
 	if err := checkError(C.signal_address_get_name(&cname, cp)); err != nil {
 		return store.Address{}, err
 	}
-	name := C.GoString((*C.char)(cname))
-	C.signal_free_string((*C.char)(cname))
+	name := C.GoString((*C.char)(unsafe.Pointer(cname)))
+	C.signal_free_string((*C.int8_t)(unsafe.Pointer(cname)))
 	var dev C.uint32_t
 	if err := checkError(C.signal_address_get_device_id(&dev, cp)); err != nil {
 		return store.Address{}, err
@@ -279,6 +279,17 @@ func signalgo_save_identity_key(ctx unsafe.Pointer, out *C.uint8_t, address C.Si
 		return -1
 	}
 	*out = C.uint8_t(res)
+	return 0
+}
+
+//export signalgo_record_received_identity_key
+func signalgo_record_received_identity_key(ctx unsafe.Pointer, address C.SignalMutPointerProtocolAddress, publicKey C.SignalMutPointerPublicKey) C.int {
+	// libsignal v0.108 added this hook to notify stores when an identity key
+	// is received during session setup. Trust/persistence is still handled
+	// through save_identity_key + is_trusted_identity, so this is a no-op.
+	_ = ctx
+	_ = address
+	_ = publicKey
 	return 0
 }
 

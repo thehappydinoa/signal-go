@@ -10,8 +10,49 @@ is *what* changed and *when*.
 
 ## [Unreleased]
 
+### Added
+
+- `pkg/signal/username` — local-only helpers for Signal's username
+  feature: candidate generation from a nickname, server-hash derivation,
+  zero-knowledge proof of ownership, username-link encrypt / rotate /
+  decrypt ([ADR 0041](./docs/adr/0041-usernames.md)). Wraps libsignal
+  `signal_username_candidates_from`, `signal_username_hash`,
+  `signal_username_hash_from_parts`, `signal_username_proof`,
+  `signal_username_verify`, `signal_username_link_create`, and
+  `signal_username_link_decrypt_username`.
+- `signal.Client` username server ops: `ReserveUsername`, `ConfirmUsername`,
+  `DeleteUsername`, `RotateUsernameLink`, `DeleteUsernameLink`,
+  `LookupUsernameHash`, `LookupUsername`. Reserve/confirm run as a pair
+  within the server's ~5-minute reservation window; confirm generates
+  the proof + link locally, uploads them, and returns a
+  `PublishedUsernameLink` with a `ShareURL()` for signal.me links.
+  Lookup methods use unauthenticated requests per server policy.
+  REST endpoints under `/v1/accounts/username_hash/*` and
+  `/v1/accounts/username_link/*`; Signal's own clients have migrated to
+  gRPC via libsignal's chat connection, but the REST surface is still
+  supported server-side and avoids pulling in libsignal's async-promise
+  scaffolding.
+- `examples/username-bot` — reserve/lookup/delete CLI against an
+  already-linked store. Demonstrates the full share-URL round trip
+  (reserve + confirm + print signal.me URL + parse URL + decrypt
+  + resolve to ACI).
+
 ### Changed
 
+- Bump libsignal to v0.108.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.108.0)).
+  Upstream regenerated `signal_ffi.h` with a new format in v0.98: every
+  `SignalXXX_LEN` macro was removed, anonymous `uint8_t[N]` array params
+  became named `SignalType_FixedArrayN_uint8_t` typedefs, `const char *`
+  parameters became `const int8_t *`, and `SignalFfiIdentityKeyStoreStruct`
+  grew a required `record_received_identity_key` field — a missing wiring
+  for the last one SIGSEGV'd `signal_process_prekey_bundle`. The wrapper
+  layer was updated accordingly: length constants are now Go-side literals,
+  FFI call sites cast through `unsafe.Pointer` where cgo DWARF unwrapping
+  diverges, every cgo file that uses `C.CString`/`C.free` now includes
+  `<stdlib.h>` in its own preamble, and a no-op
+  `signalgo_record_received_identity_key` export satisfies the new store
+  hook (trust/persistence still flow through `save_identity_key` +
+  `is_trusted_identity`).
 - Bump libsignal to v0.97.2 ([compare](https://github.com/signalapp/libsignal/compare/v0.96.4...v0.97.2)).
   No `internal/libsignal/` wrapper changes were required — everything
   signal-go currently calls compiled and passed `go test -race` unchanged.
