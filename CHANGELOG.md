@@ -39,6 +39,10 @@ is *what* changed and *when*.
 
 ### Changed
 
+- Bump minimum Go version from 1.25 to 1.26 and CI toolchain to Go 1.26.10.
+  Go 1.25 reached end-of-life with 11 unfixed stdlib vulnerabilities
+  (crypto/x509, crypto/tls, net/http, net/textproto) that govulncheck
+  flags as affecting signal-go code. All are patched in the Go 1.26 line.
 - Bump libsignal to v0.108.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.108.0)).
   Upstream regenerated `signal_ffi.h` with a new format in v0.98: every
   `SignalXXX_LEN` macro was removed, anonymous `uint8_t[N]` array params
