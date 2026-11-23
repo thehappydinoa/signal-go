@@ -135,6 +135,53 @@ patch_gnu_stack() {
   rm -rf "$PATCH_DIR"
 }
 
+# strip_lto_sections removes `.llvmbc` and `.llvmcmd` sections from every
+# object in libsignal_ffi.a. Rust builds with LTO embed LLVM bitcode in these
+# sections; Go ≥1.26 rejects them in cgo-linked archives as a security measure
+# ("disallowed LTO section"). Stripping is safe — the final native code is
+# already linked; the bitcode was only useful to the Rust/LLVM linker.
+#
+# Like patch_gnu_stack this is idempotent: objects without the sections are
+# skipped. Only meaningful on Linux (ELF); macOS and Windows use different
+# object formats and are unaffected by this Go check.
+strip_lto_sections() {
+  if [[ "$OS_KIND" != "linux" ]]; then
+    return 0
+  fi
+  if ! command -v ar >/dev/null || ! command -v objcopy >/dev/null; then
+    echo ">> warning: ar/objcopy not found; skipping LTO section strip" >&2
+    return 0
+  fi
+  echo ">> stripping LTO sections from libsignal_ffi.a"
+  STRIP_DIR="$(mktemp -d)"
+  (
+    cd "$STRIP_DIR"
+    ar x "$LIB_DIR/libsignal_ffi.a"
+    stripped=0
+    for obj in *.o; do
+      [[ -f "$obj" ]] || continue
+      needs_strip=0
+      if readelf -S "$obj" 2>/dev/null | grep -qE '\.llvmbc|\.llvmcmd'; then
+        needs_strip=1
+      fi
+      if [[ "$needs_strip" -eq 1 ]]; then
+        if objcopy --remove-section .llvmbc --remove-section .llvmcmd "$obj" "$obj.stripped" 2>/dev/null; then
+          mv "$obj.stripped" "$obj"
+          stripped=$((stripped + 1))
+        else
+          echo ">> warning: objcopy failed to strip LTO sections from $obj; leaving as-is" >&2
+          rm -f "$obj.stripped" || true
+        fi
+      fi
+    done
+    if ls *.o >/dev/null 2>&1; then
+      ar rcs "$LIB_DIR/libsignal_ffi.a" *.o
+    fi
+    echo ">> stripped LTO sections from $stripped object(s)"
+  )
+  rm -rf "$STRIP_DIR"
+}
+
 # BoringSSL only assembles fiat_p256_adx_{mul,sqr} for Mach-O/ELF. MinGW emits
 # COFF, so bcm.cc.obj references those symbols without defining them. Compile
 # portable fallbacks and append to libsignal_ffi.a (idempotent).
@@ -176,9 +223,10 @@ if [[ "${FORCE:-0}" != "1" && -f "$LIB_DIR/libsignal_ffi.a" && -f "$STAMP" ]]; t
       echo "$STAMP_NEW" > "$STAMP"
     fi
     echo "libsignal_ffi.a already built for $LIBSIGNAL_VERSION on $OS_KIND/$ARCH_KIND (use FORCE=1 to rebuild)"
-    # The patch is idempotent and cheap; re-running guarantees existing
-    # caches built before the patch landed (Phase 7 option 1) get fixed.
+    # The patches are idempotent and cheap; re-running guarantees existing
+    # caches built before the patches landed get fixed.
     patch_gnu_stack
+    strip_lto_sections
     patch_windows_fiat_adx_stubs || true
     exit 0
   fi
@@ -191,6 +239,7 @@ if [[ "${SKIP_DOWNLOAD:-0}" != "1" ]]; then
   if bash "$(dirname "$0")/download-libsignal.sh"; then
     # Patches are cheap and idempotent; apply regardless of download vs build.
     patch_gnu_stack
+    strip_lto_sections
     patch_windows_fiat_adx_stubs || true
     echo ">> done"
     ls -lh "$LIB_DIR/libsignal_ffi.a" "$INCLUDE_DIR/signal_ffi.h" 2>/dev/null || true
@@ -263,6 +312,7 @@ echo ">> installing artifacts"
 cp -f "$SRC_LIB" "$LIB_DIR/libsignal_ffi.a"
 
 patch_gnu_stack
+strip_lto_sections
 patch_windows_fiat_adx_stubs
 
 # The cbindgen-generated header lives in the Swift consumer tree of upstream.

@@ -48,3 +48,4 @@ with a new ADR that links back to the one it replaces.
 | 0038 | Groups v2 create and attribute changes           | Accepted |
 | 0041 | Username management                               | Accepted |
 | 0042 | Paid phone-numberless primary registration       | Accepted |
+| 0043 | Strip LLVM LTO sections from libsignal_ffi.a    | Accepted |

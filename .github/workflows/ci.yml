@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.25.11'
+  GO_VERSION: '1.26.11'
 
 jobs:
   detect_changes:
@@ -134,7 +134,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: internal/libsignal/lib
-          key: libsignal-${{ steps.version.outputs.version }}-ubuntu-latest-x86_64-v1
+          key: libsignal-${{ steps.version.outputs.version }}-ubuntu-latest-x86_64-v2
 
       - name: Install Rust toolchain
         if: steps.cache.outputs.cache-hit != 'true'
