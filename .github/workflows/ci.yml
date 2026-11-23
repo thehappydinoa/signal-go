@@ -134,7 +134,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: internal/libsignal/lib
-          key: libsignal-${{ steps.version.outputs.version }}-ubuntu-latest-x86_64-v1
+          key: libsignal-${{ steps.version.outputs.version }}-ubuntu-latest-x86_64-v2
 
       - name: Install Rust toolchain
         if: steps.cache.outputs.cache-hit != 'true'
@@ -257,7 +257,7 @@ jobs:
           path: internal/libsignal/lib
 
       - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Run staticcheck
         # Skip generated proto packages — autogen code is exempt from
@@ -332,7 +332,7 @@ jobs:
           path: internal/libsignal/lib
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
         run: govulncheck ./...

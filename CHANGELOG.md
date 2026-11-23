@@ -43,6 +43,13 @@ is *what* changed and *when*.
   Go 1.25 reached end-of-life with 11 unfixed stdlib vulnerabilities
   (crypto/x509, crypto/tls, net/http, net/textproto) that govulncheck
   flags as affecting signal-go code. All are patched in the Go 1.26 line.
+- Strip `.llvmbc`/`.llvmcmd` LTO sections from `libsignal_ffi.a` during
+  build ([ADR 0043](./docs/adr/0043-strip-lto-sections.md)). Go 1.26
+  rejects LLVM bitcode sections in cgo-linked archives; Rust builds
+  libsignal with LTO, which embeds them. Stripping is safe — the native
+  code is already fully linked.
+- Restore staticcheck and govulncheck to `@latest` in CI (were
+  temporarily pinned during the Go 1.25→1.26 transition).
 - Bump libsignal to v0.108.0 ([compare](https://github.com/signalapp/libsignal/compare/v0.97.2...v0.108.0)).
   Upstream regenerated `signal_ffi.h` with a new format in v0.98: every
   `SignalXXX_LEN` macro was removed, anonymous `uint8_t[N]` array params
