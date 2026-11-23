@@ -39,7 +39,7 @@ is *what* changed and *when*.
 
 ### Changed
 
-- Bump minimum Go version from 1.25 to 1.26 and CI toolchain to Go 1.26.10.
+- Bump minimum Go version from 1.25 to 1.26 and CI toolchain to Go 1.26.11.
   Go 1.25 reached end-of-life with 11 unfixed stdlib vulnerabilities
   (crypto/x509, crypto/tls, net/http, net/textproto) that govulncheck
   flags as affecting signal-go code. All are patched in the Go 1.26 line.
